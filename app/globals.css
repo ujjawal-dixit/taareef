@@ -1,0 +1,87 @@
+/* app/globals.css */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Font variables — set by next/font in layout.tsx */
+    --font-display: var(--font-fraunces);
+    --font-body: var(--font-dm-sans);
+
+    /* Surface colours */
+    --color-background: hsl(40, 20%, 98%);
+    --color-surface: hsl(0, 0%, 100%);
+    --color-border: hsl(40, 12%, 90%);
+
+    /* Bottom nav height */
+    --nav-height: 64px;
+    --nav-safe-area: 16px;
+
+    /* Container */
+    --container-max: 480px;
+    --container-padding: 16px;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --color-background: hsl(30, 8%, 10%);
+      --color-surface: hsl(30, 6%, 14%);
+      --color-border: hsl(30, 6%, 22%);
+    }
+  }
+
+  /* Reduce motion for accessibility */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+
+  /* Base HTML */
+  html {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    background-color: var(--color-background);
+  }
+
+  /* Focus visible — accessible, not always visible */
+  :focus-visible {
+    outline: 2px solid hsl(16, 65%, 52%);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+
+  /* Smooth scroll */
+  html {
+    scroll-behavior: smooth;
+  }
+}
+
+@layer utilities {
+  /* Font family utilities using CSS variables */
+  .font-display {
+    font-family: var(--font-display), Georgia, serif;
+  }
+
+  /* Safe area for iOS home indicator */
+  .pb-safe {
+    padding-bottom: calc(var(--nav-height) + var(--nav-safe-area) + env(safe-area-inset-bottom));
+  }
+
+  /* Container utility */
+  .container-app {
+    max-width: var(--container-max);
+    margin-left: auto;
+    margin-right: auto;
+    padding-left: var(--container-padding);
+    padding-right: var(--container-padding);
+  }
+}
