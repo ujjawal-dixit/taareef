@@ -1,7 +1,7 @@
 // app/(app)/dashboard/dashboard-client.tsx
-// Interactive dashboard — category bar, mixed grid vault, nudge question.
-// Mixed grid: first card full width (hero), rest in single column.
-// Adaptive: shows all categories in bar, vault only shows saved ones.
+// The vault home — Friday evening screen.
+// Wong Kar-wai warmth throughout — inline styles for reliability.
+// Adaptive: category bar always shows all 10, vault shows only saved.
 
 'use client'
 
@@ -14,18 +14,18 @@ import { NudgeQuestionCard } from '@/components/features/vault/nudge-question'
 import { getNudgeQuestion } from '@/constants/nudge-questions'
 import type { Recommendation, Category } from '@/lib/types'
 
-type DashboardClientProps = {
-  recommendations: Recommendation[]
-  userId: string
+type Props = {
+  recommendations:   Recommendation[]
+  userId:            string
   nudgeAnsweredCount: number
 }
 
 export function DashboardClient({
   recommendations,
   nudgeAnsweredCount,
-}: DashboardClientProps) {
+}: Props) {
   const router = useRouter()
-  const [activeCategory, setActiveCategory] = useState<Category | null>(null)
+  const [activeCategory, setActiveCategory]   = useState<Category | null>(null)
   const [localNudgeCount, setLocalNudgeCount] = useState(nudgeAnsweredCount)
 
   const currentNudge = getNudgeQuestion(localNudgeCount)
@@ -37,40 +37,44 @@ export function DashboardClient({
 
   async function handleNudgeAnswer(questionId: string, value: string) {
     try {
-      const response = await fetch('/api/user/preferences', {
-        method: 'PATCH',
+      await fetch('/api/user/preferences', {
+        method:  'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          questionId,
-          value,
-          nudgeAnsweredCount: localNudgeCount + 1,
-        }),
+        body:    JSON.stringify({ questionId, value, nudgeAnsweredCount: localNudgeCount + 1 }),
       })
-
-      if (!response.ok) throw new Error('Failed to save preference')
       setLocalNudgeCount(prev => prev + 1)
     } catch (err) {
-      console.error('[Dashboard] Failed to save nudge answer:', err)
-      // Silent fail — nudge is never critical to the experience
+      console.error('[Dashboard] nudge answer failed:', err)
+      // Silent fail — nudge is never critical
     }
   }
 
-  function handleCardClick(id: string) {
-    router.push(`/rec/${id}`)
-  }
-
-  const hasAnyRecs = recommendations.length > 0
-  const hasFilteredRecs = filteredRecs.length > 0
+  const hasAnyRecs     = recommendations.length > 0
+  const hasFiltered    = filteredRecs.length > 0
 
   return (
-    <div className="min-h-screen bg-neutral-50">
+    // app-container enforces 480px max-width, centred
+    <div className="app-container">
 
-      {/* Header */}
-      <header className="pt-14 px-5 pb-2">
-        <h1 className="font-display text-display text-neutral-900 tracking-tight">
+      {/* ── HEADER ─────────────────────────────────────────── */}
+      <header style={{ padding: '56px 20px 8px' }}>
+        <h1 style={{
+          fontFamily:    'var(--font-fraunces), Georgia, serif',
+          fontSize:      '36px',
+          fontWeight:    '700',
+          letterSpacing: '-0.025em',
+          lineHeight:    '1.1',
+          color:         'var(--text-primary)',
+          margin:        '0 0 4px',
+        }}>
           Taareef
         </h1>
-        <p className="font-sans text-meta text-neutral-400 mt-1">
+        <p style={{
+          fontFamily: 'var(--font-dm-sans), system-ui, sans-serif',
+          fontSize:   '13px',
+          color:      'var(--text-tertiary)',
+          margin:     0,
+        }}>
           {recommendations.length === 0
             ? 'Your vault is ready'
             : `${recommendations.length} recommendation${recommendations.length === 1 ? '' : 's'}`
@@ -78,36 +82,42 @@ export function DashboardClient({
         </p>
       </header>
 
-      {/* Category bar — sticky, always shows all 10 */}
-      <div className="sticky top-0 z-20 bg-neutral-50/90 backdrop-blur-md border-b border-surface-border">
+      {/* ── CATEGORY BAR — sticky ──────────────────────────── */}
+      <div style={{
+        position:        'sticky',
+        top:             0,
+        zIndex:          20,
+        backgroundColor: 'rgba(250,248,245,0.92)',
+        backdropFilter:  'blur(16px)',
+        WebkitBackdropFilter: 'blur(16px)',
+        borderBottom:    '0.5px solid rgba(30,28,26,0.08)',
+      }}>
         <CategoryBar
           activeCategory={activeCategory}
           onCategoryChange={setActiveCategory}
         />
       </div>
 
-      {/* Main content */}
-      <div className="pb-fab">
+      {/* ── MAIN CONTENT ──────────────────────────────────── */}
+      <div className="pb-fab" style={{ paddingTop: '8px' }}>
 
-        {/* Nudge question — appears on every visit until all answered */}
+        {/* Nudge question */}
         {hasAnyRecs && currentNudge && (
-          <div className="pt-4">
-            <NudgeQuestionCard
-              question={currentNudge}
-              onAnswer={handleNudgeAnswer}
-            />
-          </div>
+          <NudgeQuestionCard
+            question={currentNudge}
+            onAnswer={handleNudgeAnswer}
+          />
         )}
 
         {/* Vault */}
         {!hasAnyRecs ? (
           <EmptyState />
-        ) : !hasFilteredRecs ? (
+        ) : !hasFiltered ? (
           <EmptyState category={activeCategory ?? undefined} />
         ) : (
           <MixedGrid
             recommendations={filteredRecs}
-            onCardClick={handleCardClick}
+            onCardClick={id => router.push(`/rec/${id}`)}
           />
         )}
 
@@ -116,24 +126,22 @@ export function DashboardClient({
   )
 }
 
-// ============================================================
+// ─────────────────────────────────────────────────────────────
 // MIXED GRID
-// First card — full width, isHero (taller image)
-// Remaining — single column, standard size
-// ============================================================
+// Hero card full width, remaining in column
+// ─────────────────────────────────────────────────────────────
 
-type MixedGridProps = {
+function MixedGrid({
+  recommendations,
+  onCardClick,
+}: {
   recommendations: Recommendation[]
-  onCardClick: (id: string) => void
-}
-
-function MixedGrid({ recommendations, onCardClick }: MixedGridProps) {
+  onCardClick:     (id: string) => void
+}) {
   const [hero, ...rest] = recommendations
 
   return (
-    <div className="px-4 pt-4 flex flex-col gap-3">
-
-      {/* Hero card — full width */}
+    <div style={{ padding: '0 16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
       {hero && (
         <RecommendationCard
           recommendation={hero}
@@ -141,8 +149,6 @@ function MixedGrid({ recommendations, onCardClick }: MixedGridProps) {
           isHero
         />
       )}
-
-      {/* Remaining cards */}
       {rest.map(rec => (
         <RecommendationCard
           key={rec.id}
@@ -150,7 +156,6 @@ function MixedGrid({ recommendations, onCardClick }: MixedGridProps) {
           onClick={() => onCardClick(rec.id)}
         />
       ))}
-
     </div>
   )
 }
