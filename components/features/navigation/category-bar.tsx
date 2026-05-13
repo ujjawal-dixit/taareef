@@ -1,83 +1,78 @@
 // components/features/navigation/category-bar.tsx
-// The primary navigation — Airbnb category bar pattern.
-// Always shows all 10 categories. One tap switches the entire vault.
-// Horizontal scroll, no wrapping. Active category highlighted.
-// "use client" — interactive, needs browser APIs for scroll position.
+// Airbnb category bar — always shows all 10 categories.
+// One tap switches the entire vault.
+// Active: filled with jewel-toned category colour.
+// Inactive: subtle tint of the category colour — the bar feels alive.
 
 'use client'
 
-import { useRef, useEffect } from 'react'
-import { CATEGORIES, getCategoryConfig } from '@/constants/categories'
+import { forwardRef, useRef, useEffect } from 'react'
+import { CATEGORIES } from '@/constants/categories'
 import type { Category } from '@/lib/types'
 
 type CategoryBarProps = {
-  activeCategory: Category | null   // null = showing all categories (home)
+  activeCategory: Category | null
   onCategoryChange: (category: Category | null) => void
-  className?: string
 }
 
 export function CategoryBar({
   activeCategory,
   onCategoryChange,
-  className = '',
 }: CategoryBarProps) {
-  const scrollRef = useRef<HTMLDivElement>(null)
-  const activeRef = useRef<HTMLButtonElement>(null)
+  const scrollRef  = useRef<HTMLDivElement>(null)
+  const activeRef  = useRef<HTMLButtonElement>(null)
 
-  // Scroll active category into view when it changes
   useEffect(() => {
-    if (activeRef.current && scrollRef.current) {
-      activeRef.current.scrollIntoView({
-        behavior: 'smooth',
-        block: 'nearest',
-        inline: 'center',
-      })
-    }
+    activeRef.current?.scrollIntoView({
+      behavior: 'smooth',
+      block:    'nearest',
+      inline:   'center',
+    })
   }, [activeCategory])
 
   return (
-    <nav
-      aria-label="Browse by category"
-      className={[
-        'w-full',
-        className,
-      ].join(' ')}
-    >
+    <nav aria-label="Browse by category">
       <div
         ref={scrollRef}
-        className={[
-          'flex gap-2 overflow-x-auto',
-          'px-4 py-3',
-          // Hide scrollbar — navigation feel, not list feel
-          'scrollbar-none',
-          '[&::-webkit-scrollbar]:hidden',
-          '[-ms-overflow-style:none]',
-          '[scrollbar-width:none]',
-        ].join(' ')}
+        style={{
+          display:         'flex',
+          gap:             '8px',
+          overflowX:       'auto',
+          padding:         '10px 16px',
+          scrollbarWidth:  'none',
+          msOverflowStyle: 'none',
+        }}
         role="list"
       >
-        {/* "All" chip — shows home screen */}
-        <CategoryChip
+        {/* All chip */}
+        <NavChip
           label="All"
           icon="✦"
           isActive={activeCategory === null}
-          colourHex="hsl(35, 4%, 10%)"
+          activeColour="#c44a28"
+          inactiveTint="rgba(196,74,40,0.08)"
+          inactiveColor="#8a4a1a"
           onClick={() => onCategoryChange(null)}
           aria-label="Show all recommendations"
+          aria-pressed={activeCategory === null}
         />
 
-        {/* All 10 categories */}
-        {CATEGORIES.map(config => (
-          <CategoryChip
-            key={config.id}
-            ref={activeCategory === config.id ? activeRef : undefined}
-            label={config.label}
-            icon={config.icon}
-            isActive={activeCategory === config.id}
-            colourHex={config.colourHex}
-            onClick={() => onCategoryChange(config.id)}
-            aria-label={`Show ${config.labelPlural}`}
-            aria-pressed={activeCategory === config.id}
+        {/* 10 category chips */}
+        {CATEGORIES.map(cat => (
+          <NavChip
+            key={cat.id}
+            ref={activeCategory === cat.id ? activeRef : undefined}
+            label={cat.label}
+            icon={cat.icon}
+            isActive={activeCategory === cat.id}
+            activeColour={cat.colourHex}
+            // Each inactive chip has a subtle tint of its own colour
+            // This makes the bar feel alive — not just grey pills
+            inactiveTint={`${cat.colourHex}14`}
+            inactiveColor={cat.colourHex}
+            onClick={() => onCategoryChange(cat.id)}
+            aria-label={`Show ${cat.labelPlural}`}
+            aria-pressed={activeCategory === cat.id}
           />
         ))}
       </div>
@@ -85,25 +80,25 @@ export function CategoryBar({
   )
 }
 
-// ============================================================
-// CATEGORY CHIP
-// ============================================================
+// ─────────────────────────────────────────────────────────────
+// NAV CHIP
+// ─────────────────────────────────────────────────────────────
 
-import { forwardRef } from 'react'
-
-type CategoryChipProps = {
-  label: string
-  icon: string
-  isActive: boolean
-  colourHex: string
-  onClick: () => void
+type NavChipProps = {
+  label:         string
+  icon:          string
+  isActive:      boolean
+  activeColour:  string
+  inactiveTint:  string
+  inactiveColor: string
+  onClick:       () => void
   'aria-label'?: string
   'aria-pressed'?: boolean
 }
 
-const CategoryChip = forwardRef<HTMLButtonElement, CategoryChipProps>(
-  function CategoryChip(
-    { label, icon, isActive, colourHex, onClick, ...ariaProps },
+const NavChip = forwardRef<HTMLButtonElement, NavChipProps>(
+  function NavChip(
+    { label, icon, isActive, activeColour, inactiveTint, inactiveColor, onClick, ...aria },
     ref
   ) {
     return (
@@ -111,25 +106,32 @@ const CategoryChip = forwardRef<HTMLButtonElement, CategoryChipProps>(
         ref={ref}
         onClick={onClick}
         role="listitem"
-        className={[
-          'flex-shrink-0 flex items-center gap-1.5',
-          'px-3.5 py-2 rounded-full',
-          'font-sans text-chip font-600',
-          'transition-all duration-200',
-          'no-tap-highlight select-none',
-          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-1',
-          'animate-chip-select',
-          isActive
-            ? 'text-white shadow-md'
-            : 'text-neutral-600 bg-neutral-100 hover:bg-neutral-200',
-        ].join(' ')}
-        style={isActive ? {
-          backgroundColor: colourHex,
-          // Focus ring matches category colour
-        } : undefined}
-        {...ariaProps}
+        style={{
+          display:               'inline-flex',
+          alignItems:            'center',
+          gap:                   '5px',
+          padding:               '8px 14px',
+          borderRadius:          '9999px',
+          border:                'none',
+          fontSize:              '13px',
+          fontWeight:            '600',
+          whiteSpace:            'nowrap',
+          flexShrink:            0,
+          cursor:                'pointer',
+          fontFamily:            'var(--font-dm-sans), system-ui, sans-serif',
+          transition:            'all 180ms ease',
+          WebkitTapHighlightColor: 'transparent',
+          // Active: filled jewel tone + white text + shadow
+          // Inactive: subtle category tint + dark tinted text
+          backgroundColor: isActive ? activeColour : inactiveTint,
+          color:           isActive ? '#ffffff'     : inactiveColor,
+          boxShadow:       isActive
+            ? '0 2px 8px rgba(0,0,0,0.22)'
+            : '0 1px 2px rgba(30,28,26,0.05)',
+        }}
+        {...aria}
       >
-        <span aria-hidden="true" className="text-sm leading-none">
+        <span aria-hidden="true" style={{ fontSize: '14px', lineHeight: 1 }}>
           {icon}
         </span>
         <span>{label}</span>
@@ -138,4 +140,4 @@ const CategoryChip = forwardRef<HTMLButtonElement, CategoryChipProps>(
   }
 )
 
-CategoryChip.displayName = 'CategoryChip'
+NavChip.displayName = 'NavChip'
