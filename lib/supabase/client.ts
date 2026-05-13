@@ -1,7 +1,7 @@
 // lib/supabase/client.ts
 // Browser-side Supabase client.
 // Use ONLY in Client Components ("use client" files).
-// Never use this in Server Components, API routes, or middleware.
+// Do NOT use in Server Components, API routes, or middleware.
 
 import { createBrowserClient } from '@supabase/ssr'
 
