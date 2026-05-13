@@ -1,26 +1,31 @@
 // app/api/auth/callback/route.ts
 // Supabase OAuth callback handler.
 // Called by Supabase after Google completes the sign-in flow.
-// Exchanges the auth code for a session and sets session cookies.
+// Exchanges the one-time auth code for a session and sets session cookies.
+// Never blocked by middleware — /api/auth is excluded from the matcher.
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 
-export async function GET(request: NextRequest) {
+export async function GET(request: NextRequest): Promise<NextResponse> {
   const { searchParams, origin } = new URL(request.url)
 
   const code = searchParams.get('code')
   const next = searchParams.get('next') ?? '/dashboard'
-  const error = searchParams.get('error')
+  const oauthError = searchParams.get('error')
 
-  // Handle OAuth error from Google/Supabase
-  if (error) {
-    console.error('[auth/callback] OAuth error:', error, searchParams.get('error_description'))
+  // Handle error passed back from Google or Supabase
+  if (oauthError) {
+    console.error(
+      '[auth/callback] OAuth provider error:',
+      oauthError,
+      searchParams.get('error_description') ?? 'no description'
+    )
     return NextResponse.redirect(`${origin}/login?error=auth_failed`)
   }
 
   if (!code) {
-    console.error('[auth/callback] No code in callback — possible CSRF or misconfiguration')
+    console.error('[auth/callback] Missing code parameter — possible CSRF or misconfiguration')
     return NextResponse.redirect(`${origin}/login?error=auth_failed`)
   }
 
@@ -35,23 +40,24 @@ export async function GET(request: NextRequest) {
     }
 
     if (!data.user) {
-      console.error('[auth/callback] No user returned after code exchange')
+      console.error('[auth/callback] No user returned after successful code exchange')
       return NextResponse.redirect(`${origin}/login?error=auth_failed`)
     }
 
-    // Determine redirect destination:
-    // New users → onboarding. Existing users → dashboard (or the requested `next` URL).
-    // We use user_metadata to track whether onboarding has been completed.
-    const hasCompletedOnboarding = data.user.user_metadata?.has_completed_onboarding === true
+    // Security: validate `next` is a relative path to prevent open redirect attacks
+    const safeNext = next.startsWith('/') && !next.startsWith('//') ? next : '/dashboard'
 
-    // Security: ensure `next` is a relative path, not an open redirect
-    const safeNext = next.startsWith('/') ? next : '/dashboard'
-    const redirectUrl = hasCompletedOnboarding ? safeNext : '/onboarding/demo'
+    // New users go to onboarding. Returning users go to their requested destination.
+    const hasCompletedOnboarding =
+      data.user.user_metadata?.has_completed_onboarding === true
 
-    return NextResponse.redirect(`${origin}${redirectUrl}`)
+    const destination = hasCompletedOnboarding ? safeNext : '/onboarding/demo'
+
+    return NextResponse.redirect(`${origin}${destination}`)
 
   } catch (err) {
-    console.error('[auth/callback] Unexpected error:', err)
+    // Unexpected errors — log server-side, show generic message to user
+    console.error('[auth/callback] Unexpected error during session exchange:', err)
     return NextResponse.redirect(`${origin}/login?error=auth_failed`)
   }
 }
