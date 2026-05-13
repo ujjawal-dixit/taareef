@@ -1,87 +1,333 @@
 /* app/globals.css */
+/* Taareef — Global Styles */
+/* Wong Kar-wai design language: warm, rich, intimate, slightly textured */
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
+/* ============================================================
+   CSS CUSTOM PROPERTIES
+   Single source of truth for values used in custom CSS.
+   Tailwind classes handle most styling — these fill the gaps.
+   ============================================================ */
+
 @layer base {
   :root {
-    /* Font variables — set by next/font in layout.tsx */
+    /* Font variables — injected by next/font in layout.tsx */
     --font-display: var(--font-fraunces);
     --font-body: var(--font-dm-sans);
 
     /* Surface colours */
-    --color-background: hsl(40, 20%, 98%);
-    --color-surface: hsl(0, 0%, 100%);
-    --color-border: hsl(40, 12%, 90%);
+    --color-page:    hsl(35, 25%, 97%);
+    --color-card:    hsl(30, 20%, 99%);
+    --color-border:  hsl(35, 15%, 87%);
+    --color-overlay: hsla(35, 20%, 10%, 0.6);
 
-    /* Bottom nav height */
-    --nav-height: 64px;
-    --nav-safe-area: 16px;
+    /* Primary */
+    --color-primary: hsl(12, 72%, 45%);
 
-    /* Container */
-    --container-max: 480px;
-    --container-padding: 16px;
+    /* Layout */
+    --nav-height:       64px;
+    --nav-safe-area:    16px;
+    --container-max:    480px;
+    --container-pad:    16px;
+    --fab-size:         56px;
+    --fab-bottom:       96px;   /* above nav + safe area */
+
+    /* Card proportions */
+    --card-image-poster: 38%;   /* image height for visual category cards */
+    --card-radius:       16px;
   }
 
+  /* Dark mode — Wong Kar-wai at night */
+  /* Deep, warm, cinematic — never cold grey */
   @media (prefers-color-scheme: dark) {
     :root {
-      --color-background: hsl(30, 8%, 10%);
-      --color-surface: hsl(30, 6%, 14%);
-      --color-border: hsl(30, 6%, 22%);
+      --color-page:   hsl(20, 12%, 8%);
+      --color-card:   hsl(20, 10%, 12%);
+      --color-border: hsl(20, 8%, 20%);
     }
   }
 
-  /* Reduce motion for accessibility */
+  /* Reduce motion — all animations collapse to instant */
   @media (prefers-reduced-motion: reduce) {
     *,
     *::before,
     *::after {
-      animation-duration: 0.01ms !important;
+      animation-duration:        0.01ms !important;
       animation-iteration-count: 1 !important;
-      transition-duration: 0.01ms !important;
-      scroll-behavior: auto !important;
+      transition-duration:       0.01ms !important;
+      scroll-behavior:           auto !important;
     }
-  }
-
-  /* Base HTML */
-  html {
-    -webkit-tap-highlight-color: transparent;
-  }
-
-  body {
-    background-color: var(--color-background);
-  }
-
-  /* Focus visible — accessible, not always visible */
-  :focus-visible {
-    outline: 2px solid hsl(16, 65%, 52%);
-    outline-offset: 2px;
-    border-radius: 4px;
-  }
-
-  /* Smooth scroll */
-  html {
-    scroll-behavior: smooth;
   }
 }
 
+/* ============================================================
+   BASE HTML RESETS
+   ============================================================ */
+
+@layer base {
+  html {
+    -webkit-tap-highlight-color: transparent;
+    scroll-behavior: smooth;
+    /* Prevent layout shift from scrollbar appearing */
+    scrollbar-gutter: stable;
+  }
+
+  body {
+    background-color: var(--color-page);
+    color: hsl(35, 4%, 10%);
+    font-family: var(--font-body), system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    /* Prevent text size adjustment on iOS rotation */
+    -webkit-text-size-adjust: 100%;
+  }
+
+  /* Focus visible — accessible ring, never intrusive */
+  :focus-visible {
+    outline: 2px solid hsl(12, 72%, 45%);
+    outline-offset: 3px;
+    border-radius: 4px;
+  }
+
+  /* Remove default button styles — we always apply our own */
+  button {
+    cursor: pointer;
+  }
+
+  /* Images never overflow their container */
+  img {
+    max-width: 100%;
+    height: auto;
+    display: block;
+  }
+}
+
+/* ============================================================
+   UTILITY CLASSES
+   Extend Tailwind with project-specific patterns.
+   ============================================================ */
+
 @layer utilities {
-  /* Font family utilities using CSS variables */
+
+  /* Font family shortcuts */
   .font-display {
     font-family: var(--font-display), Georgia, serif;
   }
 
-  /* Safe area for iOS home indicator */
-  .pb-safe {
-    padding-bottom: calc(var(--nav-height) + var(--nav-safe-area) + env(safe-area-inset-bottom));
-  }
-
-  /* Container utility */
+  /* Container — max-width centred, consistent padding */
   .container-app {
     max-width: var(--container-max);
     margin-left: auto;
     margin-right: auto;
-    padding-left: var(--container-padding);
-    padding-right: var(--container-padding);
+    padding-left: var(--container-pad);
+    padding-right: var(--container-pad);
   }
+
+  /* Safe area padding for iOS home indicator */
+  /* Applied to the bottom of scrollable content */
+  .pb-safe {
+    padding-bottom: calc(
+      var(--nav-height) +
+      var(--nav-safe-area) +
+      env(safe-area-inset-bottom, 0px)
+    );
+  }
+
+  /* FAB clearance — content doesn't hide behind the + button */
+  .pb-fab {
+    padding-bottom: calc(var(--fab-bottom) + var(--fab-size) + 16px);
+  }
+
+  /* Grain texture overlay — very subtle, Wong Kar-wai film feel */
+  /* Applied to card surfaces and the page background */
+  .texture-grain::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");
+    pointer-events: none;
+    border-radius: inherit;
+  }
+
+  /* Card image gradient — fades image into card content below */
+  .card-image-gradient {
+    background: linear-gradient(
+      to bottom,
+      transparent 50%,
+      hsla(30, 20%, 99%, 0.95) 100%
+    );
+  }
+
+  /* Source attribution — always terracotta, always consistent */
+  .source-text {
+    color: hsl(12, 72%, 45%);
+    font-family: var(--font-body), system-ui, sans-serif;
+    font-size: 14px;
+    font-weight: 500;
+    line-height: 1.4;
+  }
+
+  /* Category chip — coloured background, white text */
+  .category-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 8px;
+    border-radius: 9999px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: white;
+  }
+
+  /* Frosted glass — for the signin overlay moment */
+  .frosted {
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    background-color: hsla(35, 25%, 97%, 0.85);
+  }
+
+  /* Frosted dark — for overlays on image backgrounds */
+  .frosted-dark {
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    background-color: hsla(20, 12%, 8%, 0.75);
+  }
+
+  /* GPU acceleration hint — applied to animated elements */
+  .gpu {
+    will-change: transform;
+    transform: translateZ(0);
+  }
+
+  /* Line clamp utilities */
+  .line-clamp-1 {
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 1;
+  }
+
+  .line-clamp-2 {
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+  }
+
+  /* Tap highlight removal for interactive elements */
+  .no-tap-highlight {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* Safe area insets for notched devices */
+  .pt-safe {
+    padding-top: env(safe-area-inset-top, 0px);
+  }
+
+  .pl-safe {
+    padding-left: env(safe-area-inset-left, 0px);
+  }
+
+  .pr-safe {
+    padding-right: env(safe-area-inset-right, 0px);
+  }
+}
+
+/* ============================================================
+   COMPONENT BASE STYLES
+   Structural patterns too complex for utility classes alone.
+   ============================================================ */
+
+@layer components {
+
+  /* Bottom sheet — slides up from bottom of screen */
+  .bottom-sheet {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    max-width: var(--container-max);
+    margin: 0 auto;
+    background-color: var(--color-card);
+    border-radius: 24px 24px 0 0;
+    box-shadow: 0 -4px 32px hsla(35, 20%, 10%, 0.12);
+    z-index: 50;
+  }
+
+  /* Sheet handle — the drag indicator at the top of bottom sheets */
+  .sheet-handle {
+    width: 36px;
+    height: 4px;
+    background-color: hsl(35, 15%, 87%);
+    border-radius: 9999px;
+    margin: 12px auto 0;
+  }
+
+  /* Card base — all recommendation cards inherit this */
+  .card-base {
+    background-color: var(--color-card);
+    border-radius: var(--card-radius);
+    box-shadow: 0 2px 8px hsla(35, 20%, 10%, 0.08), 0 0 1px hsla(35, 20%, 10%, 0.04);
+    overflow: hidden;
+    position: relative;
+    transition: box-shadow 200ms ease, transform 200ms ease;
+  }
+
+  .card-base:active {
+    transform: scale(0.98);
+    box-shadow: 0 1px 4px hsla(35, 20%, 10%, 0.06);
+  }
+
+  /* Skeleton loading — warm pulse, never grey */
+  .skeleton {
+    background: linear-gradient(
+      90deg,
+      hsl(35, 20%, 93%) 0%,
+      hsl(35, 20%, 97%) 50%,
+      hsl(35, 20%, 93%) 100%
+    );
+    background-size: 200% 100%;
+    animation: skeleton-wave 1.8s ease-in-out infinite;
+    border-radius: 6px;
+  }
+}
+
+/* ============================================================
+   CUSTOM KEYFRAMES
+   Not in Tailwind config — used in component CSS directly.
+   ============================================================ */
+
+@keyframes skeleton-wave {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* Scrollbar styling — warm, subtle, consistent */
+::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: hsl(35, 15%, 80%);
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: hsl(35, 15%, 68%);
+}
+
+/* Selection colour — warm, not default blue */
+::selection {
+  background-color: hsla(12, 72%, 45%, 0.2);
+  color: hsl(35, 4%, 10%);
 }
