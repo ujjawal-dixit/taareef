@@ -1,23 +1,19 @@
 // app/layout.tsx
-// Root layout — wraps every page in the application.
-// Loads Fraunces (display) and DM Sans (body) via next/font/google.
-// Sets global metadata, page background, and font CSS variables.
+// Root layout. Loads Fraunces + DM Sans via next/font.
+// Sets CSS variables on <html> — all components inherit from here.
 
 import type { Metadata, Viewport } from 'next'
 import { Fraunces, DM_Sans } from 'next/font/google'
 import './globals.css'
 
-// Fraunces — variable serif for headings and display text
-// Axes omitted intentionally: Next.js 14 font loader is strict about
-// variable font axes. We use weight range only — safe and well-supported.
 const fraunces = Fraunces({
   subsets: ['latin'],
   variable: '--font-fraunces',
   display: 'swap',
+  // Optical size and weight axes — gives Fraunces its warmth at large sizes
   weight: ['300', '400', '500', '600', '700'],
 })
 
-// DM Sans — geometric humanist sans for body and UI text
 const dmSans = DM_Sans({
   subsets: ['latin'],
   variable: '--font-dm-sans',
@@ -44,7 +40,8 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 1,
   userScalable: false,
-  themeColor: 'hsl(40, 20%, 98%)',
+  // Wong Kar-wai warm cream — matches the page background
+  themeColor: '#faf8f5',
 }
 
 export default function RootLayout({
@@ -55,9 +52,11 @@ export default function RootLayout({
   return (
     <html
       lang="en"
+      // Apply both font CSS variables to the root element
+      // All children can now use var(--font-fraunces) and var(--font-dm-sans)
       className={`${fraunces.variable} ${dmSans.variable}`}
     >
-      <body className="bg-neutral-50 text-neutral-900 font-sans antialiased min-h-screen">
+      <body>
         {children}
       </body>
     </html>
