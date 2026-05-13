@@ -1,54 +1,52 @@
 // app/(app)/dashboard/page.tsx
-// Stub dashboard — confirms the full auth round-trip works.
-// Replaced with the real dashboard in the next session.
-// Server Component — reads the verified user from the server-side session.
+// The home vault — the Friday evening screen.
+// Adaptive: only shows categories with ≥1 save.
+// Category bar always shows all 10.
+// Nudge question at top on every visit until answered.
+// Server Component — fetches data server-side, passes to client grid.
 
 import type { Metadata } from 'next'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
-import SignOutButton from './sign-out-button'
+import { DashboardClient } from './dashboard-client'
 
 export const metadata: Metadata = {
-  title: 'Dashboard',
+  title: 'Your vault',
 }
 
 export default async function DashboardPage() {
   const supabase = await createClient()
 
-  // getUser() contacts the Supabase Auth server to verify the token.
-  // Never use getSession() for auth checks — it reads from cookies without verification.
   const {
     data: { user },
-    error,
+    error: authError,
   } = await supabase.auth.getUser()
 
-  if (error || !user) {
-    // Belt-and-suspenders — middleware already protects this route
+  if (authError || !user) {
     redirect('/login')
   }
 
+  // Fetch all recommendations — sorted by created_at DESC
+  const { data: recommendations, error: recsError } = await supabase
+    .from('recommendations')
+    .select('*')
+    .eq('user_id', user.id)
+    .neq('status', 'dismissed')
+    .order('created_at', { ascending: false })
+
+  if (recsError) {
+    console.error('[Dashboard] Failed to fetch recommendations:', recsError.message)
+  }
+
+  // Get user's nudge question progress from user metadata
+  const nudgeAnsweredCount =
+    (user.user_metadata?.nudge_questions_answered as number) ?? 0
+
   return (
-    <div className="min-h-screen bg-neutral-50 flex flex-col items-center justify-center px-4">
-      <div className="w-full max-w-sm text-center">
-
-        <h1 className="font-display text-3xl font-bold text-neutral-900 mb-2">
-          Taareef
-        </h1>
-
-        <p className="text-neutral-500 text-sm mb-8">
-          Signed in as {user.email}
-        </p>
-
-        <div className="bg-white rounded-2xl border border-neutral-200 p-6 shadow-sm mb-6">
-          <p className="text-neutral-700 text-sm leading-relaxed">
-            ✅ Auth is working. Your vault is ready.<br />
-            The full dashboard is coming next session.
-          </p>
-        </div>
-
-        <SignOutButton />
-
-      </div>
-    </div>
+    <DashboardClient
+      recommendations={recommendations ?? []}
+      userId={user.id}
+      nudgeAnsweredCount={nudgeAnsweredCount}
+    />
   )
 }
