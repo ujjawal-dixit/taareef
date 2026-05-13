@@ -1,7 +1,7 @@
 // app/(auth)/login/page.tsx
-// The Taareef login page.
-// Google OAuth only in V1. Privacy statement visible per locked product decision.
-// Server Component — GoogleSignInButton is a separate Client Component.
+// Login page — Google OAuth only in V1.
+// Privacy statement visible per locked product decision.
+// Server Component — GoogleSignInButton handles the interactive OAuth flow.
 
 import type { Metadata } from 'next'
 import GoogleSignInButton from './google-sign-in-button'
@@ -11,21 +11,27 @@ export const metadata: Metadata = {
   description: 'Sign in to your Taareef vault.',
 }
 
-export default function LoginPage({
-  searchParams,
-}: {
-  searchParams: { error?: string; next?: string }
-}) {
-  const hasError = searchParams.error === 'auth_failed'
+// In Next.js 14 App Router, searchParams is a plain object on page components.
+// It is synchronous — no need to await.
+type SearchParams = { [key: string]: string | string[] | undefined }
+
+type Props = {
+  searchParams: SearchParams
+}
+
+export default function LoginPage({ searchParams }: Props) {
+  const error = searchParams['error']
+  const next = searchParams['next']
+
+  const hasError = error === 'auth_failed'
+  const nextPath = typeof next === 'string' ? next : undefined
 
   return (
     <div className="min-h-screen bg-neutral-50 flex flex-col items-center justify-center px-4">
-      {/* Main card */}
       <div className="w-full max-w-sm">
 
         {/* Brand mark */}
         <div className="text-center mb-10">
-          {/* Wordmark in Fraunces */}
           <h1 className="font-display text-4xl font-bold text-neutral-900 tracking-tight mb-2">
             Taareef
           </h1>
@@ -38,22 +44,24 @@ export default function LoginPage({
         {/* Sign in card */}
         <div className="bg-white rounded-2xl border border-neutral-200 p-6 shadow-sm">
 
-          {/* Error message */}
+          {/* Error state */}
           {hasError && (
-            <div className="mb-4 px-4 py-3 bg-red-50 border border-red-100 rounded-xl">
+            <div
+              role="alert"
+              className="mb-4 px-4 py-3 bg-red-50 border border-red-100 rounded-xl"
+            >
               <p className="text-sm text-red-600">
                 Couldn&rsquo;t sign in — please try again.
               </p>
             </div>
           )}
 
-          {/* Sign in prompt */}
           <p className="text-neutral-700 text-sm text-center mb-5 leading-relaxed">
             Your vault is private. Only you can see it.
           </p>
 
           {/* Google OAuth button — Client Component */}
-          <GoogleSignInButton next={searchParams.next} />
+          <GoogleSignInButton next={nextPath} />
 
         </div>
 
