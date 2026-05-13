@@ -19,7 +19,7 @@ export async function updateSession(request: NextRequest) {
         getAll() {
           return request.cookies.getAll()
         },
-        setAll(cookiesToSet) {
+        setAll(cookiesToSet: { name: string; value: string; options?: Record<string, unknown> }[]) {
           cookiesToSet.forEach(({ name, value }) =>
             request.cookies.set(name, value)
           )
@@ -27,7 +27,7 @@ export async function updateSession(request: NextRequest) {
             request,
           })
           cookiesToSet.forEach(({ name, value, options }) =>
-            supabaseResponse.cookies.set(name, value, options)
+            supabaseResponse.cookies.set(name, value, options as Parameters<typeof supabaseResponse.cookies.set>[2])
           )
         },
       },
@@ -35,20 +35,18 @@ export async function updateSession(request: NextRequest) {
   )
 
   // Refresh the session — must not be removed.
-  // This call is what keeps the user's auth session alive.
-  // Without it, server-side auth will fail after the token expires.
+  // This call keeps the user's auth session alive.
   const {
     data: { user },
   } = await supabase.auth.getUser()
 
-  // Protect all routes under /(app) — redirect to login if not authenticated
-  const isAppRoute = request.nextUrl.pathname.startsWith('/dashboard') ||
+  // Protect all routes under /(app)
+  const isAppRoute =
+    request.nextUrl.pathname.startsWith('/dashboard') ||
     request.nextUrl.pathname.startsWith('/add') ||
     request.nextUrl.pathname.startsWith('/rec')
 
   const isAuthRoute = request.nextUrl.pathname.startsWith('/login')
-  const isOnboardingRoute = request.nextUrl.pathname.startsWith('/onboarding')
-  const isApiRoute = request.nextUrl.pathname.startsWith('/api')
 
   if (!user && isAppRoute) {
     const url = request.nextUrl.clone()
@@ -56,13 +54,11 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(url)
   }
 
-  // If user is authenticated and hits /login, redirect to dashboard
   if (user && isAuthRoute) {
     const url = request.nextUrl.clone()
     url.pathname = '/dashboard'
     return NextResponse.redirect(url)
   }
 
-  // Allow: API routes, onboarding routes, auth routes, public routes
   return supabaseResponse
 }
