@@ -1,333 +1,361 @@
 /* app/globals.css */
-/* Taareef — Global Styles */
-/* Wong Kar-wai design language: warm, rich, intimate, slightly textured */
+/* Taareef — Wong Kar-wai Design System */
+/* Deep, warm, intimate. Like candlelight on aged silk. */
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* ============================================================
-   CSS CUSTOM PROPERTIES
-   Single source of truth for values used in custom CSS.
-   Tailwind classes handle most styling — these fill the gaps.
-   ============================================================ */
-
 @layer base {
   :root {
-    /* Font variables — injected by next/font in layout.tsx */
-    --font-display: var(--font-fraunces);
-    --font-body: var(--font-dm-sans);
-
-    /* Surface colours */
-    --color-page:    hsl(35, 25%, 97%);
-    --color-card:    hsl(30, 20%, 99%);
-    --color-border:  hsl(35, 15%, 87%);
-    --color-overlay: hsla(35, 20%, 10%, 0.6);
+    /* Page surfaces */
+    --page-bg:     #faf8f5;   /* warm cream — the aged paper */
+    --card-bg:     #fffefb;   /* cards glow slightly warmer than the page */
+    --card-border: rgba(30,28,26,0.09);
+    --card-shadow: 0 1px 4px rgba(30,28,26,0.06), 0 4px 12px rgba(30,28,26,0.06);
 
     /* Primary */
-    --color-primary: hsl(12, 72%, 45%);
+    --primary:     #c44a28;
+    --primary-dim: rgba(196,74,40,0.12);
+
+    /* Text */
+    --text-primary:   #1e1c1a;
+    --text-secondary: #6e6360;
+    --text-tertiary:  #b0a396;
+    --text-source:    #c44a28;
 
     /* Layout */
-    --nav-height:       64px;
-    --nav-safe-area:    16px;
-    --container-max:    480px;
-    --container-pad:    16px;
-    --fab-size:         56px;
-    --fab-bottom:       96px;   /* above nav + safe area */
-
-    /* Card proportions */
-    --card-image-poster: 38%;   /* image height for visual category cards */
-    --card-radius:       16px;
+    --container:    480px;
+    --nav-h:        64px;
+    --fab-size:     56px;
+    --fab-bottom:   80px;
+    --radius-card:  16px;
+    --radius-chip:  9999px;
   }
 
-  /* Dark mode — Wong Kar-wai at night */
-  /* Deep, warm, cinematic — never cold grey */
-  @media (prefers-color-scheme: dark) {
-    :root {
-      --color-page:   hsl(20, 12%, 8%);
-      --color-card:   hsl(20, 10%, 12%);
-      --color-border: hsl(20, 8%, 20%);
-    }
-  }
-
-  /* Reduce motion — all animations collapse to instant */
+  /* Reduce motion */
   @media (prefers-reduced-motion: reduce) {
-    *,
-    *::before,
-    *::after {
-      animation-duration:        0.01ms !important;
-      animation-iteration-count: 1 !important;
-      transition-duration:       0.01ms !important;
-      scroll-behavior:           auto !important;
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      transition-duration: 0.01ms !important;
     }
   }
-}
 
-/* ============================================================
-   BASE HTML RESETS
-   ============================================================ */
-
-@layer base {
   html {
     -webkit-tap-highlight-color: transparent;
-    scroll-behavior: smooth;
-    /* Prevent layout shift from scrollbar appearing */
-    scrollbar-gutter: stable;
+    background-color: var(--page-bg);
   }
 
   body {
-    background-color: var(--color-page);
-    color: hsl(35, 4%, 10%);
-    font-family: var(--font-body), system-ui, sans-serif;
+    background-color: var(--page-bg);
+    color: var(--text-primary);
+    font-family: var(--font-dm-sans), system-ui, sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
-    /* Prevent text size adjustment on iOS rotation */
     -webkit-text-size-adjust: 100%;
+    min-height: 100vh;
+    min-height: 100dvh;
   }
 
-  /* Focus visible — accessible ring, never intrusive */
+  /* Focus ring — terracotta, never default blue */
   :focus-visible {
-    outline: 2px solid hsl(12, 72%, 45%);
+    outline: 2px solid #c44a28;
     outline-offset: 3px;
     border-radius: 4px;
   }
 
-  /* Remove default button styles — we always apply our own */
-  button {
-    cursor: pointer;
+  button { cursor: pointer; }
+  img    { max-width: 100%; height: auto; display: block; }
+
+  /* Text selection — warm tint */
+  ::selection {
+    background-color: rgba(196,74,40,0.18);
+    color: var(--text-primary);
   }
 
-  /* Images never overflow their container */
-  img {
-    max-width: 100%;
-    height: auto;
-    display: block;
-  }
+  /* Scrollbar — warm, minimal */
+  ::-webkit-scrollbar       { width: 3px; height: 3px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #d0c5b8; border-radius: 9999px; }
 }
-
-/* ============================================================
-   UTILITY CLASSES
-   Extend Tailwind with project-specific patterns.
-   ============================================================ */
-
-@layer utilities {
-
-  /* Font family shortcuts */
-  .font-display {
-    font-family: var(--font-display), Georgia, serif;
-  }
-
-  /* Container — max-width centred, consistent padding */
-  .container-app {
-    max-width: var(--container-max);
-    margin-left: auto;
-    margin-right: auto;
-    padding-left: var(--container-pad);
-    padding-right: var(--container-pad);
-  }
-
-  /* Safe area padding for iOS home indicator */
-  /* Applied to the bottom of scrollable content */
-  .pb-safe {
-    padding-bottom: calc(
-      var(--nav-height) +
-      var(--nav-safe-area) +
-      env(safe-area-inset-bottom, 0px)
-    );
-  }
-
-  /* FAB clearance — content doesn't hide behind the + button */
-  .pb-fab {
-    padding-bottom: calc(var(--fab-bottom) + var(--fab-size) + 16px);
-  }
-
-  /* Grain texture overlay — very subtle, Wong Kar-wai film feel */
-  /* Applied to card surfaces and the page background */
-  .texture-grain::after {
-    content: '';
-    position: absolute;
-    inset: 0;
-    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");
-    pointer-events: none;
-    border-radius: inherit;
-  }
-
-  /* Card image gradient — fades image into card content below */
-  .card-image-gradient {
-    background: linear-gradient(
-      to bottom,
-      transparent 50%,
-      hsla(30, 20%, 99%, 0.95) 100%
-    );
-  }
-
-  /* Source attribution — always terracotta, always consistent */
-  .source-text {
-    color: hsl(12, 72%, 45%);
-    font-family: var(--font-body), system-ui, sans-serif;
-    font-size: 14px;
-    font-weight: 500;
-    line-height: 1.4;
-  }
-
-  /* Category chip — coloured background, white text */
-  .category-chip {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    padding: 3px 8px;
-    border-radius: 9999px;
-    font-size: 11px;
-    font-weight: 600;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
-    color: white;
-  }
-
-  /* Frosted glass — for the signin overlay moment */
-  .frosted {
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
-    background-color: hsla(35, 25%, 97%, 0.85);
-  }
-
-  /* Frosted dark — for overlays on image backgrounds */
-  .frosted-dark {
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
-    background-color: hsla(20, 12%, 8%, 0.75);
-  }
-
-  /* GPU acceleration hint — applied to animated elements */
-  .gpu {
-    will-change: transform;
-    transform: translateZ(0);
-  }
-
-  /* Line clamp utilities */
-  .line-clamp-1 {
-    overflow: hidden;
-    display: -webkit-box;
-    -webkit-box-orient: vertical;
-    -webkit-line-clamp: 1;
-  }
-
-  .line-clamp-2 {
-    overflow: hidden;
-    display: -webkit-box;
-    -webkit-box-orient: vertical;
-    -webkit-line-clamp: 2;
-  }
-
-  /* Tap highlight removal for interactive elements */
-  .no-tap-highlight {
-    -webkit-tap-highlight-color: transparent;
-  }
-
-  /* Safe area insets for notched devices */
-  .pt-safe {
-    padding-top: env(safe-area-inset-top, 0px);
-  }
-
-  .pl-safe {
-    padding-left: env(safe-area-inset-left, 0px);
-  }
-
-  .pr-safe {
-    padding-right: env(safe-area-inset-right, 0px);
-  }
-}
-
-/* ============================================================
-   COMPONENT BASE STYLES
-   Structural patterns too complex for utility classes alone.
-   ============================================================ */
 
 @layer components {
 
-  /* Bottom sheet — slides up from bottom of screen */
+  /* ── APP CONTAINER ─────────────────────────────────────────── */
+  /* Applied to the root wrapper — enforces 480px on all screens */
+  .app-container {
+    max-width: var(--container);
+    margin-left: auto;
+    margin-right: auto;
+    min-height: 100vh;
+    min-height: 100dvh;
+    position: relative;
+    background-color: var(--page-bg);
+  }
+
+  /* ── CARD ──────────────────────────────────────────────────── */
+  /* The atomic unit. All recommendation cards use this. */
+  .taareef-card {
+    background-color: var(--card-bg);
+    border-radius: var(--radius-card);
+    border: 1px solid var(--card-border);
+    box-shadow: var(--card-shadow);
+    overflow: hidden;
+    position: relative;
+    transition: box-shadow 200ms ease, transform 180ms ease;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .taareef-card:active {
+    transform: scale(0.985);
+    box-shadow: 0 1px 3px rgba(30,28,26,0.05);
+  }
+
+  /* ── SOURCE TEXT ───────────────────────────────────────────── */
+  /* "From Ahmed" — always terracotta, always present */
+  .source-line {
+    color: var(--text-source);
+    font-size: 13px;
+    font-weight: 500;
+    line-height: 1.4;
+    font-family: var(--font-dm-sans), system-ui, sans-serif;
+  }
+
+  /* ── CATEGORY CHIP ─────────────────────────────────────────── */
+  /* Coloured pill — used on cards and in nav bar */
+  .cat-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 9px;
+    border-radius: var(--radius-chip);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: white;
+    line-height: 1;
+    white-space: nowrap;
+  }
+
+  /* ── NAV CHIP ──────────────────────────────────────────────── */
+  /* Category bar chips — active and inactive states */
+  .nav-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 8px 14px;
+    border-radius: var(--radius-chip);
+    font-size: 13px;
+    font-weight: 600;
+    white-space: nowrap;
+    flex-shrink: 0;
+    transition: all 180ms ease;
+    -webkit-tap-highlight-color: transparent;
+    border: none;
+    cursor: pointer;
+    font-family: var(--font-dm-sans), system-ui, sans-serif;
+  }
+
+  .nav-chip-inactive {
+    background-color: rgba(30,28,26,0.06);
+    color: var(--text-secondary);
+  }
+
+  .nav-chip-inactive:active {
+    background-color: rgba(30,28,26,0.10);
+  }
+
+  .nav-chip-active {
+    color: white;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.20);
+  }
+
+  /* ── BOTTOM SHEET ──────────────────────────────────────────── */
   .bottom-sheet {
     position: fixed;
     bottom: 0;
     left: 0;
     right: 0;
-    max-width: var(--container-max);
+    max-width: var(--container);
     margin: 0 auto;
-    background-color: var(--color-card);
+    background-color: var(--card-bg);
     border-radius: 24px 24px 0 0;
-    box-shadow: 0 -4px 32px hsla(35, 20%, 10%, 0.12);
+    box-shadow: 0 -4px 32px rgba(30,28,26,0.12);
     z-index: 50;
   }
 
-  /* Sheet handle — the drag indicator at the top of bottom sheets */
   .sheet-handle {
     width: 36px;
     height: 4px;
-    background-color: hsl(35, 15%, 87%);
+    background-color: #d0c5b8;
     border-radius: 9999px;
     margin: 12px auto 0;
   }
 
-  /* Card base — all recommendation cards inherit this */
-  .card-base {
-    background-color: var(--color-card);
-    border-radius: var(--card-radius);
-    box-shadow: 0 2px 8px hsla(35, 20%, 10%, 0.08), 0 0 1px hsla(35, 20%, 10%, 0.04);
-    overflow: hidden;
-    position: relative;
-    transition: box-shadow 200ms ease, transform 200ms ease;
-  }
-
-  .card-base:active {
-    transform: scale(0.98);
-    box-shadow: 0 1px 4px hsla(35, 20%, 10%, 0.06);
-  }
-
-  /* Skeleton loading — warm pulse, never grey */
+  /* ── SKELETON ──────────────────────────────────────────────── */
+  /* Warm loading pulse — never cold grey */
   .skeleton {
     background: linear-gradient(
       90deg,
-      hsl(35, 20%, 93%) 0%,
-      hsl(35, 20%, 97%) 50%,
-      hsl(35, 20%, 93%) 100%
+      #f0ebe4 0%,
+      #faf8f5 50%,
+      #f0ebe4 100%
     );
     background-size: 200% 100%;
     animation: skeleton-wave 1.8s ease-in-out infinite;
     border-radius: 6px;
   }
-}
 
-/* ============================================================
-   CUSTOM KEYFRAMES
-   Not in Tailwind config — used in component CSS directly.
-   ============================================================ */
+  /* ── FAB ───────────────────────────────────────────────────── */
+  /* The + button — always terracotta */
+  .fab {
+    position: fixed;
+    bottom: var(--fab-bottom);
+    left: 50%;
+    transform: translateX(-50%);
+    width: var(--fab-size);
+    height: var(--fab-size);
+    border-radius: 50%;
+    background-color: var(--primary);
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 4px 14px rgba(196,74,40,0.45);
+    border: none;
+    cursor: pointer;
+    z-index: 40;
+    transition: transform 150ms ease, box-shadow 150ms ease;
+    -webkit-tap-highlight-color: transparent;
+    will-change: transform;
+  }
+
+  .fab:active {
+    transform: translateX(-50%) scale(0.93);
+    box-shadow: 0 2px 8px rgba(196,74,40,0.35);
+  }
+
+  /* ── BOTTOM NAV ────────────────────────────────────────────── */
+  .bottom-nav {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    max-width: var(--container);
+    margin: 0 auto;
+    height: var(--nav-h);
+    background-color: rgba(250,248,245,0.92);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border-top: 0.5px solid rgba(30,28,26,0.10);
+    display: flex;
+    align-items: center;
+    justify-content: space-around;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    z-index: 30;
+  }
+
+  /* ── EMPTY STATE ───────────────────────────────────────────── */
+  .empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 64px 32px;
+    min-height: calc(100vh - 200px);
+    min-height: calc(100dvh - 200px);
+  }
+
+  /* ── CAPTURE SCREEN ────────────────────────────────────────── */
+  /* Full viewport — sits over everything */
+  .capture-screen {
+    position: fixed;
+    inset: 0;
+    background-color: var(--page-bg);
+    z-index: 50;
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+  }
+
+  /* Centre the content at 480px on wide screens */
+  .capture-inner {
+    max-width: var(--container);
+    margin: 0 auto;
+    width: 100%;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* ── CAPTURE OPTION CARD ───────────────────────────────────── */
+  .capture-option {
+    width: 100%;
+    text-align: left;
+    background-color: var(--card-bg);
+    border-radius: 18px;
+    border: 1px solid var(--card-border);
+    box-shadow: var(--card-shadow);
+    padding: 20px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    cursor: pointer;
+    transition: transform 180ms ease, box-shadow 180ms ease;
+    -webkit-tap-highlight-color: transparent;
+    font-family: var(--font-dm-sans), system-ui, sans-serif;
+  }
+
+  .capture-option:active {
+    transform: scale(0.975);
+    box-shadow: 0 1px 4px rgba(30,28,26,0.05);
+  }
+
+  /* ── NUDGE QUESTION ────────────────────────────────────────── */
+  .nudge-card {
+    margin: 16px 16px 0;
+    background-color: var(--card-bg);
+    border-radius: var(--radius-card);
+    border: 1px solid var(--card-border);
+    box-shadow: var(--card-shadow);
+    padding: 16px 20px 20px;
+    animation: nudge-enter 320ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .nudge-option {
+    display: inline-flex;
+    padding: 8px 14px;
+    border-radius: var(--radius-chip);
+    border: 1px solid rgba(30,28,26,0.12);
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 150ms ease;
+    font-family: var(--font-dm-sans), system-ui, sans-serif;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .nudge-option:active {
+    background-color: var(--primary-dim);
+    border-color: rgba(196,74,40,0.25);
+    color: var(--primary);
+  }
+}
 
 @keyframes skeleton-wave {
   0%   { background-position: 200% 0; }
   100% { background-position: -200% 0; }
 }
 
-/* Scrollbar styling — warm, subtle, consistent */
-::-webkit-scrollbar {
-  width: 4px;
-  height: 4px;
+/* Safe area padding utility */
+.pb-safe {
+  padding-bottom: calc(var(--nav-h) + env(safe-area-inset-bottom, 0px) + 8px);
 }
 
-::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-::-webkit-scrollbar-thumb {
-  background: hsl(35, 15%, 80%);
-  border-radius: 9999px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: hsl(35, 15%, 68%);
-}
-
-/* Selection colour — warm, not default blue */
-::selection {
-  background-color: hsla(12, 72%, 45%, 0.2);
-  color: hsl(35, 4%, 10%);
+.pb-fab {
+  padding-bottom: calc(var(--fab-bottom) + var(--fab-size) + 24px);
 }
