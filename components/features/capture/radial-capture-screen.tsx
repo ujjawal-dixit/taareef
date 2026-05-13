@@ -1,8 +1,7 @@
 // components/features/capture/radial-capture-screen.tsx
-// The capture screen — full screen, three equal options.
-// Speak it, Share it, Jot it down.
-// They co-exist like colours of the Indian flag — no hierarchy.
-// Slides over the vault when the + button is tapped.
+// Full viewport capture screen — covers everything, no bleed-through.
+// Three equal options — speak, share, jot.
+// Wong Kar-wai warmth: glowing icon backgrounds, warm cards, deep typography.
 
 'use client'
 
@@ -10,28 +9,22 @@ import { useEffect, useCallback } from 'react'
 
 type CaptureMethod = 'audio' | 'screenshot' | 'manual'
 
-type RadialCaptureScreenProps = {
-  isOpen: boolean
-  onClose: () => void
+type Props = {
+  isOpen:         boolean
+  onClose:        () => void
   onMethodSelect: (method: CaptureMethod) => void
 }
 
-export function RadialCaptureScreen({
-  isOpen,
-  onClose,
-  onMethodSelect,
-}: RadialCaptureScreenProps) {
+export function RadialCaptureScreen({ isOpen, onClose, onMethodSelect }: Props) {
 
-  // Close on Escape
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
     if (e.key === 'Escape') onClose()
   }, [onClose])
 
   useEffect(() => {
-    if (isOpen) {
-      document.addEventListener('keydown', handleKeyDown)
-      document.body.style.overflow = 'hidden'
-    }
+    if (!isOpen) return
+    document.addEventListener('keydown', handleKeyDown)
+    document.body.style.overflow = 'hidden'
     return () => {
       document.removeEventListener('keydown', handleKeyDown)
       document.body.style.overflow = ''
@@ -41,159 +34,202 @@ export function RadialCaptureScreen({
   if (!isOpen) return null
 
   return (
+    // Full viewport — not max-width constrained here
+    // The inner wrapper centres at 480px
     <div
-      className={[
-        'fixed inset-0 z-50',
-        'max-w-[480px] mx-auto',
-        'flex flex-col',
-        'animate-fade-in gpu',
-      ].join(' ')}
-      style={{ backgroundColor: 'hsl(35, 25%, 97%)' }}
+      className="capture-screen"
       role="dialog"
       aria-modal="true"
       aria-label="Save a recommendation"
+      style={{ animation: 'fade-in 220ms ease-out' }}
     >
+      <div className="capture-inner">
 
-      {/* Header */}
-      <div className="flex items-center justify-between px-6 pt-14 pb-8">
-        <div>
-          <h1 className="font-display text-page text-neutral-900">
-            Save a recommendation
-          </h1>
-          <p className="font-sans text-meta text-neutral-400 mt-1">
-            Choose how you want to capture it
-          </p>
+        {/* Header */}
+        <div style={{
+          display:        'flex',
+          alignItems:     'flex-start',
+          justifyContent: 'space-between',
+          padding:        '56px 24px 32px',
+        }}>
+          <div>
+            <h1 style={{
+              fontFamily:  'var(--font-fraunces), Georgia, serif',
+              fontSize:    '26px',
+              fontWeight:  '600',
+              lineHeight:  '1.2',
+              letterSpacing: '-0.01em',
+              color:       'var(--text-primary)',
+              margin:      0,
+            }}>
+              Save a recommendation
+            </h1>
+            <p style={{
+              fontFamily: 'var(--font-dm-sans), system-ui, sans-serif',
+              fontSize:   '13px',
+              color:      'var(--text-tertiary)',
+              marginTop:  '6px',
+            }}>
+              How did it arrive?
+            </p>
+          </div>
+
+          {/* Close */}
+          <button
+            onClick={onClose}
+            aria-label="Close"
+            style={{
+              width:           '40px',
+              height:          '40px',
+              borderRadius:    '50%',
+              backgroundColor: 'rgba(30,28,26,0.07)',
+              border:          'none',
+              cursor:          'pointer',
+              display:         'flex',
+              alignItems:      'center',
+              justifyContent:  'center',
+              color:           'var(--text-secondary)',
+              flexShrink:      0,
+              marginLeft:      '16px',
+              WebkitTapHighlightColor: 'transparent',
+            }}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true">
+              <line x1="18" y1="6" x2="6" y2="18" />
+              <line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </button>
         </div>
 
-        <button
-          onClick={onClose}
-          aria-label="Close"
-          className={[
-            'w-11 h-11 rounded-full',
-            'bg-neutral-100 text-neutral-500',
-            'flex items-center justify-center',
-            'transition-colors duration-150',
-            'hover:bg-neutral-200',
-            'no-tap-highlight focus-visible:outline-none',
-            'focus-visible:ring-2 focus-visible:ring-neutral-400',
-          ].join(' ')}
-        >
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
-            <line x1="18" y1="6" x2="6" y2="18" />
-            <line x1="6" y1="6" x2="18" y2="18" />
-          </svg>
-        </button>
-      </div>
+        {/* Three capture options */}
+        <div style={{
+          display:       'flex',
+          flexDirection: 'column',
+          gap:           '12px',
+          padding:       '0 16px',
+          flex:          1,
+        }}>
+          <CaptureOption
+            icon="🎙"
+            label="Speak it"
+            description="Tap and say what was recommended and who told you"
+            iconBg="rgba(138,34,82,0.12)"     // deep rose tint
+            iconBgBorder="rgba(138,34,82,0.18)"
+            onClick={() => onMethodSelect('audio')}
+            animDelay={0}
+          />
+          <CaptureOption
+            icon="📸"
+            label="Share a screenshot"
+            description="Upload a screenshot and we'll read it for you"
+            iconBg="rgba(45,74,138,0.10)"     // deep indigo tint
+            iconBgBorder="rgba(45,74,138,0.16)"
+            onClick={() => onMethodSelect('screenshot')}
+            animDelay={60}
+          />
+          <CaptureOption
+            icon="✏️"
+            label="Jot it down"
+            description="Tell us what it is and who recommended it"
+            iconBg="rgba(26,107,74,0.10)"     // deep sage tint
+            iconBgBorder="rgba(26,107,74,0.16)"
+            onClick={() => onMethodSelect('manual')}
+            animDelay={120}
+          />
+        </div>
 
-      {/* Three capture options — equal, balanced, no hierarchy */}
-      <div className="flex-1 flex flex-col gap-4 px-6 pb-12">
-
-        <CaptureOption
-          method="audio"
-          icon="🎙"
-          label="Speak it"
-          description="Tap and say what was recommended and who told you"
-          colourHex="hsl(338, 58%, 38%)"
-          onClick={() => onMethodSelect('audio')}
-          delay={0}
-        />
-
-        <CaptureOption
-          method="screenshot"
-          icon="📸"
-          label="Share a screenshot"
-          description="Upload a screenshot and we'll read it for you"
-          colourHex="hsl(228, 60%, 35%)"
-          onClick={() => onMethodSelect('screenshot')}
-          delay={50}
-        />
-
-        <CaptureOption
-          method="manual"
-          icon="✏️"
-          label="Jot it down"
-          description="Tell us what it is and who recommended it"
-          colourHex="hsl(158, 48%, 30%)"
-          onClick={() => onMethodSelect('manual')}
-          delay={100}
-        />
-
+        {/* Bottom breathing room */}
+        <div style={{ height: '48px' }} />
       </div>
     </div>
   )
 }
 
-// ============================================================
+// ─────────────────────────────────────────────────────────────
 // CAPTURE OPTION
-// ============================================================
+// ─────────────────────────────────────────────────────────────
 
 type CaptureOptionProps = {
-  method: CaptureMethod
-  icon: string
-  label: string
-  description: string
-  colourHex: string
-  onClick: () => void
-  delay: number
+  icon:         string
+  label:        string
+  description:  string
+  iconBg:       string
+  iconBgBorder: string
+  onClick:      () => void
+  animDelay:    number
 }
 
 function CaptureOption({
   icon,
   label,
   description,
-  colourHex,
+  iconBg,
+  iconBgBorder,
   onClick,
-  delay,
+  animDelay,
 }: CaptureOptionProps) {
   return (
     <button
       onClick={onClick}
-      className={[
-        'w-full text-left',
-        'bg-white rounded-2xl',
-        'border border-surface-border',
-        'shadow-card',
-        'p-5',
-        'flex items-center gap-4',
-        'transition-all duration-150',
-        'hover:shadow-card-hover hover:-translate-y-0.5',
-        'active:scale-[0.98] active:shadow-card',
-        'no-tap-highlight focus-visible:outline-none',
-        'focus-visible:ring-2 focus-visible:ring-primary-400',
-        'animate-radial-bloom gpu',
-      ].join(' ')}
-      style={{ animationDelay: `${delay}ms` }}
+      className="capture-option"
+      style={{
+        animationDelay: `${animDelay}ms`,
+        animation:      `screen-enter 320ms cubic-bezier(0.16, 1, 0.3, 1) ${animDelay}ms both`,
+      }}
     >
-      {/* Icon */}
+      {/* Icon background — warm tinted circle */}
       <div
-        className="w-14 h-14 rounded-xl flex items-center justify-center text-2xl flex-shrink-0"
-        style={{ backgroundColor: `${colourHex}18` }}
         aria-hidden="true"
+        style={{
+          width:           '56px',
+          height:          '56px',
+          borderRadius:    '14px',
+          backgroundColor: iconBg,
+          border:          `1px solid ${iconBgBorder}`,
+          display:         'flex',
+          alignItems:      'center',
+          justifyContent:  'center',
+          fontSize:        '26px',
+          flexShrink:      0,
+        }}
       >
         {icon}
       </div>
 
       {/* Text */}
-      <div className="flex-1 min-w-0">
-        <p className="font-display text-card text-neutral-900 mb-0.5">
+      <div style={{ flex: 1, minWidth: 0, textAlign: 'left' }}>
+        <p style={{
+          fontFamily:  'var(--font-fraunces), Georgia, serif',
+          fontSize:    '17px',
+          fontWeight:  '500',
+          color:       'var(--text-primary)',
+          margin:      '0 0 3px',
+          lineHeight:  '1.2',
+        }}>
           {label}
         </p>
-        <p className="font-sans text-meta text-neutral-400 leading-snug">
+        <p style={{
+          fontFamily: 'var(--font-dm-sans), system-ui, sans-serif',
+          fontSize:   '13px',
+          color:      'var(--text-tertiary)',
+          margin:     0,
+          lineHeight: '1.4',
+        }}>
           {description}
         </p>
       </div>
 
       {/* Arrow */}
       <svg
-        width="20"
-        height="20"
+        width="18"
+        height="18"
         viewBox="0 0 24 24"
         fill="none"
         stroke="currentColor"
         strokeWidth="2"
         strokeLinecap="round"
         strokeLinejoin="round"
-        className="text-neutral-300 flex-shrink-0"
+        style={{ color: '#d0c5b8', flexShrink: 0 }}
         aria-hidden="true"
       >
         <polyline points="9 18 15 12 9 6" />
