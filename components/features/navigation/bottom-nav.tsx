@@ -1,7 +1,7 @@
 // components/features/navigation/bottom-nav.tsx
-// Fixed bottom navigation with FAB.
-// Context-sensitive — FAB only visible on vault screens.
-// Settings route not yet built — nav has two items only for now.
+// Fixed bottom navigation + FAB.
+// All styles inline — no dependency on Tailwind custom tokens.
+// FAB shows only on vault screens.
 
 'use client'
 
@@ -15,26 +15,19 @@ type BottomNavProps = {
 export function BottomNav({ onCaptureTap }: BottomNavProps) {
   const pathname = usePathname()
 
-  // Never show nav during onboarding
   if (pathname.startsWith('/onboarding')) return null
 
-  const isVaultScreen = pathname === '/dashboard' || pathname.startsWith('/rec/')
+  const isVaultScreen =
+    pathname === '/dashboard' ||
+    pathname.startsWith('/rec/')
 
   return (
     <>
-      {/* Bottom bar */}
+      {/* Nav bar */}
       <nav
         aria-label="Main navigation"
-        className={[
-          'fixed bottom-0 left-0 right-0 z-30',
-          'max-w-[480px] mx-auto',
-          'bg-surface-card/90 backdrop-blur-md',
-          'border-t border-surface-border shadow-nav',
-          'h-16 flex items-center justify-around px-8',
-          'pb-safe',
-        ].join(' ')}
+        className="bottom-nav"
       >
-        {/* Vault */}
         <NavItem
           href="/dashboard"
           label="Vault"
@@ -49,10 +42,9 @@ export function BottomNav({ onCaptureTap }: BottomNavProps) {
           }
         />
 
-        {/* Centre spacer — FAB sits here */}
-        <div className="w-14" aria-hidden="true" />
+        {/* Centre spacer for FAB */}
+        <div style={{ width: '56px' }} aria-hidden="true" />
 
-        {/* Profile — placeholder until settings page exists */}
         <NavItem
           href="/dashboard"
           label="Profile"
@@ -66,24 +58,12 @@ export function BottomNav({ onCaptureTap }: BottomNavProps) {
         />
       </nav>
 
-      {/* FAB — only on vault screens */}
+      {/* FAB */}
       {isVaultScreen && (
         <button
           onClick={onCaptureTap}
           aria-label="Save a recommendation"
-          className={[
-            'fixed z-40 bottom-10',
-            'left-1/2 -translate-x-1/2',
-            'w-14 h-14 rounded-full',
-            'bg-primary-500 text-white',
-            'flex items-center justify-center',
-            'shadow-fab',
-            'transition-transform duration-150',
-            'active:scale-95 hover:bg-primary-600',
-            'no-tap-highlight gpu',
-            'focus-visible:outline-none focus-visible:ring-2',
-            'focus-visible:ring-primary-500 focus-visible:ring-offset-2',
-          ].join(' ')}
+          className="fab"
         >
           <svg
             width="26"
@@ -105,10 +85,10 @@ export function BottomNav({ onCaptureTap }: BottomNavProps) {
 }
 
 type NavItemProps = {
-  href: string
-  label: string
+  href:     string
+  label:    string
   isActive: boolean
-  icon: React.ReactNode
+  icon:     React.ReactNode
 }
 
 function NavItem({ href, label, isActive, icon }: NavItemProps) {
@@ -117,17 +97,27 @@ function NavItem({ href, label, isActive, icon }: NavItemProps) {
       href={href}
       aria-label={label}
       aria-current={isActive ? 'page' : undefined}
-      className={[
-        'flex flex-col items-center gap-1',
-        'min-w-11 min-h-11 justify-center',
-        'transition-colors duration-150 no-tap-highlight',
-        isActive
-          ? 'text-primary-500'
-          : 'text-neutral-400 hover:text-neutral-600',
-      ].join(' ')}
+      style={{
+        display:        'flex',
+        flexDirection:  'column',
+        alignItems:     'center',
+        gap:            '3px',
+        minWidth:       '44px',
+        minHeight:      '44px',
+        justifyContent: 'center',
+        color:          isActive ? '#c44a28' : '#b0a396',
+        textDecoration: 'none',
+        transition:     'color 150ms ease',
+        WebkitTapHighlightColor: 'transparent',
+      }}
     >
       {icon}
-      <span className="text-[10px] font-sans font-semibold tracking-wide">
+      <span style={{
+        fontSize:      '10px',
+        fontWeight:    '600',
+        fontFamily:    'var(--font-dm-sans), system-ui, sans-serif',
+        letterSpacing: '0.03em',
+      }}>
         {label}
       </span>
     </Link>
