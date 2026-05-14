@@ -1,38 +1,38 @@
 // app/layout.tsx
-// Root layout. Loads Fraunces + DM Sans via next/font.
-// Sets CSS variables on <html> — all components inherit from here.
+// Root layout. Loads Rajdhani + DM Sans via next/font.
+// Sets CSS variables on <html>. Film grain applied here.
 
 import type { Metadata, Viewport } from 'next'
-import { Fraunces, DM_Sans } from 'next/font/google'
+import { Rajdhani, DM_Sans } from 'next/font/google'
 import './globals.css'
 
-const fraunces = Fraunces({
+const rajdhani = Rajdhani({
   subsets: ['latin'],
-  variable: '--font-fraunces',
+  variable: '--font-rajdhani',
+  weight: ['400', '500', '600', '700'],
   display: 'swap',
-  // Optical size and weight axes — gives Fraunces its warmth at large sizes
-  weight: ['300', '400', '500', '600', '700'],
 })
 
 const dmSans = DM_Sans({
   subsets: ['latin'],
   variable: '--font-dm-sans',
+  weight: ['300', '400', '500', '600'],
   display: 'swap',
-  weight: ['400', '500', '600', '700'],
 })
 
 export const metadata: Metadata = {
   title: {
-    default: 'Taareef',
-    template: '%s · Taareef',
+    default: 'taareef',
+    template: '%s · taareef',
   },
   description: "Every recommendation you'll ever get. One place.",
-  applicationName: 'Taareef',
+  applicationName: 'taareef',
   appleWebApp: {
     capable: true,
-    statusBarStyle: 'default',
-    title: 'Taareef',
+    statusBarStyle: 'black-translucent',
+    title: 'taareef',
   },
+  manifest: '/manifest.json',
 }
 
 export const viewport: Viewport = {
@@ -40,8 +40,8 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 1,
   userScalable: false,
-  // Wong Kar-wai warm cream — matches the page background
-  themeColor: '#faf8f5',
+  // Canvas colour — tells browser to paint chrome in same tone
+  themeColor: '#080f0a',
 }
 
 export default function RootLayout({
@@ -52,11 +52,9 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      // Apply both font CSS variables to the root element
-      // All children can now use var(--font-fraunces) and var(--font-dm-sans)
-      className={`${fraunces.variable} ${dmSans.variable}`}
+      className={`${rajdhani.variable} ${dmSans.variable}`}
     >
-      <body>
+      <body className="grain">
         {children}
       </body>
     </html>
