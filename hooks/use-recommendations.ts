@@ -1,10 +1,9 @@
-// hooks/use-recommendations.ts
-// Client-side hook for recommendation mutations.
-// Optimistic UI — card appears instantly, syncs in background.
-// Error handling — inline on card, never a blocking modal.
-// Never use this for reads — reads happen server-side in page.tsx.
-
 'use client'
+
+// hooks/use-recommendations.ts
+// Client-side mutations. Optimistic UI throughout.
+// Card appears instantly — Supabase write is background.
+// Error shown inline on card — never a blocking modal.
 
 import { useState, useCallback } from 'react'
 import type {
@@ -14,171 +13,152 @@ import type {
   ApiResponse,
 } from '@/lib/types'
 
-type MutationState = {
-  isLoading: boolean
-  error: string | null
-}
-
-// ============================================================
-// CREATE RECOMMENDATION
-// ============================================================
+// ── CREATE ────────────────────────────────────────────────────────
 
 export function useCreateRecommendation() {
-  const [state, setState] = useState<MutationState>({
-    isLoading: false,
-    error: null,
-  })
+  const [isLoading, setIsLoading] = useState(false)
+  const [error,     setError]     = useState<string | null>(null)
 
   const create = useCallback(async (
-    input: CreateRecommendationInput,
-    onOptimisticAdd?: (tempRec: Partial<Recommendation>) => void,
-    onSuccess?: (rec: Recommendation) => void,
-    onError?: (error: string) => void
+    input:          CreateRecommendationInput,
+    onOptimistic?:  (temp: Partial<Recommendation>) => void,
+    onSuccess?:     (rec: Recommendation) => void,
+    onError?:       (msg: string) => void,
   ) => {
-    setState({ isLoading: true, error: null })
+    setIsLoading(true)
+    setError(null)
 
-    // Generate a temporary ID for optimistic UI
+    // Optimistic — show card immediately
     const tempId = `temp-${Date.now()}`
-
-    // Optimistic add — card appears immediately
-    if (onOptimisticAdd) {
-      onOptimisticAdd({
-        id: tempId,
-        ...input,
-        status: 'saved',
-        reaction: null,
-        priority: input.priority ?? 'medium',
-        metadata: input.metadata ?? {},
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      })
-    }
+    onOptimistic?.({
+      id:         tempId,
+      status:     'saved',
+      reaction:   null,
+      priority:   input.priority ?? 'medium',
+      metadata:   input.metadata ?? {},
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      ...input,
+    })
 
     try {
-      const response = await fetch('/api/recommendations', {
-        method: 'POST',
+      const res = await fetch('/api/recommendations', {
+        method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(input),
+        body:    JSON.stringify(input),
       })
 
-      const result: ApiResponse<Recommendation> = await response.json()
+      const result: ApiResponse<Recommendation> = await res.json()
 
-      if (!response.ok || result.error || !result.data) {
-        const errorMessage = result.error ?? 'Couldn\'t save — try again?'
-        setState({ isLoading: false, error: errorMessage })
-        onError?.(errorMessage)
+      if (!res.ok || result.error || !result.data) {
+        const msg = result.error ?? "Couldn't save — try again?"
+        setError(msg)
+        onError?.(msg)
         return null
       }
 
-      setState({ isLoading: false, error: null })
+      setIsLoading(false)
       onSuccess?.(result.data)
       return result.data
 
     } catch (err) {
       console.error('[useCreateRecommendation]', err)
-      const errorMessage = 'Couldn\'t save — try again?'
-      setState({ isLoading: false, error: errorMessage })
-      onError?.(errorMessage)
+      const msg = "Couldn't save — try again?"
+      setError(msg)
+      onError?.(msg)
+      setIsLoading(false)
       return null
     }
   }, [])
 
-  return { create, ...state }
+  return { create, isLoading, error }
 }
 
-// ============================================================
-// UPDATE RECOMMENDATION
-// ============================================================
+// ── UPDATE ────────────────────────────────────────────────────────
 
 export function useUpdateRecommendation() {
-  const [state, setState] = useState<MutationState>({
-    isLoading: false,
-    error: null,
-  })
+  const [isLoading, setIsLoading] = useState(false)
+  const [error,     setError]     = useState<string | null>(null)
 
   const update = useCallback(async (
-    id: string,
-    input: UpdateRecommendationInput,
+    id:         string,
+    input:      UpdateRecommendationInput,
     onSuccess?: (rec: Recommendation) => void,
-    onError?: (error: string) => void
+    onError?:   (msg: string) => void,
   ) => {
-    setState({ isLoading: true, error: null })
+    setIsLoading(true)
+    setError(null)
 
     try {
-      const response = await fetch(`/api/recommendations/${id}`, {
-        method: 'PATCH',
+      const res = await fetch(`/api/recommendations/${id}`, {
+        method:  'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(input),
+        body:    JSON.stringify(input),
       })
 
-      const result: ApiResponse<Recommendation> = await response.json()
+      const result: ApiResponse<Recommendation> = await res.json()
 
-      if (!response.ok || result.error || !result.data) {
-        const errorMessage = result.error ?? 'Couldn\'t update — try again?'
-        setState({ isLoading: false, error: errorMessage })
-        onError?.(errorMessage)
+      if (!res.ok || result.error || !result.data) {
+        const msg = result.error ?? "Couldn't update — try again?"
+        setError(msg)
+        onError?.(msg)
         return null
       }
 
-      setState({ isLoading: false, error: null })
+      setIsLoading(false)
       onSuccess?.(result.data)
       return result.data
 
     } catch (err) {
       console.error('[useUpdateRecommendation]', err)
-      const errorMessage = 'Couldn\'t update — try again?'
-      setState({ isLoading: false, error: errorMessage })
-      onError?.(errorMessage)
+      const msg = "Couldn't update — try again?"
+      setError(msg)
+      onError?.(msg)
+      setIsLoading(false)
       return null
     }
   }, [])
 
-  return { update, ...state }
+  return { update, isLoading, error }
 }
 
-// ============================================================
-// DISMISS RECOMMENDATION (soft delete)
-// ============================================================
+// ── DISMISS (soft delete) ─────────────────────────────────────────
 
 export function useDismissRecommendation() {
-  const [state, setState] = useState<MutationState>({
-    isLoading: false,
-    error: null,
-  })
+  const [isLoading, setIsLoading] = useState(false)
 
   const dismiss = useCallback(async (
-    id: string,
+    id:         string,
     onSuccess?: () => void,
-    onError?: (error: string) => void
+    onError?:   (msg: string) => void,
   ) => {
-    setState({ isLoading: true, error: null })
+    setIsLoading(true)
 
     try {
-      const response = await fetch(`/api/recommendations/${id}`, {
+      const res = await fetch(`/api/recommendations/${id}`, {
         method: 'DELETE',
       })
 
-      const result: ApiResponse<{ id: string }> = await response.json()
+      const result: ApiResponse<{ id: string }> = await res.json()
 
-      if (!response.ok || result.error) {
-        const errorMessage = result.error ?? 'Couldn\'t dismiss — try again?'
-        setState({ isLoading: false, error: errorMessage })
-        onError?.(errorMessage)
+      if (!res.ok || result.error) {
+        const msg = result.error ?? "Couldn't dismiss — try again?"
+        onError?.(msg)
+        setIsLoading(false)
         return false
       }
 
-      setState({ isLoading: false, error: null })
       onSuccess?.()
+      setIsLoading(false)
       return true
 
     } catch (err) {
       console.error('[useDismissRecommendation]', err)
-      const errorMessage = 'Couldn\'t dismiss — try again?'
-      setState({ isLoading: false, error: errorMessage })
-      onError?.(errorMessage)
+      onError?.("Couldn't dismiss — try again?")
+      setIsLoading(false)
       return false
     }
   }, [])
 
-  return { dismiss, ...state }
+  return { dismiss, isLoading }
 }
