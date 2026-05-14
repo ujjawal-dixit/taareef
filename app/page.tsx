@@ -1,9 +1,18 @@
 // app/page.tsx
-// Root route — redirects all visitors to the login page.
-// Authenticated users are caught by middleware and sent to /dashboard instead.
+// Root. Redirects authenticated users to dashboard.
+// Unauthenticated users: redirect to login.
+// Middleware handles this for subsequent navigations.
 
 import { redirect } from 'next/navigation'
+import { createClient } from '@/lib/supabase/server'
 
-export default function RootPage() {
-  redirect('/login')
+export default async function RootPage() {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+
+  if (user) {
+    redirect('/dashboard')
+  } else {
+    redirect('/login')
+  }
 }
