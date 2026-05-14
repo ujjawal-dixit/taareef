@@ -1,9 +1,9 @@
 // components/features/vault/empty-state.tsx
-// Warm empty states — an invitation, never an apology.
-// Vertically centred in the available viewport space.
-// Wong Kar-wai warmth: rich icon backgrounds, editorial typography.
+// Warm empty states for all 10 categories plus the home state.
+// Every empty state is an invitation, never an apology.
+// Neon gem icon when no category — category colour when filtered.
 
-import { getCategoryConfig } from '@/constants/categories'
+import { getCategoryConfig, type CategoryId } from '@/constants/categories'
 import type { Category } from '@/lib/types'
 
 type EmptyStateProps = {
@@ -12,72 +12,55 @@ type EmptyStateProps = {
 }
 
 export function EmptyState({ category, onAdd }: EmptyStateProps) {
-  if (!category) return <HomeEmptyState onAdd={onAdd} />
+  if (!category) return <HomeEmpty onAdd={onAdd} />
 
-  const config = getCategoryConfig(category)
+  const config = getCategoryConfig(category as CategoryId)
 
   return (
     <div className="empty-state">
-
-      {/* Icon */}
+      {/* Category gem — glows in category colour */}
       <div
+        className="empty-gem"
         aria-hidden="true"
         style={{
-          width:           '80px',
-          height:          '80px',
-          borderRadius:    '22px',
-          backgroundColor: `${config.colourHex}14`,
-          border:          `1px solid ${config.colourHex}22`,
-          display:         'flex',
-          alignItems:      'center',
-          justifyContent:  'center',
-          fontSize:        '36px',
-          marginBottom:    '28px',
+          background: `radial-gradient(circle at 44% 36%, ${config.colourHex}20 0%, ${config.colourHex}04 100%)`,
+          border:     `1px solid ${config.colourHex}25`,
+          boxShadow:  `0 0 40px ${config.colourHex}0d`,
         }}
       >
-        {config.icon}
+        <svg
+          viewBox="0 0 24 24"
+          stroke={config.colourHex}
+          strokeWidth="1.3"
+          fill="none"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          style={{ width: '26px', height: '26px', opacity: 0.75 }}
+        >
+          <path d="M6 3h12l4 6-10 13L2 9z"/>
+          <path d="M2 9h20M12 3l4 6M12 3l-4 6"/>
+        </svg>
       </div>
 
-      {/* Headline */}
-      <h2 style={{
-        fontFamily:    'var(--font-fraunces), Georgia, serif',
-        fontSize:      '22px',
-        fontWeight:    '600',
-        color:         'var(--text-primary)',
-        margin:        '0 0 12px',
-        letterSpacing: '-0.01em',
-        lineHeight:    '1.2',
-      }}>
-        {config.emptyState.headline}
-      </h2>
+      <h2 className="empty-title">{config.emptyState.headline}</h2>
+      <p  className="empty-body">{config.emptyState.body}</p>
 
-      {/* Body */}
-      <p style={{
-        fontFamily:  'var(--font-dm-sans), system-ui, sans-serif',
-        fontSize:    '15px',
-        color:       'var(--text-secondary)',
-        lineHeight:  '1.6',
-        margin:      '0 0 36px',
-        maxWidth:    '260px',
-      }}>
-        {config.emptyState.body}
-      </p>
-
-      {/* CTA */}
       {onAdd && (
         <button
           onClick={onAdd}
           style={{
-            backgroundColor: 'var(--primary)',
-            color:           'white',
-            fontFamily:      'var(--font-dm-sans), system-ui, sans-serif',
-            fontSize:        '15px',
-            fontWeight:      '600',
-            padding:         '13px 24px',
-            borderRadius:    '12px',
-            border:          'none',
-            cursor:          'pointer',
-            boxShadow:       '0 4px 12px rgba(196,74,40,0.35)',
+            background:   config.colourHex,
+            color:        '#080f0a',
+            fontFamily:   'var(--f-title)',
+            fontSize:     '14px',
+            fontWeight:   700,
+            letterSpacing:'0.06em',
+            textTransform:'uppercase',
+            padding:      '12px 22px',
+            borderRadius: '10px',
+            border:       'none',
+            cursor:       'pointer',
+            boxShadow:    `0 4px 16px ${config.colourHex}40`,
             WebkitTapHighlightColor: 'transparent',
           }}
         >
@@ -88,70 +71,40 @@ export function EmptyState({ category, onAdd }: EmptyStateProps) {
   )
 }
 
-function HomeEmptyState({ onAdd }: { onAdd?: () => void }) {
+function HomeEmpty({ onAdd }: { onAdd?: () => void }) {
   return (
     <div className="empty-state">
-
-      {/* Icon */}
-      <div
-        aria-hidden="true"
-        style={{
-          width:           '80px',
-          height:          '80px',
-          borderRadius:    '22px',
-          backgroundColor: 'rgba(196,74,40,0.08)',
-          border:          '1px solid rgba(196,74,40,0.14)',
-          display:         'flex',
-          alignItems:      'center',
-          justifyContent:  'center',
-          fontSize:        '36px',
-          marginBottom:    '28px',
-        }}
-      >
-        ✦
+      {/* Neon gem — matches brand and FAB */}
+      <div className="empty-gem" aria-hidden="true">
+        <svg
+          viewBox="0 0 24 24"
+          strokeWidth="1.3"
+          fill="none"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          style={{ width: '26px', height: '26px' }}
+        >
+          <path d="M6 3h12l4 6-10 13L2 9z"/>
+          <path d="M2 9h20M12 3l4 6M12 3l-4 6"/>
+        </svg>
       </div>
 
-      <h2 style={{
-        fontFamily:    'var(--font-fraunces), Georgia, serif',
-        fontSize:      '22px',
-        fontWeight:    '600',
-        color:         'var(--text-primary)',
-        margin:        '0 0 12px',
-        letterSpacing: '-0.01em',
-        lineHeight:    '1.2',
-      }}>
-        Your vault is waiting
-      </h2>
-
-      <p style={{
-        fontFamily: 'var(--font-dm-sans), system-ui, sans-serif',
-        fontSize:   '15px',
-        color:      'var(--text-secondary)',
-        lineHeight: '1.65',
-        margin:     '0 0 36px',
-        maxWidth:   '260px',
-      }}>
-        Every recommendation someone gives you — restaurants, films, books, music — all in one place. Start with one.
+      <h2 className="empty-title">Your vault is waiting</h2>
+      <p className="empty-body">
+        Every recommendation someone gives you — restaurants, films, music, books — one place, with who told you, always.
       </p>
 
+      {/* Invitation — hairlines + neon text. WKW never shouts. */}
       {onAdd && (
         <button
           onClick={onAdd}
-          style={{
-            backgroundColor: 'var(--primary)',
-            color:           'white',
-            fontFamily:      'var(--font-dm-sans), system-ui, sans-serif',
-            fontSize:        '15px',
-            fontWeight:      '600',
-            padding:         '13px 24px',
-            borderRadius:    '12px',
-            border:          'none',
-            cursor:          'pointer',
-            boxShadow:       '0 4px 12px rgba(196,74,40,0.35)',
-            WebkitTapHighlightColor: 'transparent',
-          }}
+          className="invite"
+          style={{ background: 'none', border: 'none' }}
+          aria-label="Save your first recommendation"
         >
-          Save your first recommendation
+          <div className="invite-line" aria-hidden="true" />
+          <span className="invite-text">Save your first one</span>
+          <div className="invite-line" aria-hidden="true" />
         </button>
       )}
     </div>
