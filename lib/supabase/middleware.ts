@@ -1,12 +1,11 @@
 // lib/supabase/middleware.ts
-// Supabase client for Next.js middleware context.
-// Edge Runtime compatible — uses NextRequest/NextResponse for cookie management.
-// Do NOT use lib/supabase/server.ts here — it uses next/headers which is Node-only.
+// Edge-runtime Supabase client.
+// Use ONLY in middleware.ts.
 
-import { createServerClient, type CookieOptions } from '@supabase/ssr'
+import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
-export async function updateSession(request: NextRequest): Promise<NextResponse> {
+export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request })
 
   const supabase = createServerClient(
@@ -17,53 +16,45 @@ export async function updateSession(request: NextRequest): Promise<NextResponse>
         getAll() {
           return request.cookies.getAll()
         },
-        setAll(cookiesToSet: { name: string; value: string; options: CookieOptions }[]) {
-          // First: write to the request so downstream code sees the updated cookies
-          cookiesToSet.forEach(({ name, value }) => {
+        setAll(cookiesToSet) {
+          cookiesToSet.forEach(({ name, value }) =>
             request.cookies.set(name, value)
-          })
-
-          // Recreate the response so we can write Set-Cookie headers
+          )
           supabaseResponse = NextResponse.next({ request })
-
-          // Then: write to the response so the browser receives the updated cookies
-          cookiesToSet.forEach(({ name, value, options }) => {
+          cookiesToSet.forEach(({ name, value, options }) =>
             supabaseResponse.cookies.set(name, value, options)
-          })
+          )
         },
       },
     }
   )
 
-  // IMPORTANT: Do not remove this call.
-  // It refreshes the user session on every request.
-  // Without it, the session expires and server-side auth breaks silently.
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  // Always use getUser() — never getSession() for auth verification
+  const { data: { user } } = await supabase.auth.getUser()
 
+  // Redirect unauthenticated users to login
+  // Exclude: public routes, auth routes, static files
   const { pathname } = request.nextUrl
 
-  // Routes that require authentication
-  const isProtectedRoute =
-    pathname.startsWith('/dashboard') ||
-    pathname.startsWith('/add') ||
-    pathname.startsWith('/rec') ||
-    pathname.startsWith('/onboarding')
+  const isPublic =
+    pathname === '/login' ||
+    pathname === '/' ||
+    pathname.startsWith('/onboarding') ||
+    pathname.startsWith('/api/auth') ||
+    pathname.startsWith('/_next') ||
+    pathname.startsWith('/favicon') ||
+    pathname.startsWith('/manifest')
 
-  // Routes only for unauthenticated users
-  const isAuthRoute = pathname.startsWith('/login')
-
-  if (!user && isProtectedRoute) {
-    const redirectUrl = request.nextUrl.clone()
-    redirectUrl.pathname = '/login'
-    return NextResponse.redirect(redirectUrl)
+  if (!user && !isPublic) {
+    const loginUrl = request.nextUrl.clone()
+    loginUrl.pathname = '/login'
+    return NextResponse.redirect(loginUrl)
   }
 
-  if (user && isAuthRoute) {
-    const redirectUrl = request.nextUrl.clone()
-    redirectUrl.pathname = '/dashboard'
-    return NextResponse.redirect(redirectUrl)
+  if (user && pathname === '/login') {
+    const dashboardUrl = request.nextUrl.clone()
+    dashboardUrl.pathname = '/dashboard'
+    return NextResponse.redirect(dashboardUrl)
   }
 
   return supabaseResponse
