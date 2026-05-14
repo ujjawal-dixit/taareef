@@ -1,178 +1,122 @@
-// components/ui/toast.tsx
-// Taareef Toast — warm, non-intrusive notifications.
-// Auto-dismisses. Never blocks interaction.
-// Used for: save confirmation, errors, sync status.
-
 'use client'
 
-import { useState, useEffect, useCallback, createContext, useContext, useRef } from 'react'
+// components/ui/toast.tsx
+// Lightweight toast system. No external dependencies.
+// Toasts appear at bottom, above the nav bar.
+// Auto-dismiss after 3 seconds. Never blocks interaction.
 
-// ============================================================
-// TYPES
-// ============================================================
+import {
+  createContext, useContext, useState, useCallback,
+  useEffect, useRef, type ReactNode,
+} from 'react'
 
-type ToastVariant = 'default' | 'success' | 'error' | 'warning'
+type ToastType = 'success' | 'error' | 'info'
 
 type Toast = {
-  id: string
+  id:      string
   message: string
-  variant?: ToastVariant
-  duration?: number   // ms — default 3000
+  type:    ToastType
 }
 
 type ToastContextType = {
-  addToast: (message: string, variant?: ToastVariant, duration?: number) => void
-  removeToast: (id: string) => void
+  toast: (message: string, type?: ToastType) => void
 }
 
-// ============================================================
-// CONTEXT
-// ============================================================
-
-const ToastContext = createContext<ToastContextType | null>(null)
+const ToastContext = createContext<ToastContextType>({ toast: () => {} })
 
 export function useToast() {
-  const context = useContext(ToastContext)
-  if (!context) {
-    throw new Error('useToast must be used within a ToastProvider')
-  }
-  return context
+  return useContext(ToastContext)
 }
 
-// ============================================================
-// PROVIDER
-// Wrap the app root with this to enable toasts everywhere.
-// ============================================================
-
-export function ToastProvider({ children }: { children: React.ReactNode }) {
+export function ToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([])
 
-  const removeToast = useCallback((id: string) => {
-    setToasts(prev => prev.filter(t => t.id !== id))
-  }, [])
-
-  const addToast = useCallback((
-    message: string,
-    variant: ToastVariant = 'default',
-    duration = 3000
-  ) => {
-    const id = `toast-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
-    setToasts(prev => [...prev, { id, message, variant, duration }])
+  const toast = useCallback((message: string, type: ToastType = 'info') => {
+    const id = `toast-${Date.now()}`
+    setToasts(prev => [...prev, { id, message, type }])
+    setTimeout(() => {
+      setToasts(prev => prev.filter(t => t.id !== id))
+    }, 3000)
   }, [])
 
   return (
-    <ToastContext.Provider value={{ addToast, removeToast }}>
+    <ToastContext.Provider value={{ toast }}>
       {children}
-      <ToastContainer toasts={toasts} onRemove={removeToast} />
+      <ToastContainer toasts={toasts} />
     </ToastContext.Provider>
   )
 }
 
-// ============================================================
-// CONTAINER
-// Fixed position, above navigation.
-// ============================================================
-
-function ToastContainer({
-  toasts,
-  onRemove,
-}: {
-  toasts: Toast[]
-  onRemove: (id: string) => void
-}) {
+function ToastContainer({ toasts }: { toasts: Toast[] }) {
   if (toasts.length === 0) return null
 
   return (
     <div
       aria-live="polite"
       aria-atomic="false"
-      className={[
-        'fixed left-0 right-0 z-[100]',
-        'max-w-[480px] mx-auto',
-        'bottom-20 px-4',   // above navigation
-        'flex flex-col gap-2',
-        'pointer-events-none',
-      ].join(' ')}
+      style={{
+        position:      'fixed',
+        bottom:        '80px',
+        left:          '50%',
+        transform:     'translateX(-50%)',
+        width:         '100%',
+        maxWidth:      '390px',
+        padding:       '0 16px',
+        zIndex:        600,
+        display:       'flex',
+        flexDirection: 'column',
+        gap:           '8px',
+        pointerEvents: 'none',
+      }}
     >
-      {toasts.map(toast => (
-        <ToastItem
-          key={toast.id}
-          toast={toast}
-          onRemove={onRemove}
-        />
+      {toasts.map(t => (
+        <ToastItem key={t.id} toast={t} />
       ))}
     </div>
   )
 }
 
-// ============================================================
-// TOAST ITEM
-// ============================================================
-
-const variantStyles: Record<ToastVariant, { container: string; icon: string }> = {
-  default: {
-    container: 'bg-neutral-900 text-white',
-    icon: '●',
-  },
-  success: {
-    container: 'bg-neutral-900 text-white border-l-4 border-success',
-    icon: '✓',
-  },
-  error: {
-    container: 'bg-neutral-900 text-white border-l-4 border-error',
-    icon: '!',
-  },
-  warning: {
-    container: 'bg-neutral-900 text-white border-l-4 border-warning',
-    icon: '⚠',
-  },
-}
-
-function ToastItem({
-  toast,
-  onRemove,
-}: {
-  toast: Toast
-  onRemove: (id: string) => void
-}) {
-  const [isVisible, setIsVisible] = useState(true)
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const { container, icon } = variantStyles[toast.variant ?? 'default']
-
-  const dismiss = useCallback(() => {
-    setIsVisible(false)
-    // Remove after fade-out animation
-    setTimeout(() => onRemove(toast.id), 200)
-  }, [toast.id, onRemove])
+function ToastItem({ toast }: { toast: Toast }) {
+  const ref = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    timerRef.current = setTimeout(dismiss, toast.duration ?? 3000)
-    return () => {
-      if (timerRef.current) clearTimeout(timerRef.current)
-    }
-  }, [dismiss, toast.duration])
+    const el = ref.current
+    if (!el) return
+    el.style.opacity = '0'
+    el.style.transform = 'translateY(8px)'
+    requestAnimationFrame(() => {
+      el.style.transition = 'opacity 200ms ease, transform 200ms ease'
+      el.style.opacity    = '1'
+      el.style.transform  = 'translateY(0)'
+    })
+  }, [])
+
+  const colourMap: Record<ToastType, string> = {
+    success: '#1fce94',
+    error:   '#c8151e',
+    info:    'rgba(240,230,200,0.95)',
+  }
 
   return (
     <div
+      ref={ref}
       role="status"
-      className={[
-        'pointer-events-auto',
-        'flex items-center gap-3',
-        'px-4 py-3 rounded-xl',
-        'shadow-sheet',
-        container,
-        'transition-opacity duration-200',
-        isVisible ? 'opacity-100' : 'opacity-0',
-        'animate-fade-in',
-      ].join(' ')}
-      onClick={dismiss}
+      style={{
+        background:   'rgba(20,32,20,0.97)',
+        backdropFilter: 'blur(16px)',
+        border:       `1px solid ${colourMap[toast.type]}30`,
+        borderRadius: '12px',
+        padding:      '12px 16px',
+        fontFamily:   'var(--f-body)',
+        fontSize:     '13px',
+        fontWeight:   500,
+        color:        colourMap[toast.type],
+        boxShadow:    '0 4px 20px rgba(0,0,0,0.50)',
+        pointerEvents:'auto',
+        textAlign:    'center',
+      }}
     >
-      <span aria-hidden="true" className="text-xs opacity-70 flex-shrink-0">
-        {icon}
-      </span>
-      <p className="font-sans text-sm font-medium flex-1">
-        {toast.message}
-      </p>
+      {toast.message}
     </div>
   )
 }
