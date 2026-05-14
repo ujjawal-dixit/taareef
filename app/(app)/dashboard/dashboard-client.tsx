@@ -1,160 +1,182 @@
-// app/(app)/dashboard/dashboard-client.tsx
-// The vault home — Friday evening screen.
-// Wong Kar-wai warmth throughout — inline styles for reliability.
-// Adaptive: category bar always shows all 10, vault shows only saved.
-
 'use client'
 
-import { useState, useMemo } from 'react'
-import { useRouter } from 'next/navigation'
-import { CategoryBar } from '@/components/features/navigation/category-bar'
-import { RecommendationCard } from '@/components/features/cards/recommendation-card'
-import { EmptyState } from '@/components/features/vault/empty-state'
-import { NudgeQuestionCard } from '@/components/features/vault/nudge-question'
-import { getNudgeQuestion } from '@/constants/nudge-questions'
-import type { Recommendation, Category } from '@/lib/types'
+// app/(app)/dashboard/dashboard-client.tsx
+// Interactive dashboard shell.
+// Category filter, mixed grid vault, optimistic saves.
+// Neon brand name. All design tokens applied directly here.
 
-type Props = {
-  recommendations:   Recommendation[]
-  userId:            string
+import { useState, useMemo, useCallback, useOptimistic } from 'react'
+import { useRouter } from 'next/navigation'
+import { CategoryBar }       from '@/components/features/navigation/category-bar'
+import { RecommendationCard } from '@/components/features/cards/recommendation-card'
+import { EmptyState }         from '@/components/features/vault/empty-state'
+import { AppShell }           from '@/components/features/navigation/app-shell'
+import { useCreateRecommendation } from '@/hooks/use-recommendations'
+import { useToast }           from '@/components/ui/toast'
+import type { Recommendation, Category, CreateRecommendationInput } from '@/lib/types'
+
+type DashboardClientProps = {
+  recommendations:    Recommendation[]
+  userId:             string
   nudgeAnsweredCount: number
 }
 
 export function DashboardClient({
-  recommendations,
-  nudgeAnsweredCount,
-}: Props) {
-  const router = useRouter()
-  const [activeCategory, setActiveCategory]   = useState<Category | null>(null)
-  const [localNudgeCount, setLocalNudgeCount] = useState(nudgeAnsweredCount)
+  recommendations: initialRecs,
+}: DashboardClientProps) {
+  const router  = useRouter()
+  const { toast } = useToast()
+  const { create }  = useCreateRecommendation()
 
-  const currentNudge = getNudgeQuestion(localNudgeCount)
+  const [activeCategory, setActiveCategory]   = useState<Category | null>(null)
+  const [isCaptureOpen,  setIsCaptureOpen]     = useState(false)
+
+  // Optimistic UI — card appears instantly on save
+  const [optimisticRecs, addOptimistic] = useOptimistic<
+    Recommendation[],
+    Partial<Recommendation>
+  >(
+    initialRecs,
+    (state, newRec) => [newRec as Recommendation, ...state]
+  )
 
   const filteredRecs = useMemo(() => {
-    if (!activeCategory) return recommendations
-    return recommendations.filter(r => r.category === activeCategory)
-  }, [recommendations, activeCategory])
+    if (!activeCategory) return optimisticRecs
+    return optimisticRecs.filter(r => r.category === activeCategory)
+  }, [optimisticRecs, activeCategory])
 
-  async function handleNudgeAnswer(questionId: string, value: string) {
-    try {
-      await fetch('/api/user/preferences', {
-        method:  'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ questionId, value, nudgeAnsweredCount: localNudgeCount + 1 }),
-      })
-      setLocalNudgeCount(prev => prev + 1)
-    } catch (err) {
-      console.error('[Dashboard] nudge answer failed:', err)
-      // Silent fail — nudge is never critical
+  const handleSave = useCallback(async (input: CreateRecommendationInput) => {
+    // Optimistic add — card appears before network call
+    const temp: Partial<Recommendation> = {
+      id:          `temp-${Date.now()}`,
+      status:      'saved',
+      reaction:    null,
+      priority:    'medium',
+      metadata:    {},
+      created_at:  new Date().toISOString(),
+      updated_at:  new Date().toISOString(),
+      ...input,
     }
-  }
 
-  const hasAnyRecs     = recommendations.length > 0
-  const hasFiltered    = filteredRecs.length > 0
+    addOptimistic(temp)
+
+    await create(
+      input,
+      undefined,
+      () => {
+        toast('Saved ✦', 'success')
+        router.refresh()
+      },
+      (err) => {
+        toast(err, 'error')
+      }
+    )
+  }, [create, addOptimistic, toast, router])
+
+  const recCount = optimisticRecs.length
+  const hasRecs  = recCount > 0
+  const hasFiltered = filteredRecs.length > 0
 
   return (
-    // app-container enforces 480px max-width, centred
-    <div className="app-container">
+    <AppShell onSaveRecommendation={handleSave}>
 
-      {/* ── HEADER ─────────────────────────────────────────── */}
-      <header style={{ padding: '56px 20px 8px' }}>
-        <h1 style={{
-          fontFamily:    'var(--font-fraunces), Georgia, serif',
-          fontSize:      '36px',
-          fontWeight:    '700',
-          letterSpacing: '-0.025em',
-          lineHeight:    '1.1',
-          color:         'var(--text-primary)',
-          margin:        '0 0 4px',
-        }}>
-          Taareef
-        </h1>
-        <p style={{
-          fontFamily: 'var(--font-dm-sans), system-ui, sans-serif',
-          fontSize:   '13px',
-          color:      'var(--text-tertiary)',
-          margin:     0,
-        }}>
-          {recommendations.length === 0
+      {/* Header */}
+      <header style={{ padding: '52px 20px 10px' }}>
+        {/* Brand name — neon green, WKW shopfront glow */}
+        {/* Von Restorff: single saturated element in desaturated field */}
+        <span
+          className="brand-name"
+          aria-label="taareef"
+        >
+          taareef
+        </span>
+
+        <span className="brand-sub">
+          {recCount === 0
             ? 'Your vault is ready'
-            : `${recommendations.length} recommendation${recommendations.length === 1 ? '' : 's'}`
+            : `${recCount} recommendation${recCount === 1 ? '' : 's'}`
           }
-        </p>
+        </span>
       </header>
 
-      {/* ── CATEGORY BAR — sticky ──────────────────────────── */}
-      <div style={{
-        position:        'sticky',
-        top:             0,
-        zIndex:          20,
-        backgroundColor: 'rgba(250,248,245,0.92)',
-        backdropFilter:  'blur(16px)',
-        WebkitBackdropFilter: 'blur(16px)',
-        borderBottom:    '0.5px solid rgba(30,28,26,0.08)',
-      }}>
+      {/* Hairline — neon, left to right fade */}
+      <div className="hairline" style={{ margin: '0 20px' }} />
+
+      {/* Category grid — 5×2, all 10 visible, no scroll */}
+      {/* Sticky so it stays visible while scrolling the vault */}
+      <div
+        style={{
+          position:          'sticky',
+          top:               0,
+          zIndex:            20,
+          background:        'rgba(8,15,10,0.94)',
+          backdropFilter:    'blur(16px)',
+          WebkitBackdropFilter: 'blur(16px)',
+          borderBottom:      '0.5px solid rgba(240,230,200,0.07)',
+        }}
+      >
         <CategoryBar
           activeCategory={activeCategory}
           onCategoryChange={setActiveCategory}
         />
       </div>
 
-      {/* ── MAIN CONTENT ──────────────────────────────────── */}
-      <div className="pb-fab" style={{ paddingTop: '8px' }}>
+      {/* Vault */}
+      <div style={{ padding: '12px 16px 0' }}>
 
-        {/* Nudge question */}
-        {hasAnyRecs && currentNudge && (
-          <NudgeQuestionCard
-            question={currentNudge}
-            onAnswer={handleNudgeAnswer}
-          />
-        )}
-
-        {/* Vault */}
-        {!hasAnyRecs ? (
-          <EmptyState />
+        {!hasRecs ? (
+          <EmptyState onAdd={() => setIsCaptureOpen(true)} />
         ) : !hasFiltered ? (
-          <EmptyState category={activeCategory ?? undefined} />
+          <EmptyState
+            category={activeCategory ?? undefined}
+            onAdd={() => setIsCaptureOpen(true)}
+          />
         ) : (
-          <MixedGrid
+          <VaultGrid
             recommendations={filteredRecs}
             onCardClick={id => router.push(`/rec/${id}`)}
           />
         )}
 
       </div>
-    </div>
+
+    </AppShell>
   )
 }
 
-// ─────────────────────────────────────────────────────────────
-// MIXED GRID
-// Hero card full width, remaining in column
-// ─────────────────────────────────────────────────────────────
+// ── VAULT GRID ────────────────────────────────────────────────────
+// Mixed layout: hero card full-width, rest in column.
+// Hero is taller — draws the eye. Subsequent cards are standard height.
 
-function MixedGrid({
-  recommendations,
-  onCardClick,
-}: {
+type VaultGridProps = {
   recommendations: Recommendation[]
   onCardClick:     (id: string) => void
-}) {
+}
+
+function VaultGrid({ recommendations, onCardClick }: VaultGridProps) {
   const [hero, ...rest] = recommendations
 
   return (
-    <div style={{ padding: '0 16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+    <div
+      style={{
+        display:       'flex',
+        flexDirection: 'column',
+        gap:           '10px',
+      }}
+    >
       {hero && (
-        <RecommendationCard
-          recommendation={hero}
-          onClick={() => onCardClick(hero.id)}
-          isHero
-        />
+        <div onClick={() => onCardClick(hero.id)} style={{ cursor: 'pointer' }}>
+          <RecommendationCard recommendation={hero} isHero />
+        </div>
       )}
       {rest.map(rec => (
-        <RecommendationCard
+        <div
           key={rec.id}
-          recommendation={rec}
           onClick={() => onCardClick(rec.id)}
-        />
+          style={{ cursor: 'pointer' }}
+        >
+          <RecommendationCard recommendation={rec} />
+        </div>
       ))}
     </div>
   )
