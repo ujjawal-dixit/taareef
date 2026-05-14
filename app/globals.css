@@ -1,361 +1,633 @@
-/* app/globals.css */
-/* Taareef — Wong Kar-wai Design System */
-/* Deep, warm, intimate. Like candlelight on aged silk. */
+/* ═══════════════════════════════════════════════════════════════════
+   TAAREEF — globals.css
+   All critical visual styles defined here as CSS custom properties
+   and component classes. This ensures they render correctly regardless
+   of Tailwind's build-time scanning.
+   
+   Anti-drift rule: every visual property here traces to a token.
+   No inline magic numbers elsewhere.
+═══════════════════════════════════════════════════════════════════ */
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
+/* ── DESIGN TOKENS ─────────────────────────────────────────────── */
+:root {
+  /* Canvas */
+  --bg0: #080f0a;
+  --bg1: #0d1910;
+  --bg2: #142014;
+  --bg3: #1a2818;
+
+  /* The neon — WKW shopfront green, single saturated accent */
+  --neon:      #1fce94;
+  --neon-dim:  rgba(31,206,148,0.14);
+  --neon-glow: rgba(31,206,148,0.35);
+
+  /* Signal crimson — source attribution ONLY */
+  --signal:     #c8151e;
+  --signal-dim: rgba(200,21,30,0.12);
+
+  /* Text — lamp-lit cream */
+  --t1: rgba(240,230,200,0.95);
+  --t2: rgba(240,230,200,0.58);
+  --t3: rgba(240,230,200,0.38);
+  --t4: rgba(240,230,200,0.18);
+
+  /* Borders */
+  --bdr:   rgba(240,230,200,0.09);
+  --bdr-2: rgba(240,230,200,0.14);
+
+  /* Layout */
+  --max-w:   430px;
+  --nav-h:   64px;
+  --fab-sz:  58px;
+  --r-card:  16px;
+  --r-tile:  10px;
+
+  /* Typography */
+  --f-title: var(--font-rajdhani), system-ui, sans-serif;
+  --f-body:  var(--font-dm-sans),  system-ui, sans-serif;
+}
+
+/* ── BASE ──────────────────────────────────────────────────────── */
 @layer base {
-  :root {
-    /* Page surfaces */
-    --page-bg:     #faf8f5;   /* warm cream — the aged paper */
-    --card-bg:     #fffefb;   /* cards glow slightly warmer than the page */
-    --card-border: rgba(30,28,26,0.09);
-    --card-shadow: 0 1px 4px rgba(30,28,26,0.06), 0 4px 12px rgba(30,28,26,0.06);
-
-    /* Primary */
-    --primary:     #c44a28;
-    --primary-dim: rgba(196,74,40,0.12);
-
-    /* Text */
-    --text-primary:   #1e1c1a;
-    --text-secondary: #6e6360;
-    --text-tertiary:  #b0a396;
-    --text-source:    #c44a28;
-
-    /* Layout */
-    --container:    480px;
-    --nav-h:        64px;
-    --fab-size:     56px;
-    --fab-bottom:   80px;
-    --radius-card:  16px;
-    --radius-chip:  9999px;
-  }
-
-  /* Reduce motion */
-  @media (prefers-reduced-motion: reduce) {
-    *, *::before, *::after {
-      animation-duration: 0.01ms !important;
-      transition-duration: 0.01ms !important;
-    }
-  }
-
   html {
+    background: var(--bg0);
     -webkit-tap-highlight-color: transparent;
-    background-color: var(--page-bg);
   }
 
   body {
-    background-color: var(--page-bg);
-    color: var(--text-primary);
-    font-family: var(--font-dm-sans), system-ui, sans-serif;
+    background: var(--bg0);
+    color: var(--t1);
+    font-family: var(--f-body);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
-    -webkit-text-size-adjust: 100%;
     min-height: 100vh;
     min-height: 100dvh;
   }
 
-  /* Focus ring — terracotta, never default blue */
+  * { box-sizing: border-box; }
+
   :focus-visible {
-    outline: 2px solid #c44a28;
-    outline-offset: 3px;
+    outline: 2px solid var(--neon);
+    outline-offset: 2px;
     border-radius: 4px;
   }
 
-  button { cursor: pointer; }
-  img    { max-width: 100%; height: auto; display: block; }
-
-  /* Text selection — warm tint */
-  ::selection {
-    background-color: rgba(196,74,40,0.18);
-    color: var(--text-primary);
-  }
-
-  /* Scrollbar — warm, minimal */
-  ::-webkit-scrollbar       { width: 3px; height: 3px; }
-  ::-webkit-scrollbar-track { background: transparent; }
-  ::-webkit-scrollbar-thumb { background: #d0c5b8; border-radius: 9999px; }
+  button { cursor: pointer; background: none; border: none; }
 }
 
+/* ── LAYOUT ────────────────────────────────────────────────────── */
 @layer components {
-
-  /* ── APP CONTAINER ─────────────────────────────────────────── */
-  /* Applied to the root wrapper — enforces 480px on all screens */
-  .app-container {
-    max-width: var(--container);
-    margin-left: auto;
-    margin-right: auto;
+  /* App container — 430px centred, full height */
+  .app-shell {
+    width: 100%;
+    max-width: var(--max-w);
+    margin: 0 auto;
     min-height: 100vh;
     min-height: 100dvh;
     position: relative;
-    background-color: var(--page-bg);
+    background: var(--bg0);
+    overflow-x: hidden;
   }
 
-  /* ── CARD ──────────────────────────────────────────────────── */
-  /* The atomic unit. All recommendation cards use this. */
-  .taareef-card {
-    background-color: var(--card-bg);
-    border-radius: var(--radius-card);
-    border: 1px solid var(--card-border);
-    box-shadow: var(--card-shadow);
-    overflow: hidden;
-    position: relative;
-    transition: box-shadow 200ms ease, transform 180ms ease;
-    -webkit-tap-highlight-color: transparent;
+  /* Desktop ring — subtle on wide screens */
+  @media (min-width: 500px) {
+    .app-shell {
+      box-shadow:
+        0 0 0 1px rgba(31,206,148,0.06),
+        0 48px 120px rgba(0,0,0,0.80);
+    }
   }
 
-  .taareef-card:active {
-    transform: scale(0.985);
-    box-shadow: 0 1px 3px rgba(30,28,26,0.05);
+  /* Film grain — always present, always subtle */
+  .grain::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    max-width: var(--max-w);
+    margin: 0 auto;
+    pointer-events: none;
+    z-index: 999;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence baseFrequency='0.68' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.028'/%3E%3C/svg%3E");
   }
 
-  /* ── SOURCE TEXT ───────────────────────────────────────────── */
-  /* "From Ahmed" — always terracotta, always present */
-  .source-line {
-    color: var(--text-source);
-    font-size: 13px;
-    font-weight: 500;
-    line-height: 1.4;
-    font-family: var(--font-dm-sans), system-ui, sans-serif;
+  /* Padding below fixed nav + FAB */
+  .page-content {
+    padding-bottom: calc(var(--nav-h) + 48px + env(safe-area-inset-bottom, 0px));
   }
+}
 
-  /* ── CATEGORY CHIP ─────────────────────────────────────────── */
-  /* Coloured pill — used on cards and in nav bar */
-  .cat-chip {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    padding: 3px 9px;
-    border-radius: var(--radius-chip);
-    font-size: 10px;
+/* ── HEADER ────────────────────────────────────────────────────── */
+@layer components {
+  /* Brand name — neon green, the Von Restorff element */
+  /* Single saturated element in a desaturated field */
+  .brand-name {
+    font-family: var(--f-title);
+    font-size: 54px;
     font-weight: 700;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    color: white;
+    letter-spacing: 0.05em;
     line-height: 1;
-    white-space: nowrap;
+    color: var(--neon);
+    /* Neon glow: text-shadow creates the WKW shopfront ambience */
+    text-shadow:
+      0 0 24px rgba(31,206,148,0.55),
+      0 0 48px rgba(31,206,148,0.25);
+    display: block;
   }
 
-  /* ── NAV CHIP ──────────────────────────────────────────────── */
-  /* Category bar chips — active and inactive states */
-  .nav-chip {
-    display: inline-flex;
+  .brand-sub {
+    font-family: var(--f-body);
+    font-size: 12px;
+    font-weight: 400;
+    color: var(--t3);
+    letter-spacing: 0.03em;
+    margin-top: 3px;
+    display: block;
+  }
+
+  /* Hairline — neon, left-anchored, fades right */
+  .hairline {
+    height: 0.5px;
+    background: linear-gradient(
+      to right,
+      rgba(31,206,148,0.55) 0%,
+      rgba(31,206,148,0.12) 45%,
+      transparent 100%
+    );
+  }
+}
+
+/* ── CATEGORY GRID ─────────────────────────────────────────────── */
+@layer components {
+  .section-label {
+    font-family: var(--f-body);
+    font-size: 9px;
+    font-weight: 600;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--t3);
+    display: block;
+    padding-left: 1px;
+  }
+
+  /* Tile — Fitts's Law: minimum 52px height, fat touch targets */
+  .cat-tile {
+    display: flex;
+    flex-direction: column;
     align-items: center;
     gap: 5px;
-    padding: 8px 14px;
-    border-radius: var(--radius-chip);
-    font-size: 13px;
+    padding: 12px 2px 10px;
+    border-radius: var(--r-tile);
+    cursor: pointer;
+    position: relative;
+    /* Inactive: visible, not invisible */
+    border: 1px solid rgba(240,230,200,0.11);
+    background: rgba(240,230,200,0.03);
+    transition: border-color 180ms ease, background 180ms ease;
+    -webkit-tap-highlight-color: transparent;
+    min-height: 52px;
+  }
+
+  /* Active: category colour border + top light bar */
+  .cat-tile.active {
+    background: rgba(240,230,200,0.05);
+  }
+
+  .cat-tile.active::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 1.5px;
+    background: var(--tc);
+    border-radius: var(--r-tile) var(--r-tile) 0 0;
+  }
+
+  .tile-icon {
+    width: 18px; height: 18px;
+    display: flex; align-items: center; justify-content: center;
+  }
+
+  .tile-icon svg {
+    width: 15px; height: 15px;
+    stroke-width: 1.6;
+    stroke-linecap: round; stroke-linejoin: round;
+    fill: none;
+  }
+
+  /* Inactive icon: 62% — readable, not invisible */
+  .cat-tile:not(.active) .tile-icon svg {
+    stroke: rgba(240,230,200,0.62);
+  }
+
+  .tile-name {
+    font-family: var(--f-title);
+    font-size: 8px;
     font-weight: 600;
-    white-space: nowrap;
-    flex-shrink: 0;
-    transition: all 180ms ease;
-    -webkit-tap-highlight-color: transparent;
-    border: none;
-    cursor: pointer;
-    font-family: var(--font-dm-sans), system-ui, sans-serif;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    text-align: center;
+    line-height: 1;
+    transition: color 180ms ease;
+    color: rgba(240,230,200,0.62);
   }
 
-  .nav-chip-inactive {
-    background-color: rgba(30,28,26,0.06);
-    color: var(--text-secondary);
-  }
+  .cat-tile.active .tile-name { color: var(--t1); }
 
-  .nav-chip-inactive:active {
-    background-color: rgba(30,28,26,0.10);
-  }
-
-  .nav-chip-active {
-    color: white;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.20);
-  }
-
-  /* ── BOTTOM SHEET ──────────────────────────────────────────── */
-  .bottom-sheet {
-    position: fixed;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    max-width: var(--container);
-    margin: 0 auto;
-    background-color: var(--card-bg);
-    border-radius: 24px 24px 0 0;
-    box-shadow: 0 -4px 32px rgba(30,28,26,0.12);
-    z-index: 50;
-  }
-
-  .sheet-handle {
-    width: 36px;
-    height: 4px;
-    background-color: #d0c5b8;
-    border-radius: 9999px;
-    margin: 12px auto 0;
-  }
-
-  /* ── SKELETON ──────────────────────────────────────────────── */
-  /* Warm loading pulse — never cold grey */
-  .skeleton {
-    background: linear-gradient(
-      90deg,
-      #f0ebe4 0%,
-      #faf8f5 50%,
-      #f0ebe4 100%
-    );
-    background-size: 200% 100%;
-    animation: skeleton-wave 1.8s ease-in-out infinite;
-    border-radius: 6px;
-  }
-
-  /* ── FAB ───────────────────────────────────────────────────── */
-  /* The + button — always terracotta */
-  .fab {
-    position: fixed;
-    bottom: var(--fab-bottom);
-    left: 50%;
-    transform: translateX(-50%);
-    width: var(--fab-size);
-    height: var(--fab-size);
+  .tile-dot {
+    width: 3px; height: 3px;
     border-radius: 50%;
-    background-color: var(--primary);
-    color: white;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    box-shadow: 0 4px 14px rgba(196,74,40,0.45);
-    border: none;
+    opacity: 0;
+    transition: opacity 180ms ease;
+  }
+
+  .cat-tile.active .tile-dot { opacity: 1; }
+}
+
+/* ── CARDS ──────────────────────────────────────────────────────── */
+@layer components {
+  /* Poster card — film, music, book, podcast, tv, city, person */
+  .card-poster {
+    background: var(--bg2);
+    border-radius: var(--r-card);
+    border: 1px solid var(--bdr);
+    overflow: hidden;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.50);
     cursor: pointer;
-    z-index: 40;
-    transition: transform 150ms ease, box-shadow 150ms ease;
-    -webkit-tap-highlight-color: transparent;
-    will-change: transform;
+    transition: transform 180ms ease;
+    animation: card-enter 280ms cubic-bezier(0.16,1,0.3,1);
   }
 
-  .fab:active {
-    transform: translateX(-50%) scale(0.93);
-    box-shadow: 0 2px 8px rgba(196,74,40,0.35);
+  .card-poster:active { transform: scale(0.987); }
+
+  .card-image {
+    width: 100%;
+    position: relative; overflow: hidden;
   }
 
-  /* ── BOTTOM NAV ────────────────────────────────────────────── */
+  /* Hero card: taller image */
+  .card-image.hero    { height: 180px; }
+  /* Standard card: shorter */
+  .card-image.standard{ height: 148px; }
+
+  .card-img-bg { position: absolute; inset: 0; }
+  .card-img-atm{ position: absolute; inset: 0; pointer-events: none; }
+
+  .card-img-fade {
+    position: absolute; bottom: 0; left: 0; right: 0; height: 80px;
+    background: linear-gradient(to bottom, transparent, var(--bg2));
+  }
+
+  .card-badge {
+    position: absolute; top: 11px; left: 12px;
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 3px 9px; border-radius: var(--r-chip);
+    font-family: var(--f-title);
+    font-size: 9px; font-weight: 700;
+    letter-spacing: 0.08em; text-transform: uppercase;
+    backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+    color: rgba(240,230,200,0.95);
+  }
+
+  .card-badge svg {
+    width: 9px; height: 9px;
+    stroke: currentColor; stroke-width: 2; fill: none; stroke-linecap: round;
+  }
+
+  .card-body { padding: 10px 14px 16px; }
+
+  .card-title {
+    font-family: var(--f-title);
+    font-size: 21px; font-weight: 700;
+    letter-spacing: 0.04em;
+    color: var(--t1);
+    line-height: 1.1; margin-bottom: 4px;
+  }
+
+  /* Source: the most important metadata — always signal crimson */
+  .card-source {
+    font-family: var(--f-body);
+    font-size: 12px; font-weight: 500;
+    color: var(--signal);
+    margin-bottom: 6px;
+    display: block;
+  }
+
+  .card-meta {
+    display: flex; align-items: center; flex-wrap: wrap; gap: 5px;
+    font-family: var(--f-body);
+    font-size: 11px; color: var(--t2);
+  }
+
+  .meta-dot {
+    width: 2px; height: 2px;
+    border-radius: 50%; background: var(--t2);
+    flex-shrink: 0;
+  }
+
+  /* Split card — restaurant, bar, activity */
+  .card-split {
+    background: var(--bg2);
+    border-radius: var(--r-card);
+    border: 1px solid var(--bdr);
+    overflow: hidden;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.50);
+    display: flex;
+    cursor: pointer;
+    transition: transform 180ms ease;
+    animation: card-enter 280ms cubic-bezier(0.16,1,0.3,1);
+  }
+
+  .card-split:active { transform: scale(0.987); }
+
+  .split-accent {
+    width: 3px; flex-shrink: 0;
+  }
+
+  .split-body { flex: 1; padding: 14px; min-width: 0; }
+
+  .split-badge {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 3px 9px; border-radius: var(--r-chip);
+    font-family: var(--f-title);
+    font-size: 9px; font-weight: 700;
+    letter-spacing: 0.08em; text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+
+  .split-badge svg {
+    width: 9px; height: 9px;
+    stroke: currentColor; stroke-width: 2; fill: none;
+  }
+
+  .split-title {
+    font-family: var(--f-title);
+    font-size: 20px; font-weight: 700;
+    letter-spacing: 0.04em; color: var(--t1);
+    line-height: 1.1; margin-bottom: 4px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+
+  .split-source {
+    font-family: var(--f-body);
+    font-size: 12px; font-weight: 500;
+    color: var(--signal); margin-bottom: 5px;
+    display: block;
+  }
+
+  .split-meta {
+    display: flex; align-items: center; gap: 5px;
+    font-family: var(--f-body);
+    font-size: 11px; color: var(--t2);
+  }
+}
+
+/* ── NAVIGATION ─────────────────────────────────────────────────── */
+@layer components {
   .bottom-nav {
     position: fixed;
     bottom: 0;
-    left: 0;
-    right: 0;
-    max-width: var(--container);
-    margin: 0 auto;
+    left: 50%; transform: translateX(-50%);
+    width: 100%; max-width: var(--max-w);
     height: var(--nav-h);
-    background-color: rgba(250,248,245,0.92);
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
-    border-top: 0.5px solid rgba(30,28,26,0.10);
-    display: flex;
-    align-items: center;
-    justify-content: space-around;
+    background: rgba(8,15,10,0.97);
+    backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+    border-top: 0.5px solid var(--bdr);
+    display: flex; align-items: center;
+    justify-content: space-between;
+    padding: 0 44px;
     padding-bottom: env(safe-area-inset-bottom, 0px);
-    z-index: 30;
+    z-index: 100;
   }
 
-  /* ── EMPTY STATE ───────────────────────────────────────────── */
-  .empty-state {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
+  .nav-btn {
+    display: flex; flex-direction: column;
+    align-items: center; gap: 3px;
+    color: var(--t3);
+    min-width: 44px; min-height: 44px;
     justify-content: center;
-    text-align: center;
-    padding: 64px 32px;
-    min-height: calc(100vh - 200px);
-    min-height: calc(100dvh - 200px);
+    -webkit-tap-highlight-color: transparent;
+    transition: color 160ms ease;
   }
 
-  /* ── CAPTURE SCREEN ────────────────────────────────────────── */
-  /* Full viewport — sits over everything */
+  .nav-btn.active { color: var(--neon); }
+
+  .nav-btn svg {
+    width: 20px; height: 20px;
+    stroke: currentColor; stroke-width: 1.6;
+    fill: none; stroke-linecap: round;
+  }
+
+  .nav-label {
+    font-family: var(--f-title);
+    font-size: 9px; font-weight: 700;
+    letter-spacing: 0.09em; text-transform: uppercase;
+  }
+
+  /* FAB — circle + plus, ALWAYS */
+  /* Same neon as brand name — Von Restorff: two elements, one identity */
+  .fab {
+    position: fixed;
+    bottom: calc(var(--nav-h) - 14px);
+    left: 50%; transform: translateX(-50%);
+    width: var(--fab-sz); height: var(--fab-sz);
+    border-radius: 50%;
+    /* Dark green fill — neon as glow not fill */
+    background: #0a2018;
+    border: 1.5px solid rgba(31,206,148,0.45);
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; z-index: 101;
+    -webkit-tap-highlight-color: transparent;
+    /* Neon heartbeat — matches brand glow rhythm */
+    animation: fab-pulse 3.2s ease-in-out infinite;
+  }
+
+  .fab svg {
+    width: 24px; height: 24px;
+    /* Plus in neon — same colour as brand name */
+    stroke: var(--neon);
+    stroke-width: 2.2; fill: none; stroke-linecap: round;
+  }
+
+  @keyframes fab-pulse {
+    0%,100% { box-shadow: 0 0 0 0 rgba(31,206,148,0), 0 5px 22px rgba(31,206,148,0.35); }
+    50%      { box-shadow: 0 0 0 7px rgba(31,206,148,0.07), 0 7px 32px rgba(31,206,148,0.52); }
+  }
+}
+
+/* ── CAPTURE SCREEN ─────────────────────────────────────────────── */
+@layer components {
+  /* Full viewport — covers everything */
   .capture-screen {
     position: fixed;
-    inset: 0;
-    background-color: var(--page-bg);
-    z-index: 50;
-    display: flex;
-    flex-direction: column;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: #060d08;
+    z-index: 400;
+    display: flex; flex-direction: column;
     overflow-y: auto;
+    /* Hidden state */
+    opacity: 0; pointer-events: none;
+    transform: translateY(12px);
+    transition: opacity 240ms ease, transform 240ms ease;
   }
 
-  /* Centre the content at 480px on wide screens */
+  .capture-screen.open {
+    opacity: 1; pointer-events: auto;
+    transform: translateY(0);
+  }
+
   .capture-inner {
-    max-width: var(--container);
-    margin: 0 auto;
-    width: 100%;
-    flex: 1;
-    display: flex;
-    flex-direction: column;
+    width: 100%; max-width: var(--max-w);
+    margin: 0 auto; flex: 1;
+    display: flex; flex-direction: column;
+    padding-bottom: 48px;
   }
 
-  /* ── CAPTURE OPTION CARD ───────────────────────────────────── */
-  .capture-option {
-    width: 100%;
-    text-align: left;
-    background-color: var(--card-bg);
-    border-radius: 18px;
-    border: 1px solid var(--card-border);
-    box-shadow: var(--card-shadow);
-    padding: 20px;
-    display: flex;
-    align-items: center;
-    gap: 16px;
-    cursor: pointer;
-    transition: transform 180ms ease, box-shadow 180ms ease;
-    -webkit-tap-highlight-color: transparent;
-    font-family: var(--font-dm-sans), system-ui, sans-serif;
+  .capture-title {
+    font-family: var(--f-title);
+    font-size: 28px; font-weight: 700;
+    letter-spacing: 0.05em; text-transform: uppercase;
+    color: var(--t1); line-height: 1.1;
+    /* Never overflow */
+    max-width: calc(100% - 52px);
   }
 
-  .capture-option:active {
-    transform: scale(0.975);
-    box-shadow: 0 1px 4px rgba(30,28,26,0.05);
-  }
-
-  /* ── NUDGE QUESTION ────────────────────────────────────────── */
-  .nudge-card {
-    margin: 16px 16px 0;
-    background-color: var(--card-bg);
-    border-radius: var(--radius-card);
-    border: 1px solid var(--card-border);
-    box-shadow: var(--card-shadow);
-    padding: 16px 20px 20px;
-    animation: nudge-enter 320ms cubic-bezier(0.16, 1, 0.3, 1);
-  }
-
-  .nudge-option {
-    display: inline-flex;
-    padding: 8px 14px;
-    border-radius: var(--radius-chip);
-    border: 1px solid rgba(30,28,26,0.12);
-    background: transparent;
-    color: var(--text-secondary);
-    font-size: 13px;
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 150ms ease;
-    font-family: var(--font-dm-sans), system-ui, sans-serif;
+  /* Capture option cards */
+  .cap-opt {
+    width: 100%; border-radius: 18px;
+    padding: 18px; display: flex; align-items: center; gap: 14px;
+    cursor: pointer; position: relative; overflow: hidden;
+    border: 1px solid rgba(255,255,255,0.07);
+    transition: transform 160ms ease;
     -webkit-tap-highlight-color: transparent;
   }
 
-  .nudge-option:active {
-    background-color: var(--primary-dim);
-    border-color: rgba(196,74,40,0.25);
-    color: var(--primary);
+  .cap-opt:active { transform: scale(0.976); }
+
+  /* Grain on each option */
+  .cap-opt::after {
+    content: ''; position: absolute; inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence baseFrequency='0.82' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+    pointer-events: none; border-radius: 18px;
+  }
+
+  /* ITMFL crimson */
+  .opt-speak {
+    background: linear-gradient(148deg, #2e0206 0%, #5c0b10 44%, #880e16 100%);
+    box-shadow: 0 10px 36px rgba(136,14,22,0.36);
+  }
+
+  /* Chungking blue */
+  .opt-photo {
+    background: linear-gradient(148deg, #02091a 0%, #0b1a4a 44%, #102068 100%);
+    box-shadow: 0 10px 36px rgba(16,32,104,0.36);
+  }
+
+  /* Ashes sage */
+  .opt-jot {
+    background: linear-gradient(148deg, #010e06 0%, #053618 44%, #094e24 100%);
+    box-shadow: 0 10px 36px rgba(9,78,36,0.36);
+  }
+
+  .cap-opt-icon {
+    width: 48px; height: 48px; flex-shrink: 0;
+    border-radius: 12px;
+    background: rgba(255,255,255,0.09);
+    border: 0.5px solid rgba(255,255,255,0.14);
+    display: flex; align-items: center; justify-content: center;
+  }
+
+  .cap-opt-icon svg {
+    width: 20px; height: 20px;
+    stroke: rgba(240,230,200,0.90);
+    stroke-width: 1.6; fill: none;
+    stroke-linecap: round; stroke-linejoin: round;
+  }
+
+  .cap-opt-label {
+    font-family: var(--f-title);
+    font-size: 18px; font-weight: 700;
+    letter-spacing: 0.05em; text-transform: uppercase;
+    color: rgba(240,230,200,0.96);
+    line-height: 1.1; margin-bottom: 3px;
+  }
+
+  .cap-opt-desc {
+    font-family: var(--f-body);
+    font-size: 11.5px; font-weight: 300;
+    color: rgba(240,230,200,0.42);
+    line-height: 1.45;
   }
 }
 
-@keyframes skeleton-wave {
-  0%   { background-position: 200% 0; }
-  100% { background-position: -200% 0; }
+/* ── EMPTY STATE ────────────────────────────────────────────────── */
+@layer components {
+  .empty-state {
+    display: flex; flex-direction: column;
+    align-items: center; text-align: center;
+    padding: 40px 24px;
+    min-height: calc(100dvh - 360px);
+    justify-content: center;
+  }
+
+  .empty-gem {
+    width: 66px; height: 66px; border-radius: 17px;
+    background: radial-gradient(circle at 44% 36%, rgba(31,206,148,0.16) 0%, rgba(31,206,148,0.03) 100%);
+    border: 1px solid rgba(31,206,148,0.20);
+    display: flex; align-items: center; justify-content: center;
+    margin-bottom: 22px;
+    box-shadow: 0 0 40px rgba(31,206,148,0.08);
+  }
+
+  .empty-gem svg {
+    width: 26px; height: 26px;
+    stroke: rgba(31,206,148,0.70);
+    stroke-width: 1.3; fill: none;
+    stroke-linecap: round; stroke-linejoin: round;
+  }
+
+  .empty-title {
+    font-family: var(--f-title);
+    font-size: 24px; font-weight: 600;
+    letter-spacing: 0.03em;
+    color: var(--t1); margin-bottom: 10px;
+    line-height: 1.2;
+  }
+
+  .empty-body {
+    font-family: var(--f-body);
+    font-size: 13px; color: var(--t2);
+    line-height: 1.70; max-width: 220px;
+    font-weight: 300; margin-bottom: 30px;
+  }
+
+  /* Invitation — hairlines + spaced neon text */
+  .invite {
+    display: flex; align-items: center; gap: 14px;
+    cursor: pointer; padding: 8px 0;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .invite-line {
+    height: 0.5px; width: 36px;
+    background: var(--neon); opacity: 0.35;
+  }
+
+  .invite-text {
+    font-family: var(--f-body);
+    font-size: 11px; font-weight: 600;
+    letter-spacing: 0.12em; text-transform: uppercase;
+    color: var(--neon);
+  }
 }
 
-/* Safe area padding utility */
-.pb-safe {
-  padding-bottom: calc(var(--nav-h) + env(safe-area-inset-bottom, 0px) + 8px);
-}
-
-.pb-fab {
-  padding-bottom: calc(var(--fab-bottom) + var(--fab-size) + 24px);
+/* ── UTILITY ────────────────────────────────────────────────────── */
+@layer utilities {
+  .sr-only {
+    position: absolute; width: 1px; height: 1px;
+    padding: 0; margin: -1px; overflow: hidden;
+    clip: rect(0,0,0,0); white-space: nowrap; border: 0;
+  }
 }
