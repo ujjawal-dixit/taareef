@@ -1,77 +1,76 @@
 // app/(auth)/login/page.tsx
-// Login page — Google OAuth only in V1.
-// Privacy statement visible per locked product decision.
-// Server Component — GoogleSignInButton handles the interactive OAuth flow.
+// Login page. Google OAuth only in V1.
+// Warm, minimal. Brand name in neon. One tap to enter.
 
-import type { Metadata } from 'next'
-import GoogleSignInButton from './google-sign-in-button'
+import { GoogleSignInButton } from './google-sign-in-button'
+import type { Metadata }      from 'next'
 
-export const metadata: Metadata = {
-  title: 'Sign in',
-  description: 'Sign in to your Taareef vault.',
-}
+export const metadata: Metadata = { title: 'Sign in · taareef' }
 
-// In Next.js 14 App Router, searchParams is a plain object on page components.
-// It is synchronous — no need to await.
-type SearchParams = { [key: string]: string | string[] | undefined }
-
-type Props = {
-  searchParams: SearchParams
-}
-
-export default function LoginPage({ searchParams }: Props) {
-  const error = searchParams['error']
-  const next = searchParams['next']
-
-  const hasError = error === 'auth_failed'
-  const nextPath = typeof next === 'string' ? next : undefined
-
+export default function LoginPage() {
   return (
-    <div className="min-h-screen bg-neutral-50 flex flex-col items-center justify-center px-4">
-      <div className="w-full max-w-sm">
+    <div
+      style={{
+        maxWidth:       '430px',
+        margin:         '0 auto',
+        minHeight:      '100dvh',
+        background:     'var(--bg0)',
+        display:        'flex',
+        flexDirection:  'column',
+        justifyContent: 'center',
+        padding:        '0 32px',
+      }}
+    >
 
-        {/* Brand mark */}
-        <div className="text-center mb-10">
-          <h1 className="font-display text-4xl font-bold text-neutral-900 tracking-tight mb-2">
-            Taareef
-          </h1>
-          <p className="text-neutral-500 text-base leading-relaxed">
-            Every recommendation you&rsquo;ll ever get.<br />
-            One place.
-          </p>
-        </div>
-
-        {/* Sign in card */}
-        <div className="bg-white rounded-2xl border border-neutral-200 p-6 shadow-sm">
-
-          {/* Error state */}
-          {hasError && (
-            <div
-              role="alert"
-              className="mb-4 px-4 py-3 bg-red-50 border border-red-100 rounded-xl"
-            >
-              <p className="text-sm text-red-600">
-                Couldn&rsquo;t sign in — please try again.
-              </p>
-            </div>
-          )}
-
-          <p className="text-neutral-700 text-sm text-center mb-5 leading-relaxed">
-            Your vault is private. Only you can see it.
-          </p>
-
-          {/* Google OAuth button — Client Component */}
-          <GoogleSignInButton next={nextPath} />
-
-        </div>
-
-        {/* Privacy statement — locked product decision */}
-        <p className="mt-6 text-center text-xs text-neutral-400 leading-relaxed px-2">
-          No ads. No tracking. No data selling. Ever.<br />
-          Your recommendations are yours.
+      {/* Brand */}
+      <div style={{ marginBottom: '48px', textAlign: 'center' }}>
+        <span
+          className="brand-name"
+          style={{
+            fontSize:   '64px',
+            display:    'block',
+            textAlign:  'center',
+            marginBottom: '10px',
+          }}
+        >
+          taareef
+        </span>
+        <p style={{
+          fontFamily:  'var(--f-body)',
+          fontSize:    '14px', fontWeight: 300,
+          color:       'var(--t2)',
+          lineHeight:  1.6, textAlign: 'center',
+          maxWidth:    '240px',
+          margin:      '0 auto',
+        }}>
+          Every recommendation you'll ever get. One place.
         </p>
-
       </div>
+
+      {/* Hairline */}
+      <div
+        style={{
+          height:     '0.5px',
+          background: 'linear-gradient(to right, transparent, rgba(31,206,148,0.35), transparent)',
+          marginBottom: '40px',
+        }}
+      />
+
+      {/* Sign in */}
+      <GoogleSignInButton />
+
+      {/* Fine print */}
+      <p style={{
+        fontFamily:  'var(--f-body)',
+        fontSize:    '11px', fontWeight: 400,
+        color:       'var(--t3)',
+        textAlign:   'center',
+        marginTop:   '24px',
+        lineHeight:  1.6,
+      }}>
+        Private by default. Your vault belongs to you.
+      </p>
+
     </div>
   )
 }
