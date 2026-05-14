@@ -1,9 +1,4 @@
-// lib/supabase/server.ts
-// Server-side Supabase client.
-// Use in Server Components, API routes, and Server Actions.
-// Never use in Client Components — use lib/supabase/client.ts instead.
-
-import { createServerClient } from '@supabase/ssr'
+import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 
 export async function createClient() {
@@ -17,13 +12,13 @@ export async function createClient() {
         getAll() {
           return cookieStore.getAll()
         },
-        setAll(cookiesToSet) {
+        setAll(cookiesToSet: { name: string; value: string; options: CookieOptions }[]) {
           try {
-            cookiesToSet.forEach(({ name, value, options }) => {
+            cookiesToSet.forEach(({ name, value, options }) =>
               cookieStore.set(name, value, options)
-            })
+            )
           } catch {
-            // setAll called from Server Component — safe to ignore
+            // Called from a Server Component — safe to ignore
           }
         },
       },
