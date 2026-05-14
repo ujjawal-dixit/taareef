@@ -1,60 +1,66 @@
 // app/layout.tsx
-// Root layout. Loads Rajdhani + DM Sans via next/font.
-// Sets CSS variables on <html>. Film grain applied here.
+// Root layout.
+// Cormorant Garamond: wordmark only — intimate, cinematic, WKW.
+// Rajdhani: all UI — condensed, architectural, readable at 9px.
+// DM Sans: body copy — warm, legible at 11px on dark.
 
 import type { Metadata, Viewport } from 'next'
-import { Rajdhani, DM_Sans } from 'next/font/google'
+import { Rajdhani, DM_Sans, Cormorant_Garamond } from 'next/font/google'
 import './globals.css'
 
+const cormorant = Cormorant_Garamond({
+  subsets:  ['latin'],
+  variable: '--font-cormorant',
+  // Light italic only — this is the wordmark weight.
+  // Heavy Cormorant reads as Victorian, not cinematic.
+  weight:   ['300', '400'],
+  style:    ['normal', 'italic'],
+  display:  'swap',
+})
+
 const rajdhani = Rajdhani({
-  subsets: ['latin'],
+  subsets:  ['latin'],
   variable: '--font-rajdhani',
-  weight: ['400', '500', '600', '700'],
-  display: 'swap',
+  weight:   ['400', '500', '600', '700'],
+  display:  'swap',
 })
 
 const dmSans = DM_Sans({
-  subsets: ['latin'],
+  subsets:  ['latin'],
   variable: '--font-dm-sans',
-  weight: ['300', '400', '500', '600'],
-  display: 'swap',
+  weight:   ['300', '400', '500', '600'],
+  display:  'swap',
 })
 
 export const metadata: Metadata = {
   title: {
-    default: 'taareef',
+    default:  'taareef',
     template: '%s · taareef',
   },
   description: "Every recommendation you'll ever get. One place.",
   applicationName: 'taareef',
   appleWebApp: {
-    capable: true,
-    statusBarStyle: 'black-translucent',
-    title: 'taareef',
+    capable:         true,
+    statusBarStyle:  'black-translucent',
+    title:           'taareef',
   },
-  manifest: '/manifest.json',
 }
 
 export const viewport: Viewport = {
-  width: 'device-width',
-  initialScale: 1,
-  maximumScale: 1,
-  userScalable: false,
-  // Canvas colour — tells browser to paint chrome in same tone
-  themeColor: '#080f0a',
+  width:         'device-width',
+  initialScale:  1,
+  maximumScale:  1,
+  userScalable:  false,
+  themeColor:    '#080f0a',
 }
 
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode
-}) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html
       lang="en"
-      className={`${rajdhani.variable} ${dmSans.variable}`}
+      className={`${cormorant.variable} ${rajdhani.variable} ${dmSans.variable}`}
     >
-      <body className="grain">
+      <body>
         {children}
       </body>
     </html>
