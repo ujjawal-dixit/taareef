@@ -1,8 +1,4 @@
-// lib/supabase/middleware.ts
-// Edge-runtime Supabase client. Use ONLY in middleware.ts.
-// cookiesToSet typed explicitly — TypeScript strict mode requires it.
-
-import { createServerClient, type CookieMethodsServer } from '@supabase/ssr'
+import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
 export async function updateSession(request: NextRequest) {
@@ -16,7 +12,7 @@ export async function updateSession(request: NextRequest) {
         getAll() {
           return request.cookies.getAll()
         },
-        setAll(cookiesToSet: Parameters<CookieMethodsServer['setAll']>[0]) {
+        setAll(cookiesToSet: { name: string; value: string; options: CookieOptions }[]) {
           cookiesToSet.forEach(({ name, value }) =>
             request.cookies.set(name, value)
           )
@@ -29,7 +25,6 @@ export async function updateSession(request: NextRequest) {
     }
   )
 
-  // Always getUser() — never getSession() for auth verification
   const { data: { user } } = await supabase.auth.getUser()
 
   const { pathname } = request.nextUrl
