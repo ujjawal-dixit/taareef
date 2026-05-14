@@ -1,13 +1,15 @@
 'use client'
 
 // app/(app)/dashboard/dashboard-client.tsx
-// Interactive dashboard shell.
-// Category filter, mixed grid vault, optimistic saves.
-// Neon brand name. All design tokens applied directly here.
+// Every design decision here is intentional and documented.
+// Wordmark: Cormorant Garamond 300 italic, centred, 38px, neon glow.
+// Header: centred composition — wordmark, subtitle, symmetric hairline.
+// Category grid: sticky, 5×2, icon + label, each jewel tone.
+// Vault: mixed grid, hero card taller, subsequent cards standard.
 
-import { useState, useMemo, useCallback, useOptimistic } from 'react'
-import { useRouter } from 'next/navigation'
-import { CategoryBar }       from '@/components/features/navigation/category-bar'
+import { useState, useMemo, useCallback } from 'react'
+import { useRouter }          from 'next/navigation'
+import { CategoryBar }        from '@/components/features/navigation/category-bar'
 import { RecommendationCard } from '@/components/features/cards/recommendation-card'
 import { EmptyState }         from '@/components/features/vault/empty-state'
 import { AppShell }           from '@/components/features/navigation/app-shell'
@@ -15,168 +17,228 @@ import { useCreateRecommendation } from '@/hooks/use-recommendations'
 import { useToast }           from '@/components/ui/toast'
 import type { Recommendation, Category, CreateRecommendationInput } from '@/lib/types'
 
-type DashboardClientProps = {
+type Props = {
   recommendations:    Recommendation[]
   userId:             string
   nudgeAnsweredCount: number
 }
 
-export function DashboardClient({
-  recommendations: initialRecs,
-}: DashboardClientProps) {
-  const router  = useRouter()
+export function DashboardClient({ recommendations: serverRecs }: Props) {
+  const router    = useRouter()
   const { toast } = useToast()
-  const { create }  = useCreateRecommendation()
+  const { create } = useCreateRecommendation()
 
-  const [activeCategory, setActiveCategory]   = useState<Category | null>(null)
-  const [isCaptureOpen,  setIsCaptureOpen]     = useState(false)
+  const [activeCategory, setActiveCategory] = useState<Category | null>(null)
+  const [localRecs,      setLocalRecs]      = useState<Recommendation[]>(serverRecs)
 
-  // Optimistic UI — card appears instantly on save
-  const [optimisticRecs, addOptimistic] = useOptimistic<
-    Recommendation[],
-    Partial<Recommendation>
-  >(
-    initialRecs,
-    (state, newRec) => [newRec as Recommendation, ...state]
-  )
-
-  const filteredRecs = useMemo(() => {
-    if (!activeCategory) return optimisticRecs
-    return optimisticRecs.filter(r => r.category === activeCategory)
-  }, [optimisticRecs, activeCategory])
+  const filtered = useMemo(() => {
+    if (!activeCategory) return localRecs
+    return localRecs.filter(r => r.category === activeCategory)
+  }, [localRecs, activeCategory])
 
   const handleSave = useCallback(async (input: CreateRecommendationInput) => {
-    // Optimistic add — card appears before network call
-    const temp: Partial<Recommendation> = {
-      id:          `temp-${Date.now()}`,
-      status:      'saved',
-      reaction:    null,
-      priority:    'medium',
-      metadata:    {},
-      created_at:  new Date().toISOString(),
-      updated_at:  new Date().toISOString(),
+    const tempId = `temp-${Date.now()}`
+    const tempRec: Recommendation = {
+      id:         tempId,
+      user_id:    '',
+      status:     'saved',
+      reaction:   null,
+      priority:   input.priority  ?? 'medium',
+      metadata:   input.metadata  ?? {},
+      url:        input.url       ?? null,
+      image_url:  input.image_url ?? null,
+      notes:      input.notes     ?? null,
+      location:   input.location  ?? null,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
       ...input,
     }
 
-    addOptimistic(temp)
+    // Optimistic: card appears instantly
+    setLocalRecs(prev => [tempRec, ...prev])
 
     await create(
       input,
       undefined,
-      () => {
+      (real) => {
+        setLocalRecs(prev => prev.map(r => r.id === tempId ? real : r))
         toast('Saved ✦', 'success')
-        router.refresh()
       },
       (err) => {
+        setLocalRecs(prev => prev.filter(r => r.id !== tempId))
         toast(err, 'error')
       }
     )
-  }, [create, addOptimistic, toast, router])
+  }, [create, toast])
 
-  const recCount = optimisticRecs.length
-  const hasRecs  = recCount > 0
-  const hasFiltered = filteredRecs.length > 0
+  const count   = localRecs.length
+  const hasRecs = count > 0
+  const hasFilt = filtered.length > 0
 
   return (
     <AppShell onSaveRecommendation={handleSave}>
 
-      {/* Header */}
-      <header style={{ padding: '52px 20px 10px' }}>
-        {/* Brand name — neon green, WKW shopfront glow */}
-        {/* Von Restorff: single saturated element in desaturated field */}
-        <span
-          className="brand-name"
+      {/* ════════════════════════════════════════════════
+          HEADER
+          Centred composition. Wordmark is a film title
+          card — intimate, memorable, neon.
+          Not a dashboard. Not a masthead. A lantern.
+      ════════════════════════════════════════════════ */}
+      <header style={{
+        padding:   '56px 20px 0',
+        textAlign: 'center',
+      }}>
+
+        {/*
+          THE WORDMARK
+          Cormorant Garamond 300 italic — the display font.
+          38px: present without dominating. A whisper, not a shout.
+          Centred: composition over convention.
+          Neon #1fce94 with layered text-shadow:
+            - 20px: the immediate glow (the hot spot)
+            - 48px: the ambient spread (the halo)
+            - 80px: the atmospheric bleed (barely perceptible,
+                    but removes the hard edge in dark)
+          This is how WKW's neon signs work — they don't
+          end at the letter, they bleed into the night.
+        */}
+        <h1
           aria-label="taareef"
+          style={{
+            fontFamily:    'var(--font-cormorant), Georgia, serif',
+            fontWeight:    300,
+            fontStyle:     'italic',
+            fontSize:      '42px',
+            letterSpacing: '-0.01em',
+            lineHeight:    1,
+            color:         '#1fce94',
+            textShadow: [
+              '0 0 20px rgba(31,206,148,0.65)',
+              '0 0 48px rgba(31,206,148,0.28)',
+              '0 0 88px rgba(31,206,148,0.10)',
+            ].join(', '),
+            margin: 0,
+          }}
         >
           taareef
-        </span>
+        </h1>
 
-        <span className="brand-sub">
-          {recCount === 0
-            ? 'Your vault is ready'
-            : `${recCount} recommendation${recCount === 1 ? '' : 's'}`
-          }
-        </span>
+        {/*
+          SUBTITLE
+          Context, not decoration.
+          Shows count when vault has saves — personal, not generic.
+          52% opacity: present but clearly subordinate.
+        */}
+        <p style={{
+          fontFamily:    'var(--font-dm-sans), system-ui, sans-serif',
+          fontSize:      '11.5px',
+          fontWeight:    400,
+          color:         'rgba(240,230,200,0.52)',
+          letterSpacing: '0.05em',
+          marginTop:     '7px',
+        }}>
+          {count === 0
+            ? 'your vault is ready'
+            : `${count} recommendation${count === 1 ? '' : 's'}`}
+        </p>
+
+        {/*
+          HAIRLINE
+          Symmetric — grows from centre outward.
+          If the wordmark is centred, the hairline echoes it.
+          Neon at peak (50%), fading to nothing at edges.
+          Max-width: 160px — proportional to the wordmark width.
+        */}
+        <div style={{
+          height:    '0.5px',
+          margin:    '16px auto 0',
+          maxWidth:  '160px',
+          background: 'linear-gradient(to right, transparent 0%, rgba(31,206,148,0.18) 20%, rgba(31,206,148,0.55) 50%, rgba(31,206,148,0.18) 80%, transparent 100%)',
+        }} aria-hidden="true" />
+
       </header>
 
-      {/* Hairline — neon, left to right fade */}
-      <div className="hairline" style={{ margin: '0 20px' }} />
-
-      {/* Category grid — 5×2, all 10 visible, no scroll */}
-      {/* Sticky so it stays visible while scrolling the vault */}
-      <div
-        style={{
-          position:          'sticky',
-          top:               0,
-          zIndex:            20,
-          background:        'rgba(8,15,10,0.94)',
-          backdropFilter:    'blur(16px)',
-          WebkitBackdropFilter: 'blur(16px)',
-          borderBottom:      '0.5px solid rgba(240,230,200,0.07)',
-        }}
-      >
+      {/* ════════════════════════════════════════════════
+          CATEGORY GRID — sticky
+          5×2 grid. All 10 visible. No scroll.
+          Becomes the navigation anchor as you browse.
+          Backdrop blur + dark bg so cards scroll beneath
+          it without creating visual noise.
+      ════════════════════════════════════════════════ */}
+      <div style={{
+        position:             'sticky',
+        top:                  0,
+        zIndex:               20,
+        background:           'rgba(8,15,10,0.96)',
+        backdropFilter:       'blur(20px)',
+        WebkitBackdropFilter: 'blur(20px)',
+        borderBottom:         '0.5px solid rgba(240,230,200,0.06)',
+        marginTop:            '20px',
+      }}>
         <CategoryBar
           activeCategory={activeCategory}
-          onCategoryChange={setActiveCategory}
+          onCategoryChange={(cat) => {
+            setActiveCategory(cat)
+            // Scroll vault to top on category change
+            window.scrollTo({ top: 0, behavior: 'smooth' })
+          }}
         />
       </div>
 
-      {/* Vault */}
-      <div style={{ padding: '12px 16px 0' }}>
-
+      {/* ════════════════════════════════════════════════
+          VAULT
+          Mixed grid: hero card taller (draws the eye),
+          subsequent cards standard height.
+          14px horizontal padding: cards breathe.
+      ════════════════════════════════════════════════ */}
+      <section
+        aria-label="Saved recommendations"
+        style={{ padding: '14px 14px 0' }}
+      >
         {!hasRecs ? (
-          <EmptyState onAdd={() => setIsCaptureOpen(true)} />
-        ) : !hasFiltered ? (
-          <EmptyState
-            category={activeCategory ?? undefined}
-            onAdd={() => setIsCaptureOpen(true)}
-          />
+          <EmptyState />
+        ) : !hasFilt ? (
+          <EmptyState category={activeCategory ?? undefined} />
         ) : (
           <VaultGrid
-            recommendations={filteredRecs}
-            onCardClick={id => router.push(`/rec/${id}`)}
+            recommendations={filtered}
+            onCardClick={id => {
+              if (!id.startsWith('temp-')) router.push(`/rec/${id}`)
+            }}
           />
         )}
-
-      </div>
+      </section>
 
     </AppShell>
   )
 }
 
 // ── VAULT GRID ────────────────────────────────────────────────────
-// Mixed layout: hero card full-width, rest in column.
-// Hero is taller — draws the eye. Subsequent cards are standard height.
 
-type VaultGridProps = {
+function VaultGrid({
+  recommendations,
+  onCardClick,
+}: {
   recommendations: Recommendation[]
   onCardClick:     (id: string) => void
-}
-
-function VaultGrid({ recommendations, onCardClick }: VaultGridProps) {
+}) {
   const [hero, ...rest] = recommendations
 
   return (
-    <div
-      style={{
-        display:       'flex',
-        flexDirection: 'column',
-        gap:           '10px',
-      }}
-    >
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
       {hero && (
-        <div onClick={() => onCardClick(hero.id)} style={{ cursor: 'pointer' }}>
-          <RecommendationCard recommendation={hero} isHero />
-        </div>
+        <RecommendationCard
+          recommendation={hero}
+          isHero
+          onClick={() => onCardClick(hero.id)}
+        />
       )}
       {rest.map(rec => (
-        <div
+        <RecommendationCard
           key={rec.id}
+          recommendation={rec}
           onClick={() => onCardClick(rec.id)}
-          style={{ cursor: 'pointer' }}
-        >
-          <RecommendationCard recommendation={rec} />
-        </div>
+        />
       ))}
     </div>
   )
