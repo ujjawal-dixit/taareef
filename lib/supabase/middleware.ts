@@ -1,8 +1,8 @@
 // lib/supabase/middleware.ts
-// Edge-runtime Supabase client.
-// Use ONLY in middleware.ts.
+// Edge-runtime Supabase client. Use ONLY in middleware.ts.
+// cookiesToSet typed explicitly — TypeScript strict mode requires it.
 
-import { createServerClient } from '@supabase/ssr'
+import { createServerClient, type CookieMethodsServer } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
 export async function updateSession(request: NextRequest) {
@@ -16,7 +16,7 @@ export async function updateSession(request: NextRequest) {
         getAll() {
           return request.cookies.getAll()
         },
-        setAll(cookiesToSet) {
+        setAll(cookiesToSet: Parameters<CookieMethodsServer['setAll']>[0]) {
           cookiesToSet.forEach(({ name, value }) =>
             request.cookies.set(name, value)
           )
@@ -29,11 +29,9 @@ export async function updateSession(request: NextRequest) {
     }
   )
 
-  // Always use getUser() — never getSession() for auth verification
+  // Always getUser() — never getSession() for auth verification
   const { data: { user } } = await supabase.auth.getUser()
 
-  // Redirect unauthenticated users to login
-  // Exclude: public routes, auth routes, static files
   const { pathname } = request.nextUrl
 
   const isPublic =
@@ -46,15 +44,15 @@ export async function updateSession(request: NextRequest) {
     pathname.startsWith('/manifest')
 
   if (!user && !isPublic) {
-    const loginUrl = request.nextUrl.clone()
-    loginUrl.pathname = '/login'
-    return NextResponse.redirect(loginUrl)
+    const url = request.nextUrl.clone()
+    url.pathname = '/login'
+    return NextResponse.redirect(url)
   }
 
   if (user && pathname === '/login') {
-    const dashboardUrl = request.nextUrl.clone()
-    dashboardUrl.pathname = '/dashboard'
-    return NextResponse.redirect(dashboardUrl)
+    const url = request.nextUrl.clone()
+    url.pathname = '/dashboard'
+    return NextResponse.redirect(url)
   }
 
   return supabaseResponse
