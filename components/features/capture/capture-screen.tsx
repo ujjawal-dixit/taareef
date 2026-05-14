@@ -1,81 +1,109 @@
 'use client'
 
 // components/features/capture/capture-screen.tsx
-// Full-screen capture overlay. Three methods: speak, screenshot, jot.
-// Jot is the functional one in V1 — opens a form.
-// Peak-End Rule: the save moment is engineered for delight.
+// Full-screen capture overlay.
+// Three paths: Speak (V2), Screenshot (V2), Jot (V1 — functional).
+// Title: Cormorant italic — same voice as wordmark and empty state.
+// Form: clean, unhurried, every field purposeful.
+// Save button: neon fill — the one moment neon is used as a fill.
 
 import { useState, useCallback, useEffect, useRef } from 'react'
 import type { CreateRecommendationInput, Category, SourceType } from '@/lib/types'
-import { CATEGORIES, getCategoryConfig } from '@/constants/categories'
+import { CATEGORIES } from '@/constants/categories'
 
 type CaptureMethod = 'choose' | 'jot'
 
-type CaptureScreenProps = {
-  isOpen:   boolean
-  onClose:  () => void
-  onSaved:  (input: CreateRecommendationInput) => Promise<void>
+type Props = {
+  isOpen:  boolean
+  onClose: () => void
+  onSaved: (input: CreateRecommendationInput) => Promise<void>
 }
 
-export function CaptureScreen({ isOpen, onClose, onSaved }: CaptureScreenProps) {
-  const [method,    setMethod]    = useState<CaptureMethod>('choose')
-  const [isSaving,  setIsSaving]  = useState(false)
-  const [saveError, setSaveError] = useState<string | null>(null)
+export function CaptureScreen({ isOpen, onClose, onSaved }: Props) {
+  const [method,   setMethod]   = useState<CaptureMethod>('choose')
+  const [isSaving, setIsSaving] = useState(false)
+  const [error,    setError]    = useState<string | null>(null)
 
-  // Lock body scroll when open
+  // Lock body scroll when open, reset state on close
   useEffect(() => {
     if (isOpen) {
       document.body.style.overflow = 'hidden'
     } else {
       document.body.style.overflow = ''
-      // Reset to choose on close
-      setTimeout(() => setMethod('choose'), 300)
+      const t = setTimeout(() => {
+        setMethod('choose')
+        setError(null)
+        setIsSaving(false)
+      }, 320)
+      return () => clearTimeout(t)
     }
-    return () => { document.body.style.overflow = '' }
   }, [isOpen])
 
-  // Escape key closes
+  // Escape to close
   useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
-    }
-    document.addEventListener('keydown', handler)
-    return () => document.removeEventListener('keydown', handler)
+    const fn = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    document.addEventListener('keydown', fn)
+    return () => document.removeEventListener('keydown', fn)
   }, [onClose])
 
-  async function handleJotSave(input: CreateRecommendationInput) {
+  async function handleSave(input: CreateRecommendationInput) {
     setIsSaving(true)
-    setSaveError(null)
+    setError(null)
     try {
       await onSaved(input)
-      onClose()
+      // onSaved calls onClose — no need to close here
     } catch {
-      setSaveError("Couldn't save — try again?")
-    } finally {
+      setError("Couldn't save — try again?")
       setIsSaving(false)
     }
   }
 
   return (
+    /*
+      position: fixed; inset: 0 — true full viewport.
+      z-index: 400 — above everything.
+      No max-width here — the overlay covers the full screen.
+      The inner content is constrained to 430px and centred.
+    */
     <div
-      id="capture-screen"
-      className={`capture-screen${isOpen ? ' open' : ''}`}
       role="dialog"
       aria-modal="true"
       aria-label="Save a recommendation"
+      style={{
+        position:      'fixed',
+        inset:         0,
+        background:    '#06100a',
+        zIndex:        400,
+        display:       'flex',
+        flexDirection: 'column',
+        overflowY:     'auto',
+        opacity:       isOpen ? 1 : 0,
+        pointerEvents: isOpen ? 'auto' : 'none',
+        transform:     isOpen ? 'translateY(0)' : 'translateY(12px)',
+        transition:    'opacity 240ms ease, transform 240ms cubic-bezier(0.16,1,0.3,1)',
+      }}
     >
-      <div className="capture-inner">
+      {/* Content constrained to 430px, centred */}
+      <div style={{
+        width:          '100%',
+        maxWidth:       '430px',
+        margin:         '0 auto',
+        flex:           1,
+        display:        'flex',
+        flexDirection:  'column',
+        paddingBottom:  '48px',
+      }}>
         {method === 'choose' ? (
           <ChooseMethod
-            onMethodSelect={setMethod}
+            onSelect={setMethod}
             onClose={onClose}
           />
         ) : (
-          <JotItDown
-            onSave={handleJotSave}
+          <JotForm
+            onSave={handleSave}
             onBack={() => setMethod('choose')}
             isSaving={isSaving}
-            error={saveError}
+            error={error}
           />
         )}
       </div>
@@ -83,40 +111,70 @@ export function CaptureScreen({ isOpen, onClose, onSaved }: CaptureScreenProps) 
   )
 }
 
-// ── CHOOSE METHOD SCREEN ──────────────────────────────────────────
+// ── CHOOSE METHOD ─────────────────────────────────────────────────
 
-type ChooseMethodProps = {
-  onMethodSelect: (method: CaptureMethod) => void
-  onClose:        () => void
-}
-
-function ChooseMethod({ onMethodSelect, onClose }: ChooseMethodProps) {
+function ChooseMethod({
+  onSelect,
+  onClose,
+}: {
+  onSelect: (m: CaptureMethod) => void
+  onClose:  () => void
+}) {
   return (
     <>
       {/* Header */}
       <div style={{ padding: '52px 22px 20px', position: 'relative' }}>
-        <h1 className="capture-title">
-          Save a<br />Recommendation
+
+        {/*
+          Title: Cormorant italic.
+          "save a recommendation" — lowercase, like the wordmark.
+          This moment is intimate, not transactional.
+        */}
+        <h1 style={{
+          fontFamily:    'var(--font-cormorant), Georgia, serif',
+          fontWeight:    400,
+          fontStyle:     'italic',
+          fontSize:      '30px',
+          letterSpacing: '-0.01em',
+          color:         'rgba(240,230,200,0.95)',
+          lineHeight:    1.1,
+          maxWidth:      'calc(100% - 52px)',
+          margin:        0,
+        }}>
+          save a<br />recommendation
         </h1>
+
         <p style={{
-          fontFamily: 'var(--f-body)', fontSize: '12px',
-          color: 'var(--t3)', letterSpacing: '0.03em', marginTop: '6px',
+          fontFamily:    'var(--font-dm-sans), system-ui, sans-serif',
+          fontSize:      '12px',
+          fontWeight:    400,
+          color:         'rgba(240,230,200,0.35)',
+          letterSpacing: '0.03em',
+          marginTop:     '6px',
         }}>
           How did it arrive?
         </p>
 
-        {/* Close */}
+        {/* Close button */}
         <button
           onClick={onClose}
           aria-label="Close"
           style={{
-            position: 'absolute', top: '52px', right: '22px',
-            width: '36px', height: '36px', borderRadius: '50%',
-            background: 'rgba(240,230,200,0.07)',
-            border: '0.5px solid rgba(240,230,200,0.12)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            cursor: 'pointer', color: 'var(--t2)',
-            WebkitTapHighlightColor: 'transparent',
+            position:               'absolute',
+            top:                    '52px',
+            right:                  '22px',
+            width:                  '36px',
+            height:                 '36px',
+            borderRadius:           '50%',
+            background:             'rgba(240,230,200,0.07)',
+            border:                 '0.5px solid rgba(240,230,200,0.12)',
+            display:                'flex',
+            alignItems:             'center',
+            justifyContent:         'center',
+            cursor:                 'pointer',
+            color:                  'rgba(240,230,200,0.55)',
+            WebkitTapHighlightColor:'transparent',
+            transition:             'background 160ms ease',
           }}
         >
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
@@ -127,110 +185,162 @@ function ChooseMethod({ onMethodSelect, onClose }: ChooseMethodProps) {
       </div>
 
       {/* Options */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', padding: '4px 16px 24px' }}>
+      <div style={{ padding: '4px 16px 24px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
 
-        {/* Speak — V2, not yet functional */}
-        <div
-          className="cap-opt opt-speak"
-          role="button"
-          tabIndex={0}
-          aria-label="Speak it — coming soon"
-          style={{ opacity: 0.6, cursor: 'not-allowed' }}
-        >
-          <div className="cap-opt-icon">
-            <svg viewBox="0 0 24 24">
-              <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
-              <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
-              <line x1="12" y1="19" x2="12" y2="23"/>
-              <line x1="8" y1="23" x2="16" y2="23"/>
-            </svg>
-          </div>
-          <div style={{ flex: 1 }}>
-            <div className="cap-opt-label">Speak it</div>
-            <div className="cap-opt-desc">Coming in V2</div>
-          </div>
-          <div style={{ color: 'rgba(240,230,200,0.20)' }}>
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-              <polyline points="9 18 15 12 9 6"/>
-            </svg>
-          </div>
-        </div>
+        {/* Speak — V2 */}
+        <CaptureOption
+          gradient="linear-gradient(148deg,#2e0206 0%,#5c0b10 44%,#880e16 100%)"
+          shadow="0 12px 40px rgba(136,14,22,0.36)"
+          icon={<MicIcon />}
+          label="speak it"
+          desc="Coming in V2"
+          disabled
+        />
 
-        {/* Screenshot — V2, not yet functional */}
-        <div
-          className="cap-opt opt-photo"
-          role="button"
-          tabIndex={0}
-          aria-label="Share a screenshot — coming soon"
-          style={{ opacity: 0.6, cursor: 'not-allowed' }}
-        >
-          <div className="cap-opt-icon">
-            <svg viewBox="0 0 24 24">
-              <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
-              <circle cx="12" cy="13" r="4"/>
-            </svg>
-          </div>
-          <div style={{ flex: 1 }}>
-            <div className="cap-opt-label">Screenshot</div>
-            <div className="cap-opt-desc">Coming in V2</div>
-          </div>
-          <div style={{ color: 'rgba(240,230,200,0.20)' }}>
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-              <polyline points="9 18 15 12 9 6"/>
-            </svg>
-          </div>
-        </div>
+        {/* Screenshot — V2 */}
+        <CaptureOption
+          gradient="linear-gradient(148deg,#02091a 0%,#0b1a4a 44%,#102068 100%)"
+          shadow="0 12px 40px rgba(16,32,104,0.36)"
+          icon={<CameraIcon />}
+          label="share a screenshot"
+          desc="Coming in V2"
+          disabled
+        />
 
-        {/* Jot it down — FUNCTIONAL in V1 */}
-        <div
-          className="cap-opt opt-jot"
-          role="button"
-          tabIndex={0}
-          onClick={() => onMethodSelect('jot')}
-          onKeyDown={e => { if (e.key === 'Enter') onMethodSelect('jot') }}
-          aria-label="Jot it down"
-        >
-          <div className="cap-opt-icon">
-            <svg viewBox="0 0 24 24">
-              <path d="M12 20h9"/>
-              <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
-            </svg>
-          </div>
-          <div style={{ flex: 1 }}>
-            <div className="cap-opt-label">Jot it down</div>
-            <div className="cap-opt-desc">Tell us what it is and who recommended it</div>
-          </div>
-          <div style={{ color: 'rgba(240,230,200,0.20)' }}>
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-              <polyline points="9 18 15 12 9 6"/>
-            </svg>
-          </div>
-        </div>
+        {/* Jot — V1, functional */}
+        <CaptureOption
+          gradient="linear-gradient(148deg,#010e06 0%,#053618 44%,#094e24 100%)"
+          shadow="0 12px 40px rgba(9,78,36,0.36)"
+          icon={<PenIcon />}
+          label="jot it down"
+          desc="Tell us what it is and who recommended it"
+          onClick={() => onSelect('jot')}
+        />
 
       </div>
     </>
   )
 }
 
-// ── JOT IT DOWN — FUNCTIONAL FORM ────────────────────────────────
+// ── CAPTURE OPTION ────────────────────────────────────────────────
 
-type JotProps = {
-  onSave:    (input: CreateRecommendationInput) => Promise<void>
-  onBack:    () => void
-  isSaving:  boolean
-  error:     string | null
+function CaptureOption({
+  gradient, shadow, icon, label, desc, onClick, disabled,
+}: {
+  gradient: string
+  shadow:   string
+  icon:     React.ReactNode
+  label:    string
+  desc:     string
+  onClick?: () => void
+  disabled?: boolean
+}) {
+  return (
+    <div
+      role="button"
+      tabIndex={disabled ? -1 : 0}
+      onClick={!disabled ? onClick : undefined}
+      onKeyDown={!disabled ? (e) => { if (e.key === 'Enter') onClick?.() } : undefined}
+      aria-disabled={disabled}
+      style={{
+        borderRadius:            '18px',
+        padding:                 '20px',
+        display:                 'flex',
+        alignItems:              'center',
+        gap:                     '16px',
+        cursor:                  disabled ? 'not-allowed' : 'pointer',
+        background:              gradient,
+        boxShadow:               disabled ? 'none' : shadow,
+        border:                  '1px solid rgba(255,255,255,0.07)',
+        opacity:                 disabled ? 0.55 : 1,
+        transition:              'transform 160ms ease',
+        WebkitTapHighlightColor: 'transparent',
+        position:                'relative',
+        overflow:                'hidden',
+      }}
+    >
+      {/* Icon box */}
+      <div style={{
+        width:          '48px',
+        height:         '48px',
+        borderRadius:   '12px',
+        background:     'rgba(255,255,255,0.09)',
+        border:         '0.5px solid rgba(255,255,255,0.14)',
+        display:        'flex',
+        alignItems:     'center',
+        justifyContent: 'center',
+        flexShrink:     0,
+      }}>
+        {icon}
+      </div>
+
+      {/* Text */}
+      <div style={{ flex: 1, minWidth: 0 }}>
+        {/*
+          Option labels: Cormorant italic — consistent voice.
+          All three screens (wordmark, empty state, capture title,
+          option labels) speak in the same register.
+        */}
+        <div style={{
+          fontFamily:    'var(--font-cormorant), Georgia, serif',
+          fontWeight:    400,
+          fontStyle:     'italic',
+          fontSize:      '21px',
+          color:         'rgba(240,230,200,0.96)',
+          lineHeight:    1.1,
+          marginBottom:  '3px',
+        }}>
+          {label}
+        </div>
+        <div style={{
+          fontFamily: 'var(--font-dm-sans), system-ui, sans-serif',
+          fontSize:   '12px',
+          fontWeight: 300,
+          color:      'rgba(240,230,200,0.40)',
+          lineHeight: 1.45,
+        }}>
+          {desc}
+        </div>
+      </div>
+
+      {/* Arrow */}
+      {!disabled && (
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none"
+          stroke="rgba(240,230,200,0.22)" strokeWidth="2" strokeLinecap="round">
+          <polyline points="9 18 15 12 9 6"/>
+        </svg>
+      )}
+    </div>
+  )
 }
 
-function JotItDown({ onSave, onBack, isSaving, error }: JotProps) {
+// ── JOT FORM ──────────────────────────────────────────────────────
+// The functional save form for V1.
+// Three fields: what, what kind, who told you.
+// Note is optional — never required at save time.
+// Save button: neon fill, 52px height (Fitts's Law primary action).
+
+function JotForm({
+  onSave,
+  onBack,
+  isSaving,
+  error,
+}: {
+  onSave:   (input: CreateRecommendationInput) => Promise<void>
+  onBack:   () => void
+  isSaving: boolean
+  error:    string | null
+}) {
   const [title,      setTitle]      = useState('')
   const [category,   setCategory]   = useState<Category | null>(null)
   const [sourceName, setSourceName] = useState('')
-  const [sourceType, setSourceType] = useState<SourceType>('friend')
   const [notes,      setNotes]      = useState('')
   const titleRef = useRef<HTMLInputElement>(null)
 
+  // Auto-focus the title field
   useEffect(() => {
-    setTimeout(() => titleRef.current?.focus(), 150)
+    const t = setTimeout(() => titleRef.current?.focus(), 160)
+    return () => clearTimeout(t)
   }, [])
 
   const canSave = title.trim().length > 0 && category !== null
@@ -240,74 +350,99 @@ function JotItDown({ onSave, onBack, isSaving, error }: JotProps) {
     await onSave({
       title:       title.trim(),
       category:    category!,
-      source_type: sourceType,
+      source_type: 'friend' as SourceType,
       source_name: sourceName.trim() || 'Someone',
       notes:       notes.trim() || undefined,
     })
   }
 
-  const fieldStyle = {
-    width: '100%',
-    background: 'rgba(240,230,200,0.04)',
-    border: '1px solid rgba(240,230,200,0.12)',
-    borderRadius: '10px',
-    padding: '12px 14px',
-    fontFamily: 'var(--f-body)',
-    fontSize: '15px',
-    color: 'var(--t1)',
-    outline: 'none',
-    transition: 'border-color 160ms ease',
-  } as const
+  // Field + label shared styles
+  const fieldStyle: React.CSSProperties = {
+    width:           '100%',
+    background:      'rgba(240,230,200,0.04)',
+    border:          '1px solid rgba(240,230,200,0.11)',
+    borderRadius:    '10px',
+    padding:         '13px 14px',
+    fontFamily:      'var(--font-dm-sans), system-ui, sans-serif',
+    fontSize:        '15px',
+    fontWeight:      400,
+    color:           'rgba(240,230,200,0.95)',
+    outline:         'none',
+    transition:      'border-color 160ms ease',
+    caretColor:      '#1fce94',
+  }
 
-  const labelStyle = {
-    fontFamily: 'var(--f-body)',
-    fontSize: '11px',
-    fontWeight: '500' as const,
-    letterSpacing: '0.06em',
-    textTransform: 'uppercase' as const,
-    color: 'var(--t3)',
-    display: 'block' as const,
-    marginBottom: '6px',
+  const labelStyle: React.CSSProperties = {
+    fontFamily:    'var(--font-dm-sans), system-ui, sans-serif',
+    fontSize:      '10px',
+    fontWeight:    600,
+    letterSpacing: '0.10em',
+    textTransform: 'uppercase',
+    color:         'rgba(240,230,200,0.38)',
+    display:       'block',
+    marginBottom:  '7px',
   }
 
   return (
     <>
       {/* Header */}
-      <div style={{ padding: '52px 22px 20px', position: 'relative' }}>
-        {/* Back */}
+      <div style={{ padding: '52px 22px 24px', position: 'relative' }}>
+
+        {/* Back button */}
         <button
           onClick={onBack}
-          aria-label="Back"
+          aria-label="Back to capture options"
           style={{
-            position: 'absolute', top: '52px', left: '22px',
-            display: 'flex', alignItems: 'center', gap: '6px',
-            color: 'var(--t3)', fontSize: '12px',
-            fontFamily: 'var(--f-body)', letterSpacing: '0.04em',
-            cursor: 'pointer',
-            WebkitTapHighlightColor: 'transparent',
+            position:               'absolute',
+            top:                    '52px',
+            left:                   '22px',
+            display:                'flex',
+            alignItems:             'center',
+            gap:                    '5px',
+            color:                  'rgba(240,230,200,0.38)',
+            fontFamily:             'var(--font-dm-sans), system-ui, sans-serif',
+            fontSize:               '12px',
+            letterSpacing:          '0.03em',
+            cursor:                 'pointer',
+            WebkitTapHighlightColor:'transparent',
+            transition:             'color 160ms ease',
           }}
         >
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
             <polyline points="15 18 9 12 15 6"/>
           </svg>
-          Back
+          back
         </button>
 
-        <h1 className="capture-title" style={{ marginTop: '28px' }}>
-          Jot It Down
+        {/* Title — Cormorant italic, lowercase */}
+        <h1 style={{
+          fontFamily:    'var(--font-cormorant), Georgia, serif',
+          fontWeight:    400,
+          fontStyle:     'italic',
+          fontSize:      '30px',
+          letterSpacing: '-0.01em',
+          color:         'rgba(240,230,200,0.95)',
+          lineHeight:    1.1,
+          marginTop:     '28px',
+          margin:        '28px 0 6px',
+        }}>
+          jot it down
         </h1>
         <p style={{
-          fontFamily: 'var(--f-body)', fontSize: '12px',
-          color: 'var(--t3)', letterSpacing: '0.03em', marginTop: '6px',
+          fontFamily:    'var(--font-dm-sans), system-ui, sans-serif',
+          fontSize:      '12px',
+          fontWeight:    400,
+          color:         'rgba(240,230,200,0.35)',
+          letterSpacing: '0.02em',
         }}>
           What was recommended, and who told you?
         </p>
       </div>
 
-      {/* Form */}
-      <div style={{ padding: '0 16px 32px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+      {/* Form fields */}
+      <div style={{ padding: '0 16px 32px', display: 'flex', flexDirection: 'column', gap: '22px' }}>
 
-        {/* Title */}
+        {/* What is it */}
         <div>
           <label htmlFor="jot-title" style={labelStyle}>What is it?</label>
           <input
@@ -316,42 +451,52 @@ function JotItDown({ onSave, onBack, isSaving, error }: JotProps) {
             type="text"
             value={title}
             onChange={e => setTitle(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter' && canSave) handleSave() }}
             placeholder="Restaurant name, film title, album..."
-            style={fieldStyle}
+            style={{
+              ...fieldStyle,
+              // Placeholder colour
+            }}
             aria-required="true"
             autoComplete="off"
+            autoCorrect="off"
+            spellCheck={false}
           />
         </div>
 
-        {/* Category */}
+        {/* Category picker — 5×2 grid matching the vault grid */}
         <div>
           <label style={labelStyle}>What kind?</label>
           <div style={{
-            display: 'grid',
+            display:             'grid',
             gridTemplateColumns: 'repeat(5, 1fr)',
-            gap: '6px',
+            gap:                 '6px',
           }}>
             {CATEGORIES.map(cat => {
-              const isSelected = category === cat.id
+              const sel = category === cat.id
               return (
                 <button
                   key={cat.id}
                   type="button"
                   onClick={() => setCategory(cat.id as Category)}
-                  aria-pressed={isSelected}
+                  aria-pressed={sel}
                   aria-label={cat.label}
                   style={{
-                    padding: '8px 4px',
-                    borderRadius: '8px',
-                    border: `1px solid ${isSelected ? cat.colourHex : 'rgba(240,230,200,0.10)'}`,
-                    background: isSelected ? `${cat.colourHex}18` : 'rgba(240,230,200,0.03)',
-                    fontFamily: 'var(--f-title)',
-                    fontSize: '8px', fontWeight: 700,
-                    letterSpacing: '0.06em', textTransform: 'uppercase' as const,
-                    color: isSelected ? cat.colourHex : 'rgba(240,230,200,0.55)',
-                    cursor: 'pointer',
-                    transition: 'all 160ms ease',
+                    padding:                 '9px 4px',
+                    borderRadius:            '8px',
+                    border:                  `1px solid ${sel ? cat.colourHex : 'rgba(240,230,200,0.09)'}`,
+                    background:              sel ? `${cat.colourHex}1a` : 'rgba(240,230,200,0.025)',
+                    fontFamily:              'var(--font-rajdhani), system-ui, sans-serif',
+                    fontSize:                '8px',
+                    fontWeight:              700,
+                    letterSpacing:           '0.06em',
+                    textTransform:           'uppercase',
+                    color:                   sel ? cat.colourHex : 'rgba(240,230,200,0.52)',
+                    cursor:                  'pointer',
+                    transition:              'all 160ms ease',
                     WebkitTapHighlightColor: 'transparent',
+                    // Active: inset top bar in category colour
+                    boxShadow:               sel ? `inset 0 2px 0 ${cat.colourHex}` : 'none',
                   }}
                 >
                   {cat.shortLabel}
@@ -361,7 +506,7 @@ function JotItDown({ onSave, onBack, isSaving, error }: JotProps) {
           </div>
         </div>
 
-        {/* Source */}
+        {/* Who told you */}
         <div>
           <label htmlFor="jot-source" style={labelStyle}>
             Who told you about it?
@@ -374,13 +519,17 @@ function JotItDown({ onSave, onBack, isSaving, error }: JotProps) {
             placeholder="Arjun, that newsletter, a friend..."
             style={fieldStyle}
             autoComplete="off"
+            autoCorrect="off"
           />
         </div>
 
-        {/* Note */}
+        {/* Note — always optional */}
         <div>
           <label htmlFor="jot-note" style={labelStyle}>
-            One thing to remember <span style={{ opacity: 0.6 }}>(optional)</span>
+            One thing to remember
+            <span style={{ opacity: 0.5, marginLeft: '6px', textTransform: 'none', fontWeight: 400, fontSize: '10px' }}>
+              optional
+            </span>
           </label>
           <textarea
             id="jot-note"
@@ -388,46 +537,55 @@ function JotItDown({ onSave, onBack, isSaving, error }: JotProps) {
             onChange={e => setNotes(e.target.value)}
             placeholder="Watch it knowing nothing..."
             rows={2}
+            maxLength={500}
             style={{
               ...fieldStyle,
-              resize: 'none',
+              resize:     'none',
               lineHeight: 1.55,
             }}
-            maxLength={500}
           />
         </div>
 
         {/* Error */}
         {error && (
           <p role="alert" style={{
-            fontFamily: 'var(--f-body)',
-            fontSize: '13px', color: '#c8151e',
-            textAlign: 'center',
+            fontFamily: 'var(--font-dm-sans), system-ui, sans-serif',
+            fontSize:   '13px',
+            color:      '#c8151e',
+            textAlign:  'center',
           }}>
             {error}
           </p>
         )}
 
-        {/* Save button */}
+        {/*
+          SAVE BUTTON
+          Neon fill — the one moment in the UI where neon is used
+          as a background. It earns this because it's the primary
+          action moment. 52px height: Fitts's Law for primary actions.
+          Dark text on neon — maximum contrast.
+        */}
         <button
           type="button"
           onClick={handleSave}
           disabled={!canSave || isSaving}
           style={{
-            width: '100%', padding: '14px',
-            borderRadius: '12px', border: 'none',
-            background: canSave && !isSaving
-              ? 'var(--neon)'
-              : 'rgba(240,230,200,0.08)',
-            color: canSave && !isSaving ? '#080f0a' : 'var(--t3)',
-            fontFamily: 'var(--f-title)',
-            fontSize: '16px', fontWeight: 700,
-            letterSpacing: '0.06em', textTransform: 'uppercase' as const,
-            cursor: canSave && !isSaving ? 'pointer' : 'not-allowed',
-            transition: 'background 180ms ease, color 180ms ease',
+            width:                   '100%',
+            height:                  '52px',
+            borderRadius:            '12px',
+            border:                  'none',
+            background:              canSave && !isSaving ? '#1fce94' : 'rgba(240,230,200,0.07)',
+            color:                   canSave && !isSaving ? '#080f0a' : 'rgba(240,230,200,0.28)',
+            fontFamily:              'var(--font-rajdhani), system-ui, sans-serif',
+            fontSize:                '15px',
+            fontWeight:              700,
+            letterSpacing:           '0.08em',
+            textTransform:           'uppercase',
+            cursor:                  canSave && !isSaving ? 'pointer' : 'not-allowed',
+            transition:              'background 200ms ease, color 200ms ease, box-shadow 200ms ease',
             WebkitTapHighlightColor: 'transparent',
-            boxShadow: canSave && !isSaving
-              ? '0 4px 20px rgba(31,206,148,0.35)'
+            boxShadow:               canSave && !isSaving
+              ? '0 4px 24px rgba(31,206,148,0.38)'
               : 'none',
           }}
           aria-busy={isSaving}
@@ -437,5 +595,43 @@ function JotItDown({ onSave, onBack, isSaving, error }: JotProps) {
 
       </div>
     </>
+  )
+}
+
+// ── ICONS ─────────────────────────────────────────────────────────
+// Minimal SVG line icons — architectural, not decorative.
+
+function MicIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none"
+      stroke="rgba(240,230,200,0.88)" strokeWidth="1.6"
+      strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+      <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+      <line x1="12" y1="19" x2="12" y2="23"/>
+      <line x1="8" y1="23" x2="16" y2="23"/>
+    </svg>
+  )
+}
+
+function CameraIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none"
+      stroke="rgba(240,230,200,0.88)" strokeWidth="1.6"
+      strokeLinecap="round" strokeLinejoin="round">
+      <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+      <circle cx="12" cy="13" r="4"/>
+    </svg>
+  )
+}
+
+function PenIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none"
+      stroke="rgba(240,230,200,0.88)" strokeWidth="1.6"
+      strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 20h9"/>
+      <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
+    </svg>
   )
 }
