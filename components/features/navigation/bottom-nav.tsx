@@ -1,125 +1,73 @@
-// components/features/navigation/bottom-nav.tsx
-// Fixed bottom navigation + FAB.
-// All styles inline — no dependency on Tailwind custom tokens.
-// FAB shows only on vault screens.
-
 'use client'
 
-import { usePathname } from 'next/navigation'
+// components/features/navigation/bottom-nav.tsx
+// Fixed bottom nav. FAB centred above it.
+// FAB: dark green fill, neon border, neon plus stroke.
+// Same neon as brand name — Von Restorff: two elements, one identity.
+// Circle + plus. Always. Non-negotiable.
+
 import Link from 'next/link'
+import { usePathname } from 'next/navigation'
 
 type BottomNavProps = {
-  onCaptureTap: () => void
+  onFabTap: () => void
 }
 
-export function BottomNav({ onCaptureTap }: BottomNavProps) {
+export function BottomNav({ onFabTap }: BottomNavProps) {
   const pathname = usePathname()
 
-  if (pathname.startsWith('/onboarding')) return null
-
-  const isVaultScreen =
-    pathname === '/dashboard' ||
-    pathname.startsWith('/rec/')
+  const isVault   = pathname === '/dashboard' || pathname.startsWith('/rec/')
+  const isProfile = pathname.startsWith('/profile')
 
   return (
     <>
-      {/* Nav bar */}
-      <nav
-        aria-label="Main navigation"
-        className="bottom-nav"
-      >
-        <NavItem
+      {/* Navigation bar */}
+      <nav className="bottom-nav" aria-label="Main navigation">
+        {/* Vault */}
+        <Link
           href="/dashboard"
-          label="Vault"
-          isActive={pathname === '/dashboard'}
-          icon={
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <rect x="3" y="3" width="7" height="7" rx="1.5" />
-              <rect x="14" y="3" width="7" height="7" rx="1.5" />
-              <rect x="3" y="14" width="7" height="7" rx="1.5" />
-              <rect x="14" y="14" width="7" height="7" rx="1.5" />
-            </svg>
-          }
-        />
+          className={`nav-btn${isVault ? ' active' : ''}`}
+          aria-label="Vault"
+          aria-current={isVault ? 'page' : undefined}
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <rect x="3" y="3" width="7" height="7" rx="1.2"/>
+            <rect x="14" y="3" width="7" height="7" rx="1.2"/>
+            <rect x="3" y="14" width="7" height="7" rx="1.2"/>
+            <rect x="14" y="14" width="7" height="7" rx="1.2"/>
+          </svg>
+          <span className="nav-label">Vault</span>
+        </Link>
 
-        {/* Centre spacer for FAB */}
-        <div style={{ width: '56px' }} aria-hidden="true" />
-
-        <NavItem
-          href="/dashboard"
-          label="Profile"
-          isActive={false}
-          icon={
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <circle cx="12" cy="8" r="4" />
-              <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" />
-            </svg>
-          }
-        />
+        {/* Profile */}
+        <Link
+          href="/profile"
+          className={`nav-btn${isProfile ? ' active' : ''}`}
+          aria-label="Profile"
+          aria-current={isProfile ? 'page' : undefined}
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <circle cx="12" cy="8" r="4"/>
+            <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/>
+          </svg>
+          <span className="nav-label">Profile</span>
+        </Link>
       </nav>
 
-      {/* FAB */}
-      {isVaultScreen && (
+      {/* FAB — circle + plus, centred above nav */}
+      {/* Dark green fill, neon border, neon plus — matches brand name */}
+      {isVault && (
         <button
-          onClick={onCaptureTap}
-          aria-label="Save a recommendation"
           className="fab"
+          onClick={onFabTap}
+          aria-label="Save a recommendation"
         >
-          <svg
-            width="26"
-            height="26"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2.2"
-            strokeLinecap="round"
-            aria-hidden="true"
-          >
-            <line x1="12" y1="5" x2="12" y2="19" />
-            <line x1="5" y1="12" x2="19" y2="12" />
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <line x1="12" y1="5" x2="12" y2="19"/>
+            <line x1="5" y1="12" x2="19" y2="12"/>
           </svg>
         </button>
       )}
     </>
-  )
-}
-
-type NavItemProps = {
-  href:     string
-  label:    string
-  isActive: boolean
-  icon:     React.ReactNode
-}
-
-function NavItem({ href, label, isActive, icon }: NavItemProps) {
-  return (
-    <Link
-      href={href}
-      aria-label={label}
-      aria-current={isActive ? 'page' : undefined}
-      style={{
-        display:        'flex',
-        flexDirection:  'column',
-        alignItems:     'center',
-        gap:            '3px',
-        minWidth:       '44px',
-        minHeight:      '44px',
-        justifyContent: 'center',
-        color:          isActive ? '#c44a28' : '#b0a396',
-        textDecoration: 'none',
-        transition:     'color 150ms ease',
-        WebkitTapHighlightColor: 'transparent',
-      }}
-    >
-      {icon}
-      <span style={{
-        fontSize:      '10px',
-        fontWeight:    '600',
-        fontFamily:    'var(--font-dm-sans), system-ui, sans-serif',
-        letterSpacing: '0.03em',
-      }}>
-        {label}
-      </span>
-    </Link>
   )
 }
