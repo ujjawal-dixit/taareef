@@ -1,45 +1,45 @@
-// components/features/navigation/app-shell.tsx
-// Client shell for authenticated pages.
-// Manages capture screen state, wraps with ToastProvider.
-
 'use client'
 
-import { useState } from 'react'
+// components/features/navigation/app-shell.tsx
+// Client shell for all authenticated pages.
+// Manages capture screen state. Wraps with ToastProvider.
+// Every authenticated page is wrapped in this.
+
+import { useState, type ReactNode } from 'react'
 import { ToastProvider } from '@/components/ui/toast'
-import { BottomNav } from './bottom-nav'
-import { RadialCaptureScreen } from '@/components/features/capture/radial-capture-screen'
+import { BottomNav }      from './bottom-nav'
+import { CaptureScreen }  from '@/components/features/capture/capture-screen'
+import type { CreateRecommendationInput } from '@/lib/types'
 
-type CaptureMethod = 'audio' | 'screenshot' | 'manual'
+type AppShellProps = {
+  children: ReactNode
+  onSaveRecommendation: (input: CreateRecommendationInput) => Promise<void>
+}
 
-export function AppShell({ children }: { children: React.ReactNode }) {
-  const [isCaptureOpen, setIsCaptureOpen]   = useState(false)
-  const [, setCaptureMethod] = useState<CaptureMethod | null>(null)
-
-  function handleMethodSelect(method: CaptureMethod) {
-    setCaptureMethod(method)
-    setIsCaptureOpen(false)
-    // TODO Layer 4: route to capture flow for each method
-    // audio      → AudioCaptureFlow
-    // screenshot → ScreenshotCaptureFlow
-    // manual     → ManualCaptureFlow
-  }
+export function AppShell({ children, onSaveRecommendation }: AppShellProps) {
+  const [isCaptureOpen, setIsCaptureOpen] = useState(false)
 
   return (
     <ToastProvider>
-      {/* Page content — padded above nav */}
-      <div className="pb-safe">
-        {children}
+      <div className="app-shell grain">
+        {/* Page content — padded above nav */}
+        <main className="page-content" id="main-content">
+          {children}
+        </main>
+
+        {/* Bottom navigation + FAB */}
+        <BottomNav onFabTap={() => setIsCaptureOpen(true)} />
+
+        {/* Capture screen — full viewport overlay */}
+        <CaptureScreen
+          isOpen={isCaptureOpen}
+          onClose={() => setIsCaptureOpen(false)}
+          onSaved={async (input) => {
+            await onSaveRecommendation(input)
+            setIsCaptureOpen(false)
+          }}
+        />
       </div>
-
-      {/* Bottom navigation + FAB */}
-      <BottomNav onCaptureTap={() => setIsCaptureOpen(true)} />
-
-      {/* Capture screen — full viewport overlay */}
-      <RadialCaptureScreen
-        isOpen={isCaptureOpen}
-        onClose={() => setIsCaptureOpen(false)}
-        onMethodSelect={handleMethodSelect}
-      />
     </ToastProvider>
   )
 }
