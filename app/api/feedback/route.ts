@@ -1,108 +1,98 @@
 // app/api/feedback/route.ts
-// Receives feedback from the FeedbackCard component.
-// Sends directly to founder email via Resend.
-// Free tier: 3,000 emails/month. No credit card required.
-// Get your key at resend.com — add RESEND_API_KEY to Vercel env vars.
-// Set FOUNDER_EMAIL to your personal email in Vercel env vars.
+// Receives feedback. Sends beautiful formatted email to founder via Resend.
+// Works without Resend key (logs to console) so UI never breaks.
 
 import { NextResponse } from 'next/server'
-import type { ApiResponse } from '@/lib/types'
+
+const MODE_DETAILS: Record<string, { emoji: string; colour: string }> = {
+  'delighted':       { emoji: '✦', colour: '#1fce94' },
+  'frustrated':      { emoji: '◌', colour: '#c8151e' },
+  'want-something':  { emoji: '→', colour: '#b87820' },
+  'thought':         { emoji: '◦', colour: '#888'    },
+}
 
 export async function POST(request: Request) {
   try {
     const body = await request.json()
-    const {
-      userEmail, userName, saveCount, topSource,
-      type, tone, message,
-    } = body
+    const { userEmail, userName, saveCount, topSource, mode, modeLabel, message } = body
 
     if (!message?.trim()) {
-      return NextResponse.json<ApiResponse<null>>(
-        { data: null, error: 'Message is required' }, { status: 400 }
-      )
+      return NextResponse.json({ data: null, error: 'Message required' }, { status: 400 })
     }
 
     const resendKey    = process.env.RESEND_API_KEY
     const founderEmail = process.env.FOUNDER_EMAIL
+    const details      = MODE_DETAILS[mode] ?? { emoji: '◦', colour: '#888' }
 
-    // If Resend not configured yet — log and return success
-    // So the UI still works even before you add the key
     if (!resendKey || !founderEmail) {
-      console.log('[Feedback received — Resend not configured]', {
-        from: userName, email: userEmail,
-        type, tone, message, saveCount, topSource,
-      })
-      return NextResponse.json<ApiResponse<{ sent: boolean }>>(
-        { data: { sent: true }, error: null }, { status: 200 }
-      )
+      console.log('\n━━━ taareef feedback ━━━')
+      console.log(`From:    ${userName} <${userEmail}>`)
+      console.log(`Mode:    ${modeLabel}`)
+      console.log(`Saves:   ${saveCount}${topSource ? ` · top source: ${topSource}` : ''}`)
+      console.log(`Message: ${message}`)
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━\n')
+      return NextResponse.json({ data: { sent: true }, error: null }, { status: 200 })
     }
 
-    const typeLabel = type === 'new-feature' ? 'New feature suggestion' : 'Existing feature feedback'
-    const toneLabel = tone === 'feeling'     ? 'Feeling / vibe'         : 'Specific'
+    const context = topSource && saveCount >= 5
+      ? `${saveCount} saves · mostly from ${topSource}`
+      : `${saveCount} save${saveCount === 1 ? '' : 's'}`
 
-    const emailBody = `
-<div style="font-family: Georgia, serif; max-width: 500px; margin: 0 auto; color: #1a1a1a; padding: 32px 24px;">
+    const html = `
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"></head>
+<body style="margin:0;padding:0;background:#0d1910;font-family:Georgia,serif;">
+<table width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;margin:0 auto;">
+  <tr><td style="padding:40px 32px 0;">
 
-  <p style="font-size: 28px; font-style: italic; font-weight: 300; color: #080f0a; margin: 0 0 8px;">
-    taareef feedback
-  </p>
-
-  <p style="font-size: 13px; color: #888; margin: 0 0 32px; border-bottom: 1px solid #eee; padding-bottom: 20px;">
-    From <strong>${userName}</strong> (${userEmail}) · ${saveCount} saves${topSource ? ` · mostly from ${topSource}` : ''}
-  </p>
-
-  <table style="width: 100%; margin-bottom: 24px;">
-    <tr>
-      <td style="font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #999; padding-bottom: 6px; width: 50%;">Type</td>
-      <td style="font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #999; padding-bottom: 6px;">Tone</td>
-    </tr>
-    <tr>
-      <td style="font-size: 14px; color: #333; font-weight: 500;">${typeLabel}</td>
-      <td style="font-size: 14px; color: #333; font-weight: 500;">${toneLabel}</td>
-    </tr>
-  </table>
-
-  <div style="background: #f8f7f4; border-left: 3px solid #1fce94; border-radius: 0 8px 8px 0; padding: 16px 20px; margin-bottom: 32px;">
-    <p style="font-size: 15px; color: #1a1a1a; line-height: 1.65; margin: 0; font-style: italic;">
-      "${message}"
+    <!-- Header -->
+    <p style="font-size:11px;font-family:system-ui,sans-serif;letter-spacing:0.12em;text-transform:uppercase;color:#1fce94;margin:0 0 6px;">
+      taareef · beta feedback
     </p>
-  </div>
+    <h1 style="font-size:32px;font-weight:300;font-style:italic;color:#f0e6c8;margin:0 0 4px;letter-spacing:-0.01em;">
+      ${details.emoji} ${modeLabel}
+    </h1>
+    <p style="font-size:13px;color:rgba(240,230,200,0.45);font-family:system-ui,sans-serif;margin:0 0 32px;">
+      ${userName} · ${userEmail} · ${context}
+    </p>
 
-  <p style="font-size: 11px; color: #bbb; text-align: center; margin: 0;">
-    taareef · beta feedback
-  </p>
+    <!-- Divider -->
+    <div style="height:0.5px;background:linear-gradient(to right,${details.colour}88,${details.colour}22,transparent);margin-bottom:28px;"></div>
 
-</div>
-    `.trim()
+    <!-- Message -->
+    <div style="border-left:3px solid ${details.colour};padding:16px 20px;background:rgba(240,230,200,0.03);border-radius:0 10px 10px 0;margin-bottom:32px;">
+      <p style="font-size:16px;color:rgba(240,230,200,0.90);line-height:1.7;margin:0;font-style:italic;">
+        "${message}"
+      </p>
+    </div>
 
-    const res = await fetch('https://api.resend.com/emails', {
+    <!-- Footer -->
+    <p style="font-size:11px;font-family:system-ui,sans-serif;color:rgba(240,230,200,0.20);text-align:center;margin:0 0 40px;">
+      reply directly to this email to respond to ${userName.split(' ')[0]}
+    </p>
+
+  </td></tr>
+</table>
+</body>
+</html>`.trim()
+
+    await fetch('https://api.resend.com/emails', {
       method:  'POST',
-      headers: {
-        'Authorization': `Bearer ${resendKey}`,
-        'Content-Type':  'application/json',
-      },
-      body: JSON.stringify({
-        from:    'taareef feedback <feedback@taareef.app>',
-        to:      [founderEmail],
-        subject: `[taareef] ${typeLabel} from ${userName}`,
-        html:    emailBody,
+      headers: { 'Authorization': `Bearer ${resendKey}`, 'Content-Type': 'application/json' },
+      body:    JSON.stringify({
+        from:       'taareef <feedback@taareef.app>',
+        to:         [founderEmail],
+        reply_to:   userEmail,
+        subject:    `${details.emoji} ${modeLabel} — ${userName}`,
+        html,
       }),
     })
 
-    if (!res.ok) {
-      const err = await res.text()
-      console.error('[Feedback] Resend error:', err)
-      // Still return success to user — don't expose email config errors
-    }
-
-    return NextResponse.json<ApiResponse<{ sent: boolean }>>(
-      { data: { sent: true }, error: null }, { status: 200 }
-    )
+    return NextResponse.json({ data: { sent: true }, error: null }, { status: 200 })
 
   } catch (err) {
-    console.error('[Feedback] Unexpected error:', err)
-    return NextResponse.json<ApiResponse<null>>(
-      { data: null, error: 'Something went wrong' }, { status: 500 }
-    )
+    console.error('[Feedback]', err)
+    return NextResponse.json({ data: null, error: 'Something went wrong' }, { status: 500 })
   }
 }
