@@ -1,9 +1,12 @@
 // app/(app)/profile/page.tsx
-// Profile with back-to-vault button at top.
+// Profile page with feedback form at the bottom.
+// Feedback lives here permanently — discovered, not interrupted.
+// User is already in a reflective mode when they're on this page.
 
 import { createClient }  from '@/lib/supabase/server'
 import { redirect }      from 'next/navigation'
 import { SignOutButton }  from './sign-out-button'
+import { ProfileClient } from './profile-client'
 import Link              from 'next/link'
 import type { Metadata } from 'next'
 
@@ -14,43 +17,57 @@ export default async function ProfilePage() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  const { count } = await supabase
+  const { count: savedCount } = await supabase
     .from('recommendations')
     .select('*', { count: 'exact', head: true })
     .eq('user_id', user.id)
     .neq('status', 'dismissed')
 
-  const { count: experienced } = await supabase
+  const { count: experiencedCount } = await supabase
     .from('recommendations')
     .select('*', { count: 'exact', head: true })
     .eq('user_id', user.id)
     .neq('status', 'saved')
     .neq('status', 'dismissed')
 
+  // Top source — for feedback card personalisation
+  const { data: recs } = await supabase
+    .from('recommendations')
+    .select('source_name')
+    .eq('user_id', user.id)
+    .neq('status', 'dismissed')
+
+  const sourceCounts: Record<string, number> = {}
+  recs?.forEach(r => {
+    sourceCounts[r.source_name] = (sourceCounts[r.source_name] ?? 0) + 1
+  })
+  const topSource = Object.entries(sourceCounts)
+    .sort((a, b) => b[1] - a[1])[0]?.[0] ?? null
+
   const name   = user.user_metadata?.full_name ?? user.email?.split('@')[0] ?? 'You'
   const email  = user.email ?? ''
   const avatar = user.user_metadata?.avatar_url ?? null
 
   return (
-    <div style={{ maxWidth: '430px', margin: '0 auto', minHeight: '100dvh', background: '#080f0a', paddingBottom: '100px' }}>
+    <div style={{
+      maxWidth:      '430px',
+      margin:        '0 auto',
+      minHeight:     '100dvh',
+      background:    '#080f0a',
+      paddingBottom: '120px',
+    }}>
 
       {/* Back to vault */}
       <div style={{ padding: '52px 20px 0' }}>
-        <Link
-          href="/dashboard"
-          style={{
-            display:        'inline-flex',
-            alignItems:     'center',
-            gap:            '5px',
-            color:          'rgba(240,230,200,0.38)',
-            textDecoration: 'none',
-            fontFamily:     'var(--font-dm-sans), system-ui, sans-serif',
-            fontSize:       '12px',
-            letterSpacing:  '0.04em',
-            WebkitTapHighlightColor: 'transparent',
-          }}
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+        <Link href="/dashboard" style={{
+          display: 'inline-flex', alignItems: 'center', gap: '5px',
+          color: 'rgba(240,230,200,0.38)', textDecoration: 'none',
+          fontFamily: 'var(--font-dm-sans), system-ui, sans-serif',
+          fontSize: '12px', letterSpacing: '0.04em',
+          WebkitTapHighlightColor: 'transparent',
+        }}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+            stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
             <polyline points="15 18 9 12 15 6"/>
           </svg>
           vault
@@ -70,21 +87,22 @@ export default async function ProfilePage() {
             width: '72px', height: '72px', borderRadius: '50%',
             border: '1.5px solid rgba(31,206,148,0.20)',
             background: 'rgba(31,206,148,0.06)',
-            margin: '0 auto 16px', display: 'flex',
-            alignItems: 'center', justifyContent: 'center',
+            margin: '0 auto 16px',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
           }}>
-            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="rgba(31,206,148,0.55)" strokeWidth="1.5" strokeLinecap="round">
-              <circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/>
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none"
+              stroke="rgba(31,206,148,0.55)" strokeWidth="1.5" strokeLinecap="round">
+              <circle cx="12" cy="8" r="4"/>
+              <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/>
             </svg>
           </div>
         )}
 
         <h1 style={{
-          fontFamily:    'var(--font-cormorant), Georgia, serif',
-          fontWeight:    400, fontStyle: 'italic',
-          fontSize:      '28px', letterSpacing: '-0.01em',
-          color:         'rgba(240,230,200,0.95)',
-          margin:        '0 0 4px',
+          fontFamily: 'var(--font-cormorant), Georgia, serif',
+          fontWeight: 400, fontStyle: 'italic',
+          fontSize: '28px', letterSpacing: '-0.01em',
+          color: 'rgba(240,230,200,0.95)', margin: '0 0 4px',
         }}>
           {name}
         </h1>
@@ -104,10 +122,10 @@ export default async function ProfilePage() {
       </header>
 
       {/* Stats */}
-      <div style={{ padding: '0 20px 32px', display: 'flex', gap: '10px' }}>
+      <div style={{ padding: '0 20px 28px', display: 'flex', gap: '10px' }}>
         {[
-          { n: count ?? 0, label: 'saved' },
-          { n: experienced ?? 0, label: 'experienced' },
+          { n: savedCount ?? 0,      label: 'saved'       },
+          { n: experiencedCount ?? 0, label: 'experienced' },
         ].map(s => (
           <div key={s.label} style={{
             flex: 1, textAlign: 'center',
@@ -116,26 +134,48 @@ export default async function ProfilePage() {
             borderRadius: '14px', padding: '18px 12px',
           }}>
             <div style={{
-              fontFamily:  'var(--font-cormorant), Georgia, serif',
-              fontWeight:  400, fontStyle: 'italic',
-              fontSize:    '36px', lineHeight: 1,
-              color:       '#1fce94',
-              textShadow:  '0 0 20px rgba(31,206,148,0.50)',
-              marginBottom:'4px',
+              fontFamily: 'var(--font-cormorant), Georgia, serif',
+              fontWeight: 400, fontStyle: 'italic',
+              fontSize: '36px', lineHeight: 1,
+              color: '#1fce94',
+              textShadow: '0 0 20px rgba(31,206,148,0.50)',
+              marginBottom: '4px',
             }}>
               {s.n}
             </div>
             <div style={{
-              fontFamily:    'var(--font-dm-sans), system-ui, sans-serif',
-              fontSize:      '10px', fontWeight: 600,
+              fontFamily: 'var(--font-dm-sans), system-ui, sans-serif',
+              fontSize: '10px', fontWeight: 600,
               letterSpacing: '0.08em', textTransform: 'uppercase',
-              color:         'rgba(240,230,200,0.35)',
+              color: 'rgba(240,230,200,0.35)',
             }}>
               {s.label}
             </div>
           </div>
         ))}
       </div>
+
+      {/* Hairline before feedback */}
+      <div style={{
+        height: '0.5px', margin: '0 20px 28px',
+        background: 'rgba(240,230,200,0.06)',
+      }} />
+
+      {/* Feedback form — lives here, never interrupts */}
+      <div style={{ padding: '0 20px' }}>
+        <ProfileClient
+          userEmail={email}
+          userName={name}
+          saveCount={savedCount ?? 0}
+          topSource={topSource}
+        />
+      </div>
+
+      {/* Hairline before sign out */}
+      <div style={{
+        height: '0.5px', margin: '28px 20px',
+        background: 'rgba(240,230,200,0.06)',
+      }} />
 
       {/* Sign out */}
       <div style={{ padding: '0 20px' }}>
