@@ -1,11 +1,12 @@
 'use client'
 
 // hooks/use-recommendations.ts
-// Client-side mutations. Optimistic UI throughout.
-// Card appears instantly — Supabase write is background.
-// Error shown inline on card — never a blocking modal.
+// Client-side mutations with optimistic UI.
+// After successful create: triggers background enrichment for film/music.
+// After enrichment: card updates with real artwork automatically on next load.
 
 import { useState, useCallback } from 'react'
+import { triggerEnrichment }     from '@/lib/utils/enrich'
 import type {
   Recommendation,
   CreateRecommendationInput,
@@ -20,26 +21,13 @@ export function useCreateRecommendation() {
   const [error,     setError]     = useState<string | null>(null)
 
   const create = useCallback(async (
-    input:          CreateRecommendationInput,
-    onOptimistic?:  (temp: Partial<Recommendation>) => void,
-    onSuccess?:     (rec: Recommendation) => void,
-    onError?:       (msg: string) => void,
+    input:         CreateRecommendationInput,
+    onOptimistic?: (temp: Partial<Recommendation>) => void,
+    onSuccess?:    (rec: Recommendation) => void,
+    onError?:      (msg: string) => void,
   ) => {
     setIsLoading(true)
     setError(null)
-
-    // Optimistic — show card immediately
-    const tempId = `temp-${Date.now()}`
-    onOptimistic?.({
-      id:         tempId,
-      status:     'saved',
-      reaction:   null,
-      priority:   input.priority ?? 'medium',
-      metadata:   input.metadata ?? {},
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-      ...input,
-    })
 
     try {
       const res = await fetch('/api/recommendations', {
@@ -54,12 +42,23 @@ export function useCreateRecommendation() {
         const msg = result.error ?? "Couldn't save — try again?"
         setError(msg)
         onError?.(msg)
+        setIsLoading(false)
         return null
       }
 
+      const saved = result.data
+
+      // Trigger background enrichment for categories that benefit from it.
+      // Film/TV get TMDB posters. Music gets Spotify artwork.
+      // Fire-and-forget — never blocks the UI.
+      const ENRICHABLE = ['film', 'tv', 'music'] as const
+      if (ENRICHABLE.includes(saved.category as typeof ENRICHABLE[number])) {
+        triggerEnrichment(saved.id)
+      }
+
       setIsLoading(false)
-      onSuccess?.(result.data)
-      return result.data
+      onSuccess?.(saved)
+      return saved
 
     } catch (err) {
       console.error('[useCreateRecommendation]', err)
@@ -102,6 +101,7 @@ export function useUpdateRecommendation() {
         const msg = result.error ?? "Couldn't update — try again?"
         setError(msg)
         onError?.(msg)
+        setIsLoading(false)
         return null
       }
 
@@ -122,7 +122,7 @@ export function useUpdateRecommendation() {
   return { update, isLoading, error }
 }
 
-// ── DISMISS (soft delete) ─────────────────────────────────────────
+// ── DISMISS ───────────────────────────────────────────────────────
 
 export function useDismissRecommendation() {
   const [isLoading, setIsLoading] = useState(false)
@@ -133,17 +133,12 @@ export function useDismissRecommendation() {
     onError?:   (msg: string) => void,
   ) => {
     setIsLoading(true)
-
     try {
-      const res = await fetch(`/api/recommendations/${id}`, {
-        method: 'DELETE',
-      })
-
+      const res = await fetch(`/api/recommendations/${id}`, { method: 'DELETE' })
       const result: ApiResponse<{ id: string }> = await res.json()
 
       if (!res.ok || result.error) {
-        const msg = result.error ?? "Couldn't dismiss — try again?"
-        onError?.(msg)
+        onError?.(result.error ?? "Couldn't dismiss — try again?")
         setIsLoading(false)
         return false
       }
