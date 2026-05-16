@@ -1,18 +1,30 @@
 'use client'
 
 // app/(app)/dashboard/dashboard-client.tsx
-// Adds FeedbackCard to the vault — appears after 3+ saves for beta users.
-// Dismissal stored in localStorage so it never reappears.
+//
+// LAYOUT PHILOSOPHY:
+// The vault is not a flat list. It is a series of rooms.
+// Each category is a room. Cards stack inside it.
+// You scroll through Film's room, then Music's room, then Food's room.
+// The category label is the doorframe — ambient, architectural.
+// 
+// The sticky category strip at top is for navigation only —
+// tapping a category scrolls to that room.
+// 
+// WKW LIGHT:
+// Cards don't sit in a void. They have internal atmosphere.
+// The image zone has a light source — a radial gradient from
+// a specific corner, in the category's dominant colour.
+// This is the half-open-door light from Chungking Express.
 
-import { useState, useMemo, useCallback, useEffect } from 'react'
-import { useRouter }          from 'next/navigation'
-import { CategoryBar }        from '@/components/features/navigation/category-bar'
-import { RecommendationCard } from '@/components/features/cards/recommendation-card'
-import { EmptyState }         from '@/components/features/vault/empty-state'
-import { AppShell }           from '@/components/features/navigation/app-shell'
-import { FeedbackCard }       from '@/components/features/feedback/feedback-card'
+import { useState, useMemo, useCallback, useRef } from 'react'
+import { useRouter }              from 'next/navigation'
+import { RecommendationCard }     from '@/components/features/cards/recommendation-card'
+import { EmptyState }             from '@/components/features/vault/empty-state'
+import { AppShell }               from '@/components/features/navigation/app-shell'
 import { useCreateRecommendation } from '@/hooks/use-recommendations'
-import { useToast }           from '@/components/ui/toast'
+import { useToast }               from '@/components/ui/toast'
+import { CATEGORIES, getCategoryConfig } from '@/constants/categories'
 import type { Recommendation, Category, CreateRecommendationInput } from '@/lib/types'
 
 type Props = {
@@ -23,36 +35,29 @@ type Props = {
   userName:           string
 }
 
-export function DashboardClient({ recommendations: serverRecs, userEmail, userName }: Props) {
+export function DashboardClient({ recommendations: serverRecs }: Props) {
   const router    = useRouter()
   const { toast } = useToast()
   const { create } = useCreateRecommendation()
 
-  const [activeCategory, setActiveCategory] = useState<Category | null>(null)
   const [localRecs,      setLocalRecs]      = useState<Recommendation[]>(serverRecs)
-  const [showFeedback,   setShowFeedback]   = useState(false)
+  const [activeCategory, setActiveCategory] = useState<Category | null>(null)
 
-  // Show feedback card after 3 saves, once per user, for beta
-  useEffect(() => {
-    const dismissed = localStorage.getItem('taareef_feedback_dismissed')
-    if (!dismissed && localRecs.length >= 3) {
-      setShowFeedback(true)
+  // Refs for scrolling to category sections
+  const sectionRefs = useRef<Record<string, HTMLElement | null>>({})
+
+  function scrollToCategory(catId: string) {
+    const el = sectionRefs.current[catId]
+    if (el) {
+      const top = el.getBoundingClientRect().top + window.scrollY - 100
+      window.scrollTo({ top, behavior: 'smooth' })
     }
-  }, [localRecs.length])
-
-  function dismissFeedback() {
-    localStorage.setItem('taareef_feedback_dismissed', 'true')
-    setShowFeedback(false)
+    setActiveCategory(catId as Category)
   }
-
-  const filtered = useMemo(() => {
-    if (!activeCategory) return localRecs
-    return localRecs.filter(r => r.category === activeCategory)
-  }, [localRecs, activeCategory])
 
   const handleSave = useCallback(async (input: CreateRecommendationInput) => {
     const tempId = `temp-${Date.now()}`
-    const tempRec: Recommendation = {
+    const temp: Recommendation = {
       id: tempId, user_id: '', status: 'saved', reaction: null,
       priority: input.priority ?? 'medium', metadata: input.metadata ?? {},
       url: input.url ?? null, image_url: input.image_url ?? null,
@@ -60,11 +65,13 @@ export function DashboardClient({ recommendations: serverRecs, userEmail, userNa
       created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
       ...input,
     }
-    setLocalRecs(prev => [tempRec, ...prev])
+    setLocalRecs(prev => [temp, ...prev])
     await create(input, undefined,
       (real) => {
         setLocalRecs(prev => prev.map(r => r.id === tempId ? real : r))
         toast('Saved ✦', 'success')
+        // Scroll to the category this was saved in
+        setTimeout(() => scrollToCategory(real.category), 400)
       },
       (err) => {
         setLocalRecs(prev => prev.filter(r => r.id !== tempId))
@@ -73,40 +80,43 @@ export function DashboardClient({ recommendations: serverRecs, userEmail, userNa
     )
   }, [create, toast])
 
-  // Top source name for feedback card context
-  const topSource = useMemo(() => {
-    const counts: Record<string, number> = {}
-    localRecs.forEach(r => { counts[r.source_name] = (counts[r.source_name] ?? 0) + 1 })
-    const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1])
-    return sorted[0]?.[0] ?? null
+  // Group recommendations by category, in category display order
+  const grouped = useMemo(() => {
+    const map: Record<string, Recommendation[]> = {}
+    localRecs.forEach(r => {
+      if (!map[r.category]) map[r.category] = []
+      map[r.category].push(r)
+    })
+    return map
   }, [localRecs])
 
-  const count   = localRecs.length
-  const hasRecs = count > 0
-  const hasFilt = filtered.length > 0
+  // Categories that have at least one save — in display order
+  const activeCategories = CATEGORIES.filter(c => (grouped[c.id]?.length ?? 0) > 0)
+  const hasAnything = localRecs.length > 0
 
   return (
     <AppShell onSaveRecommendation={handleSave}>
 
-      {/* Header */}
+      {/* ── HEADER ────────────────────────────────────────────── */}
       <header style={{ padding: '56px 20px 0', textAlign: 'center' }}>
         <h1 aria-label="taareef" style={{
           fontFamily:    'var(--font-cormorant), Georgia, serif',
           fontWeight:    300, fontStyle: 'italic',
           fontSize:      '42px', letterSpacing: '-0.01em',
           lineHeight:    1, color: '#1fce94',
-          textShadow:    '0 0 20px rgba(31,206,148,0.60), 0 0 48px rgba(31,206,148,0.25), 0 0 88px rgba(31,206,148,0.10)',
+          textShadow:    '0 0 20px rgba(31,206,148,0.65), 0 0 48px rgba(31,206,148,0.28), 0 0 88px rgba(31,206,148,0.10)',
           margin:        0,
         }}>
           taareef
         </h1>
         <p style={{
           fontFamily: 'var(--font-dm-sans), system-ui, sans-serif',
-          fontSize:   '11.5px', fontWeight: 400,
-          color:      'rgba(240,230,200,0.50)',
-          letterSpacing: '0.05em', marginTop: '7px',
+          fontSize: '11.5px', fontWeight: 400,
+          color: 'rgba(240,230,200,0.50)', letterSpacing: '0.05em', marginTop: '7px',
         }}>
-          {count === 0 ? 'your vault is ready' : `${count} recommendation${count === 1 ? '' : 's'}`}
+          {localRecs.length === 0
+            ? 'your vault is ready'
+            : `${localRecs.length} saved`}
         </p>
         {/* Symmetric hairline */}
         <div style={{
@@ -115,64 +125,191 @@ export function DashboardClient({ recommendations: serverRecs, userEmail, userNa
         }} aria-hidden="true" />
       </header>
 
-      {/* Sticky category grid */}
-      <div style={{
-        position: 'sticky', top: 0, zIndex: 20,
-        background: 'rgba(8,15,10,0.96)',
-        backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)',
-        borderBottom: '0.5px solid rgba(240,230,200,0.06)',
-        marginTop: '20px',
-      }}>
-        <CategoryBar
-          activeCategory={activeCategory}
-          onCategoryChange={(cat) => {
-            setActiveCategory(cat)
-            window.scrollTo({ top: 0, behavior: 'smooth' })
+      {/* ── CATEGORY STRIP ────────────────────────────────────── */}
+      {/* Horizontal scroll. Only shows categories with saves.    */}
+      {/* Tapping scrolls to that room in the vault.             */}
+      {hasAnything && (
+        <nav
+          aria-label="Jump to category"
+          style={{
+            position:             'sticky',
+            top:                  0,
+            zIndex:               20,
+            background:           'rgba(8,15,10,0.97)',
+            backdropFilter:       'blur(24px)',
+            WebkitBackdropFilter: 'blur(24px)',
+            borderBottom:         '0.5px solid rgba(240,230,200,0.06)',
+            marginTop:            '20px',
+            overflowX:            'auto',
+            scrollbarWidth:       'none',
+            // Hide webkit scrollbar
           }}
-        />
-      </div>
+        >
+          <style>{`::-webkit-scrollbar { display: none; }`}</style>
+          <div style={{
+            display:        'flex',
+            gap:            '6px',
+            padding:        '10px 16px',
+            width:          'max-content',
+            minWidth:       '100%',
+          }}>
+            {/* All button */}
+            <button
+              onClick={() => {
+                setActiveCategory(null)
+                window.scrollTo({ top: 0, behavior: 'smooth' })
+              }}
+              aria-pressed={activeCategory === null}
+              style={{
+                padding:       '7px 14px',
+                borderRadius:  '20px',
+                border:        `1px solid ${activeCategory === null ? 'rgba(31,206,148,0.55)' : 'rgba(240,230,200,0.10)'}`,
+                background:    activeCategory === null ? 'rgba(31,206,148,0.12)' : 'rgba(240,230,200,0.03)',
+                fontFamily:    'var(--font-rajdhani), system-ui, sans-serif',
+                fontSize:      '11px', fontWeight: 700,
+                letterSpacing: '0.06em', textTransform: 'uppercase',
+                color:         activeCategory === null ? '#1fce94' : 'rgba(240,230,200,0.50)',
+                cursor:        'pointer', whiteSpace: 'nowrap',
+                transition:    'all 180ms ease',
+                WebkitTapHighlightColor: 'transparent',
+              }}
+            >
+              All
+            </button>
 
-      {/* Vault */}
-      <section aria-label="Saved recommendations" style={{ padding: '14px 14px 0' }}>
+            {activeCategories.map(cat => {
+              const isActive = activeCategory === cat.id
+              return (
+                <button
+                  key={cat.id}
+                  onClick={() => scrollToCategory(cat.id)}
+                  aria-pressed={isActive}
+                  style={{
+                    padding:       '7px 14px',
+                    borderRadius:  '20px',
+                    border:        `1px solid ${isActive ? cat.colourHex + '80' : 'rgba(240,230,200,0.10)'}`,
+                    background:    isActive ? cat.colourHex + '18' : 'rgba(240,230,200,0.03)',
+                    fontFamily:    'var(--font-rajdhani), system-ui, sans-serif',
+                    fontSize:      '11px', fontWeight: 700,
+                    letterSpacing: '0.06em', textTransform: 'uppercase',
+                    color:         isActive ? cat.colourHex : 'rgba(240,230,200,0.50)',
+                    cursor:        'pointer', whiteSpace: 'nowrap',
+                    transition:    'all 180ms ease',
+                    WebkitTapHighlightColor: 'transparent',
+                    // Count badge
+                    display:       'flex',
+                    alignItems:    'center',
+                    gap:           '5px',
+                  }}
+                >
+                  {cat.label}
+                  <span style={{
+                    fontSize:      '9px',
+                    color:         isActive ? cat.colourHex : 'rgba(240,230,200,0.28)',
+                    fontWeight:    700,
+                    transition:    'color 180ms ease',
+                  }}>
+                    {grouped[cat.id]?.length ?? 0}
+                  </span>
+                </button>
+              )
+            })}
+          </div>
+        </nav>
+      )}
 
-        {/* Feedback card — appears at top of vault after 3 saves */}
-        {showFeedback && !activeCategory && (
-          <FeedbackCard
-            userEmail={userEmail}
-            userName={userName}
-            saveCount={count}
-            topSource={topSource}
-            onDismiss={dismissFeedback}
-          />
-        )}
-
-        {!hasRecs ? (
-          <EmptyState />
-        ) : !hasFilt ? (
-          <EmptyState category={activeCategory ?? undefined} />
+      {/* ── VAULT ─────────────────────────────────────────────── */}
+      {/* Rooms pattern: each category is a section.              */}
+      {/* The section header is the doorframe.                    */}
+      {/* Cards stack beneath it, breathing with 14px padding.   */}
+      <main
+        aria-label="Your vault"
+        style={{ padding: '0 0 24px' }}
+      >
+        {!hasAnything ? (
+          <div style={{ padding: '0 14px' }}>
+            <EmptyState />
+          </div>
         ) : (
-          <VaultGrid
-            recommendations={filtered}
-            onCardClick={id => { if (!id.startsWith('temp-')) router.push(`/rec/${id}`) }}
-          />
+          // Filter: show all rooms, or just the active one
+          CATEGORIES
+            .filter(cat => {
+              const hasRecs = (grouped[cat.id]?.length ?? 0) > 0
+              if (!hasRecs) return false
+              if (activeCategory && activeCategory !== cat.id) return false
+              return true
+            })
+            .map(cat => {
+              const recs = grouped[cat.id] ?? []
+              return (
+                <section
+                  key={cat.id}
+                  ref={el => { sectionRefs.current[cat.id] = el }}
+                  aria-label={cat.labelPlural}
+                  style={{ marginTop: '28px' }}
+                >
+                  {/* Room label — the doorframe */}
+                  <div style={{
+                    display:       'flex',
+                    alignItems:    'baseline',
+                    gap:           '10px',
+                    padding:       '0 18px 12px',
+                    borderBottom:  `0.5px solid ${cat.colourHex}18`,
+                    marginBottom:  '12px',
+                  }}>
+                    <h2 style={{
+                      fontFamily:    'var(--font-cormorant), Georgia, serif',
+                      fontWeight:    400,
+                      fontStyle:     'italic',
+                      fontSize:      '22px',
+                      letterSpacing: '-0.01em',
+                      color:         'rgba(240,230,200,0.90)',
+                      margin:        0,
+                    }}>
+                      {cat.label}
+                    </h2>
+                    {/* Count — small, subordinate */}
+                    <span style={{
+                      fontFamily:    'var(--font-dm-sans), system-ui, sans-serif',
+                      fontSize:      '11px',
+                      fontWeight:    400,
+                      color:         'rgba(240,230,200,0.28)',
+                    }}>
+                      {recs.length}
+                    </span>
+                    {/* Colour line — traces the room's identity */}
+                    <div style={{
+                      flex:        1,
+                      height:      '0.5px',
+                      background:  `linear-gradient(to right, ${cat.colourHex}35, transparent)`,
+                      marginLeft:  '4px',
+                    }} aria-hidden="true" />
+                  </div>
+
+                  {/* Cards in this room */}
+                  <div style={{
+                    padding: '0 14px',
+                    display: 'flex', flexDirection: 'column', gap: '10px',
+                  }}>
+                    {recs.map((rec, i) => (
+                      <RecommendationCard
+                        key={rec.id}
+                        recommendation={rec}
+                        isHero={i === 0 && recs.length >= 2}
+                        onClick={() => {
+                          if (!rec.id.startsWith('temp-')) {
+                            router.push(`/rec/${rec.id}`)
+                          }
+                        }}
+                      />
+                    ))}
+                  </div>
+                </section>
+              )
+            })
         )}
-      </section>
+      </main>
 
     </AppShell>
-  )
-}
-
-function VaultGrid({ recommendations, onCardClick }: {
-  recommendations: Recommendation[]
-  onCardClick:     (id: string) => void
-}) {
-  const [hero, ...rest] = recommendations
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-      {hero && <RecommendationCard recommendation={hero} isHero onClick={() => onCardClick(hero.id)} />}
-      {rest.map(rec => (
-        <RecommendationCard key={rec.id} recommendation={rec} onClick={() => onCardClick(rec.id)} />
-      ))}
-    </div>
   )
 }
