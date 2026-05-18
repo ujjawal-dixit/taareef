@@ -19,7 +19,7 @@ No prose. No markdown fences. Just the JSON.
 
 {
   "title": string or null,
-  "category": one of [restaurant, bar, film, tv, music, book, city, activity, podcast, person] or null,
+  "category": one of [restaurant, bar, film, tv, music, book, city, activity] or null,
   "source_name": string or null,
   "source_type": one of [friend, family, colleague, instagram, twitter, youtube, article, newsletter, podcast, self] or null,
   "notes": string or null (max 15 words — why it might be worth experiencing),
