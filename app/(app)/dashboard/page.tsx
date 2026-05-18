@@ -1,6 +1,3 @@
-// app/(app)/dashboard/page.tsx
-// Passes userEmail and userName to client for feedback card.
-
 import { createClient }    from '@/lib/supabase/server'
 import { DashboardClient } from './dashboard-client'
 import { redirect }        from 'next/navigation'
@@ -18,19 +15,17 @@ export default async function DashboardPage() {
     .select('*')
     .neq('status', 'dismissed')
     .order('created_at', { ascending: false })
-    .limit(50)
+    .limit(100)
 
   if (recsError) console.error('[Dashboard]', recsError.message)
 
   let nudgeAnsweredCount = 0
   try {
     const { data: prefs } = await supabase
-      .from('user_preferences')
-      .select('nudge_answered_count')
-      .eq('user_id', user.id)
-      .maybeSingle()
+      .from('user_preferences').select('nudge_answered_count')
+      .eq('user_id', user.id).maybeSingle()
     nudgeAnsweredCount = prefs?.nudge_answered_count ?? 0
-  } catch { /* table may not exist yet */ }
+  } catch {}
 
   const userName  = user.user_metadata?.full_name ?? user.email?.split('@')[0] ?? 'You'
   const userEmail = user.email ?? ''
