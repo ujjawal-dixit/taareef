@@ -1,130 +1,155 @@
-// app/api/capture/ocr/route.ts
-// Screenshot OCR using Groq Vision (llama-4-scout-17b).
-// Free tier. Same GROQ_API_KEY as audio transcription.
-// No Anthropic key needed.
-// 
-// Flow: user uploads screenshot → Groq Vision reads it →
-// returns structured recommendation → pre-filled card shown to user.
+// app/api/enrich/[id]/route.ts
+// Background enrichment triggered after save.
+// Film/TV: TMDB for poster, overview, genres, streaming.
+// Music: Spotify for album art, artist, preview.
+// Never blocks the save flow — called fire-and-forget.
 
-import { NextResponse } from 'next/server'
-import type { ApiResponse } from '@/lib/types'
+import { createClient } from '@/lib/supabase/server'
+import { NextResponse }  from 'next/server'
 
-const SYSTEM_PROMPT = `You are a recommendation extraction specialist.
-You will receive a screenshot. It may be from WhatsApp, iMessage, Instagram, 
-Twitter/X, a food delivery app, a streaming service, or any other context 
-where someone recommends something.
+type Params = { params: Promise<{ id: string }> }
 
-Your job: extract the recommendation and return ONLY a valid JSON object.
-No prose. No markdown fences. Just the JSON.
-
-{
-  "title": string or null,
-  "category": one of [restaurant, bar, film, tv, music, book, city, activity, podcast, person] or null,
-  "source_name": string or null,
-  "source_type": one of [friend, family, colleague, instagram, twitter, youtube, article, newsletter, podcast, self] or null,
-  "notes": string or null (max 15 words — why it might be worth experiencing),
-  "location": { "city": string, "country": string } or null,
-  "confidence": "high" or "medium" or "low"
-}
-
-If no clear recommendation exists in the image, return all null values with confidence "low".`
-
-export async function POST(request: Request) {
+export async function POST(_req: Request, { params }: Params) {
   try {
-    const groqKey = process.env.GROQ_API_KEY
-    if (!groqKey) {
-      return NextResponse.json<ApiResponse<null>>(
-        { data: null, error: 'OCR not configured' }, { status: 503 }
-      )
+    const { id }   = await params
+    const supabase = await createClient()
+
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return NextResponse.json({ data: null, error: 'Unauthorised' }, { status: 401 })
+
+    const { data: rec } = await supabase
+      .from('recommendations')
+      .select('id, title, category, metadata')
+      .eq('id', id)
+      .eq('user_id', user.id)
+      .single()
+
+    if (!rec) return NextResponse.json({ data: { enriched: false }, error: null })
+
+    // Already enriched
+    if (rec.metadata && Object.keys(rec.metadata).length > 0) {
+      return NextResponse.json({ data: { enriched: false, reason: 'already_enriched' }, error: null })
     }
 
-    const form  = await request.formData()
-    const file  = form.get('image') as File | null
+    let metadata: Record<string, unknown> = {}
+    let enriched = false
 
-    if (!file) {
-      return NextResponse.json<ApiResponse<null>>(
-        { data: null, error: 'No image provided' }, { status: 400 }
-      )
+    // ── FILM / TV → TMDB ────────────────────────────────────────
+    if (rec.category === 'film' || rec.category === 'tv') {
+      const tmdbKey = process.env.TMDB_API_KEY
+      if (tmdbKey) {
+        const mediaType = rec.category === 'film' ? 'movie' : 'tv'
+        const searchUrl = `https://api.themoviedb.org/3/search/${mediaType}?query=${encodeURIComponent(rec.title)}&api_key=${tmdbKey}`
+        const res  = await fetch(searchUrl)
+        const data = await res.json()
+        const hit  = data.results?.[0]
+
+        if (hit) {
+          metadata = {
+            tmdb_id:      hit.id,
+            poster_path:  hit.poster_path
+              ? `https://image.tmdb.org/t/p/w500${hit.poster_path}`
+              : null,
+            overview:     hit.overview ?? null,
+            release_year: hit.release_date
+              ? parseInt(hit.release_date.slice(0, 4))
+              : hit.first_air_date
+              ? parseInt(hit.first_air_date.slice(0, 4))
+              : null,
+            vote_average: hit.vote_average ?? null,
+          }
+
+          // Fetch genres separately
+          const detailRes  = await fetch(`https://api.themoviedb.org/3/${mediaType}/${hit.id}?api_key=${tmdbKey}`)
+          const detailData = await detailRes.json()
+          if (detailData.genres?.length) {
+            metadata.genre = detailData.genres[0].name
+          }
+          if (detailData.runtime) metadata.runtime = detailData.runtime
+
+          enriched = true
+
+          // If there's a poster, update image_url on the recommendation
+          if (metadata.poster_path) {
+            await supabase
+              .from('recommendations')
+              .update({ image_url: metadata.poster_path, metadata })
+              .eq('id', id)
+            return NextResponse.json({ data: { enriched: true, metadata }, error: null })
+          }
+        }
+      }
     }
 
-    if (file.size > 20 * 1024 * 1024) {
-      return NextResponse.json<ApiResponse<null>>(
-        { data: null, error: 'Image must be under 20MB' }, { status: 400 }
-      )
-    }
+    // ── MUSIC → SPOTIFY ─────────────────────────────────────────
+    if (rec.category === 'music') {
+      const clientId     = process.env.SPOTIFY_CLIENT_ID
+      const clientSecret = process.env.SPOTIFY_CLIENT_SECRET
 
-    const bytes   = await file.arrayBuffer()
-    const base64  = Buffer.from(bytes).toString('base64')
-    const mime    = file.type || 'image/jpeg'
-
-    // Groq Vision — same API key as Whisper audio
-    const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-      method:  'POST',
-      headers: {
-        'Authorization': `Bearer ${groqKey}`,
-        'Content-Type':  'application/json',
-      },
-      body: JSON.stringify({
-        model:      'meta-llama/llama-4-scout-17b-16e-instruct',
-        max_tokens: 512,
-        messages: [
-          {
-            role:    'system',
-            content: SYSTEM_PROMPT,
+      if (clientId && clientSecret) {
+        // Get access token (Client Credentials — no user login needed)
+        const tokenRes = await fetch('https://accounts.spotify.com/api/token', {
+          method:  'POST',
+          headers: {
+            'Content-Type':  'application/x-www-form-urlencoded',
+            'Authorization': `Basic ${Buffer.from(`${clientId}:${clientSecret}`).toString('base64')}`,
           },
-          {
-            role:    'user',
-            content: [
-              {
-                type:      'image_url',
-                image_url: { url: `data:${mime};base64,${base64}` },
-              },
-              {
-                type: 'text',
-                text: 'Extract the recommendation from this screenshot.',
-              },
-            ],
-          },
-        ],
-      }),
-    })
+          body: 'grant_type=client_credentials',
+        })
+        const tokenData = await tokenRes.json()
+        const token     = tokenData.access_token
 
-    if (!res.ok) {
-      const err = await res.text()
-      console.error('[OCR] Groq error:', res.status, err)
-      return NextResponse.json<ApiResponse<null>>(
-        { data: null, error: 'Could not read the screenshot — try again?' },
-        { status: 503 }
-      )
+        if (token) {
+          const searchRes  = await fetch(
+            `https://api.spotify.com/v1/search?q=${encodeURIComponent(rec.title)}&type=track,album&limit=1`,
+            { headers: { 'Authorization': `Bearer ${token}` } }
+          )
+          const searchData = await searchRes.json()
+
+          // Try track first, then album
+          const track = searchData.tracks?.items?.[0]
+          const album = searchData.albums?.items?.[0]
+          const hit   = track ?? album
+
+          if (hit) {
+            const artwork = hit.album?.images?.[0]?.url ?? hit.images?.[0]?.url ?? null
+            metadata = {
+              artist:      hit.artists?.[0]?.name ?? hit.artists?.[0]?.name ?? null,
+              album:       hit.album?.name ?? hit.name ?? null,
+              artwork_url: artwork,
+              spotify_id:  hit.id,
+              preview_url: hit.preview_url ?? null,
+              release_year:hit.album?.release_date
+                ? parseInt(hit.album.release_date.slice(0, 4))
+                : null,
+            }
+            enriched = true
+
+            if (artwork) {
+              await supabase
+                .from('recommendations')
+                .update({ image_url: artwork, metadata })
+                .eq('id', id)
+              return NextResponse.json({ data: { enriched: true, metadata }, error: null })
+            }
+          }
+        }
+      }
     }
 
-    const groqData = await res.json()
-    const text     = groqData.choices?.[0]?.message?.content?.trim() ?? ''
-
-    // Strip markdown fences if Groq adds them despite instructions
-    const clean = text
-      .replace(/^```(?:json)?\n?/, '')
-      .replace(/\n?```$/, '')
-      .trim()
-
-    let parsed: Record<string, unknown>
-    try {
-      parsed = JSON.parse(clean)
-    } catch {
-      console.error('[OCR] Parse failed. Raw:', text)
-      return NextResponse.json<ApiResponse<null>>(
-        { data: null, error: 'Could not extract a recommendation from this screenshot' },
-        { status: 422 }
-      )
+    // Save metadata even if no image
+    if (enriched && Object.keys(metadata).length > 0) {
+      await supabase
+        .from('recommendations')
+        .update({ metadata })
+        .eq('id', id)
     }
 
-    return NextResponse.json({ data: parsed, error: null }, { status: 200 })
+    return NextResponse.json({ data: { enriched, metadata }, error: null })
 
   } catch (err) {
-    console.error('[OCR] Unexpected:', err)
-    return NextResponse.json<ApiResponse<null>>(
-      { data: null, error: 'Something went wrong — please try again' },
-      { status: 500 }
-    )
+    console.error('[Enrich]', err)
+    // Never error to client — enrichment failure is always silent
+    return NextResponse.json({ data: { enriched: false }, error: null })
   }
 }
