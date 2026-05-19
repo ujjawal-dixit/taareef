@@ -1,21 +1,10 @@
 'use client'
 
 // app/(app)/dashboard/dashboard-client.tsx
-//
-// LAYOUT PHILOSOPHY:
-// The vault is not a flat list. It is a series of rooms.
-// Each category is a room. Cards stack inside it.
-// You scroll through Film's room, then Music's room, then Food's room.
-// The category label is the doorframe — ambient, architectural.
-// 
-// The sticky category strip at top is for navigation only —
-// tapping a category scrolls to that room.
-// 
-// WKW LIGHT:
-// Cards don't sit in a void. They have internal atmosphere.
-// The image zone has a light source — a radial gradient from
-// a specific corner, in the category's dominant colour.
-// This is the half-open-door light from Chungking Express.
+// Fix: category strip sticky positioning.
+// The strip must be sticky relative to the page scroll, not a flex container.
+// Solution: remove flex from the parent, let the strip be a block element
+// with position:sticky top:0. The viewport is the scroll root.
 
 import { useState, useMemo, useCallback, useRef } from 'react'
 import { useRouter }              from 'next/navigation'
@@ -24,7 +13,7 @@ import { EmptyState }             from '@/components/features/vault/empty-state'
 import { AppShell }               from '@/components/features/navigation/app-shell'
 import { useCreateRecommendation } from '@/hooks/use-recommendations'
 import { useToast }               from '@/components/ui/toast'
-import { CATEGORIES, getCategoryConfig } from '@/constants/categories'
+import { CATEGORIES }             from '@/constants/categories'
 import type { Recommendation, Category, CreateRecommendationInput } from '@/lib/types'
 
 type Props = {
@@ -43,16 +32,16 @@ export function DashboardClient({ recommendations: serverRecs }: Props) {
   const [localRecs,      setLocalRecs]      = useState<Recommendation[]>(serverRecs)
   const [activeCategory, setActiveCategory] = useState<Category | null>(null)
 
-  // Refs for scrolling to category sections
   const sectionRefs = useRef<Record<string, HTMLElement | null>>({})
 
   function scrollToCategory(catId: string) {
+    setActiveCategory(catId as Category)
     const el = sectionRefs.current[catId]
     if (el) {
-      const top = el.getBoundingClientRect().top + window.scrollY - 100
+      // Account for sticky strip height (~52px) + some breathing room
+      const top = el.getBoundingClientRect().top + window.scrollY - 60
       window.scrollTo({ top, behavior: 'smooth' })
     }
-    setActiveCategory(catId as Category)
   }
 
   const handleSave = useCallback(async (input: CreateRecommendationInput) => {
@@ -70,8 +59,7 @@ export function DashboardClient({ recommendations: serverRecs }: Props) {
       (real) => {
         setLocalRecs(prev => prev.map(r => r.id === tempId ? real : r))
         toast('Saved ✦', 'success')
-        // Scroll to the category this was saved in
-        setTimeout(() => scrollToCategory(real.category), 400)
+        setTimeout(() => scrollToCategory(real.category), 500)
       },
       (err) => {
         setLocalRecs(prev => prev.filter(r => r.id !== tempId))
@@ -80,7 +68,6 @@ export function DashboardClient({ recommendations: serverRecs }: Props) {
     )
   }, [create, toast])
 
-  // Group recommendations by category, in category display order
   const grouped = useMemo(() => {
     const map: Record<string, Recommendation[]> = {}
     localRecs.forEach(r => {
@@ -90,14 +77,13 @@ export function DashboardClient({ recommendations: serverRecs }: Props) {
     return map
   }, [localRecs])
 
-  // Categories that have at least one save — in display order
-  const activeCategories = CATEGORIES.filter(c => (grouped[c.id]?.length ?? 0) > 0)
-  const hasAnything = localRecs.length > 0
+  const populatedCategories = CATEGORIES.filter(c => (grouped[c.id]?.length ?? 0) > 0)
+  const hasAny = localRecs.length > 0
 
   return (
     <AppShell onSaveRecommendation={handleSave}>
 
-      {/* ── HEADER ────────────────────────────────────────────── */}
+      {/* ── HEADER ────────────────────────────────────────── */}
       <header style={{ padding: '56px 20px 0', textAlign: 'center' }}>
         <h1 aria-label="taareef" style={{
           fontFamily:    'var(--font-cormorant), Georgia, serif',
@@ -105,7 +91,7 @@ export function DashboardClient({ recommendations: serverRecs }: Props) {
           fontSize:      '42px', letterSpacing: '-0.01em',
           lineHeight:    1, color: '#1fce94',
           textShadow:    '0 0 20px rgba(31,206,148,0.65), 0 0 48px rgba(31,206,148,0.28), 0 0 88px rgba(31,206,148,0.10)',
-          margin:        0,
+          margin: 0,
         }}>
           taareef
         </h1>
@@ -114,56 +100,56 @@ export function DashboardClient({ recommendations: serverRecs }: Props) {
           fontSize: '11.5px', fontWeight: 400,
           color: 'rgba(240,230,200,0.50)', letterSpacing: '0.05em', marginTop: '7px',
         }}>
-          {localRecs.length === 0
-            ? 'your vault is ready'
-            : `${localRecs.length} saved`}
+          {localRecs.length === 0 ? 'your vault is ready' : `${localRecs.length} saved`}
         </p>
-        {/* Symmetric hairline */}
         <div style={{
           height: '0.5px', margin: '16px auto 0', maxWidth: '160px',
           background: 'linear-gradient(to right, transparent, rgba(31,206,148,0.18) 20%, rgba(31,206,148,0.55) 50%, rgba(31,206,148,0.18) 80%, transparent)',
         }} aria-hidden="true" />
       </header>
 
-      {/* ── CATEGORY STRIP ────────────────────────────────────── */}
-      {/* Horizontal scroll. Only shows categories with saves.    */}
-      {/* Tapping scrolls to that room in the vault.             */}
-      {hasAnything && (
-        <nav
+      {/* ── CATEGORY STRIP ────────────────────────────────── */}
+      {/*
+        STICKY FIX:
+        position:sticky only works when the element is inside a scroll container
+        that is the window (or has overflow:auto/scroll).
+        The AppShell uses a div with overflowX:hidden — this doesn't prevent
+        vertical scroll on window. The sticky should work.
+        Key: the strip must NOT be inside a flex column that has height:auto.
+        We keep the strip as a direct block child of the scroll document.
+      */}
+      {hasAny && (
+        <div
+          role="navigation"
           aria-label="Jump to category"
           style={{
             position:             'sticky',
             top:                  0,
-            zIndex:               20,
-            background:           'rgba(8,15,10,0.97)',
+            zIndex:               50,
+            background:           'rgba(8,15,10,0.98)',
             backdropFilter:       'blur(24px)',
             WebkitBackdropFilter: 'blur(24px)',
             borderBottom:         '0.5px solid rgba(240,230,200,0.06)',
             marginTop:            '20px',
-            overflowX:            'auto',
-            scrollbarWidth:       'none',
-            // Hide webkit scrollbar
           }}
         >
-          <style>{`::-webkit-scrollbar { display: none; }`}</style>
           <div style={{
-            display:        'flex',
-            gap:            '6px',
-            padding:        '10px 16px',
-            width:          'max-content',
-            minWidth:       '100%',
+            display:    'flex',
+            gap:        '6px',
+            padding:    '10px 14px',
+            overflowX:  'auto',
+            scrollbarWidth: 'none',
+            msOverflowStyle: 'none',
           }}>
-            {/* All button */}
+            <style>{`::-webkit-scrollbar { display: none; }`}</style>
+
+            {/* All */}
             <button
-              onClick={() => {
-                setActiveCategory(null)
-                window.scrollTo({ top: 0, behavior: 'smooth' })
-              }}
+              onClick={() => { setActiveCategory(null); window.scrollTo({ top: 0, behavior: 'smooth' }) }}
               aria-pressed={activeCategory === null}
               style={{
-                padding:       '7px 14px',
-                borderRadius:  '20px',
-                border:        `1px solid ${activeCategory === null ? 'rgba(31,206,148,0.55)' : 'rgba(240,230,200,0.10)'}`,
+                padding:       '7px 14px', borderRadius: '20px', flexShrink: 0,
+                border:        `1px solid ${activeCategory === null ? 'rgba(31,206,148,0.55)' : 'rgba(240,230,200,0.12)'}`,
                 background:    activeCategory === null ? 'rgba(31,206,148,0.12)' : 'rgba(240,230,200,0.03)',
                 fontFamily:    'var(--font-rajdhani), system-ui, sans-serif',
                 fontSize:      '11px', fontWeight: 700,
@@ -177,17 +163,18 @@ export function DashboardClient({ recommendations: serverRecs }: Props) {
               All
             </button>
 
-            {activeCategories.map(cat => {
+            {populatedCategories.map(cat => {
               const isActive = activeCategory === cat.id
+              const count    = grouped[cat.id]?.length ?? 0
               return (
                 <button
                   key={cat.id}
                   onClick={() => scrollToCategory(cat.id)}
                   aria-pressed={isActive}
                   style={{
-                    padding:       '7px 14px',
-                    borderRadius:  '20px',
-                    border:        `1px solid ${isActive ? cat.colourHex + '80' : 'rgba(240,230,200,0.10)'}`,
+                    display:       'flex', alignItems: 'center', gap: '5px',
+                    padding:       '7px 14px', borderRadius: '20px', flexShrink: 0,
+                    border:        `1px solid ${isActive ? cat.colourHex + '80' : 'rgba(240,230,200,0.12)'}`,
                     background:    isActive ? cat.colourHex + '18' : 'rgba(240,230,200,0.03)',
                     fontFamily:    'var(--font-rajdhani), system-ui, sans-serif',
                     fontSize:      '11px', fontWeight: 700,
@@ -196,42 +183,30 @@ export function DashboardClient({ recommendations: serverRecs }: Props) {
                     cursor:        'pointer', whiteSpace: 'nowrap',
                     transition:    'all 180ms ease',
                     WebkitTapHighlightColor: 'transparent',
-                    // Count badge
-                    display:       'flex',
-                    alignItems:    'center',
-                    gap:           '5px',
                   }}
                 >
                   {cat.label}
                   <span style={{
-                    fontSize:      '9px',
-                    color:         isActive ? cat.colourHex : 'rgba(240,230,200,0.28)',
-                    fontWeight:    700,
-                    transition:    'color 180ms ease',
+                    fontSize: '9px', fontWeight: 700,
+                    color: isActive ? cat.colourHex : 'rgba(240,230,200,0.28)',
+                    transition: 'color 180ms ease',
                   }}>
-                    {grouped[cat.id]?.length ?? 0}
+                    {count}
                   </span>
                 </button>
               )
             })}
           </div>
-        </nav>
+        </div>
       )}
 
-      {/* ── VAULT ─────────────────────────────────────────────── */}
-      {/* Rooms pattern: each category is a section.              */}
-      {/* The section header is the doorframe.                    */}
-      {/* Cards stack beneath it, breathing with 14px padding.   */}
-      <main
-        aria-label="Your vault"
-        style={{ padding: '0 0 24px' }}
-      >
-        {!hasAnything ? (
+      {/* ── VAULT ─────────────────────────────────────────── */}
+      <main aria-label="Your vault" style={{ padding: '0 0 24px' }}>
+        {!hasAny ? (
           <div style={{ padding: '0 14px' }}>
             <EmptyState />
           </div>
         ) : (
-          // Filter: show all rooms, or just the active one
           CATEGORIES
             .filter(cat => {
               const hasRecs = (grouped[cat.id]?.length ?? 0) > 0
@@ -248,58 +223,42 @@ export function DashboardClient({ recommendations: serverRecs }: Props) {
                   aria-label={cat.labelPlural}
                   style={{ marginTop: '28px' }}
                 >
-                  {/* Room label — the doorframe */}
+                  {/* Room label */}
                   <div style={{
-                    display:       'flex',
-                    alignItems:    'baseline',
-                    gap:           '10px',
-                    padding:       '0 18px 12px',
-                    borderBottom:  `0.5px solid ${cat.colourHex}18`,
-                    marginBottom:  '12px',
+                    display: 'flex', alignItems: 'baseline', gap: '10px',
+                    padding: '0 18px 12px',
+                    borderBottom: `0.5px solid ${cat.colourHex}18`,
+                    marginBottom: '12px',
                   }}>
                     <h2 style={{
                       fontFamily:    'var(--font-cormorant), Georgia, serif',
-                      fontWeight:    400,
-                      fontStyle:     'italic',
-                      fontSize:      '22px',
-                      letterSpacing: '-0.01em',
-                      color:         'rgba(240,230,200,0.90)',
-                      margin:        0,
+                      fontWeight:    400, fontStyle: 'italic',
+                      fontSize:      '22px', letterSpacing: '-0.01em',
+                      color:         'rgba(240,230,200,0.90)', margin: 0,
                     }}>
                       {cat.label}
                     </h2>
-                    {/* Count — small, subordinate */}
                     <span style={{
-                      fontFamily:    'var(--font-dm-sans), system-ui, sans-serif',
-                      fontSize:      '11px',
-                      fontWeight:    400,
-                      color:         'rgba(240,230,200,0.28)',
+                      fontFamily: 'var(--font-dm-sans), system-ui, sans-serif',
+                      fontSize: '11px', color: 'rgba(240,230,200,0.28)',
                     }}>
                       {recs.length}
                     </span>
-                    {/* Colour line — traces the room's identity */}
                     <div style={{
-                      flex:        1,
-                      height:      '0.5px',
-                      background:  `linear-gradient(to right, ${cat.colourHex}35, transparent)`,
-                      marginLeft:  '4px',
+                      flex: 1, height: '0.5px',
+                      background: `linear-gradient(to right, ${cat.colourHex}35, transparent)`,
                     }} aria-hidden="true" />
                   </div>
 
-                  {/* Cards in this room */}
-                  <div style={{
-                    padding: '0 14px',
-                    display: 'flex', flexDirection: 'column', gap: '10px',
-                  }}>
+                  {/* Cards */}
+                  <div style={{ padding: '0 14px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
                     {recs.map((rec, i) => (
                       <RecommendationCard
                         key={rec.id}
                         recommendation={rec}
                         isHero={i === 0 && recs.length >= 2}
                         onClick={() => {
-                          if (!rec.id.startsWith('temp-')) {
-                            router.push(`/rec/${rec.id}`)
-                          }
+                          if (!rec.id.startsWith('temp-')) router.push(`/rec/${rec.id}`)
                         }}
                       />
                     ))}
