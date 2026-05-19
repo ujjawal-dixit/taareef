@@ -123,7 +123,7 @@ export default async function ProfilePage() {
       </header>
 
       {/* ── STATS ────────────────────────────────────────────── */}
-      <div style={{ padding: '0 20px 32px', display: 'flex', gap: '10px' }}>
+      <div style={{ padding: '0 20px 20px', display: 'flex', gap: '10px' }}>
         {[
           { n: savedCount ?? 0,       label: 'saved'       },
           { n: experiencedCount ?? 0, label: 'experienced' },
@@ -160,7 +160,7 @@ export default async function ProfilePage() {
 
       {/* Section divider */}
       <div style={{
-        height: '0.5px', margin: '0 20px 28px',
+        height: '0.5px', margin: '0 20px 16px',
         background: 'rgba(240,230,200,0.05)',
       }} />
 
