@@ -291,7 +291,7 @@ function BackBtn({ label, onClick }: { label: string; onClick: () => void }) {
       onClick={onClick}
       style={{
         display: 'flex', alignItems: 'center', gap: '5px',
-        color: 'rgba(240,230,200,0.70)',
+        color: 'rgba(240,230,200,0.85)',
         fontFamily: 'var(--font-dm-sans), system-ui, sans-serif',
         fontSize: '12px', letterSpacing: '0.04em',
         minHeight: '44px',
@@ -537,7 +537,7 @@ function AudioCapture({ onExtracted, onBack, onError, error }: {
         onBack={onBack} backLabel="← options"
       />
 
-      <div style={{ padding: '0 16px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '24px' }}>
+      <div style={{ padding: '0 16px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '28px', flex: 1, minHeight: 'calc(100dvh - 220px)' }}>
 
         {/* Recording button */}
         <button
@@ -664,7 +664,7 @@ function OcrCapture({ onExtracted, onBack, onError, error }: {
         onBack={onBack} backLabel="← options"
       />
 
-      <div style={{ padding: '0 16px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '20px' }}>
+      <div style={{ padding: '0 16px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '24px', flex: 1, minHeight: 'calc(100dvh - 220px)' }}>
 
         {/* Upload zone */}
         <div
