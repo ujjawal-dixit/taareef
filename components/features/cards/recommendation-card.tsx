@@ -99,7 +99,7 @@ function PosterCard({ recommendation: rec, isHero, onClick }: CardProps) {
           letterSpacing:        '0.08em', textTransform: 'uppercase',
           color:                'rgba(240,230,200,0.96)',
           backdropFilter:       'blur(8px)',
-          WebkitBackdropFilter: 'blur(8px)',
+          WebkitBackdropFilter: 'blur(8px)', zIndex: 2,
         }}>
           {config.label}
         </div>
@@ -123,7 +123,7 @@ function PosterCard({ recommendation: rec, isHero, onClick }: CardProps) {
       </div>
 
       {/* Body */}
-      <div style={{ padding: '14px 18px 20px' }}>
+      <div style={{ padding: isHero ? '16px 18px 22px' : '14px 18px 20px' }}>
         <h3 style={{
           fontFamily:    'var(--font-rajdhani), system-ui, sans-serif',
           fontSize:      '22px', fontWeight: 700, letterSpacing: '0.02em',
