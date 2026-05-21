@@ -1,16 +1,9 @@
 // app/(app)/profile/page.tsx
-//
-// PROFILE BACK BUTTON — redesigned.
-// The current "vault" link in small cream text top-left reads as an afterthought.
-// Profile is a different room. Returning to vault should feel like
-// stepping back through a doorframe — not tapping a footnote.
-//
-// Solution: A full-width "return to vault" bar at the bottom of the page,
-// above the nav bar. It is always visible. It says exactly what it does.
-// The vault icon matches the nav bar vault icon. Neon — because you're going home.
-//
-// The top of the page: no back button. You got here via the nav bar.
-// The nav bar is always visible. Profile doesn't need a top back button.
+// Fixed:
+// 1. Back button at TOP — not bottom. Neon, 44px target.
+// 2. SIGN OUT at bottom — completely separated from back button.
+// 3. All queries run in parallel via Promise.all — eliminates latency.
+// 4. Top source computed from already-fetched data — no extra query.
 
 import { createClient }  from '@/lib/supabase/server'
 import { redirect }      from 'next/navigation'
@@ -23,31 +16,38 @@ export const metadata: Metadata = { title: 'Profile · taareef' }
 
 export default async function ProfilePage() {
   const supabase = await createClient()
+
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  const { count: savedCount } = await supabase
-    .from('recommendations')
-    .select('*', { count: 'exact', head: true })
-    .eq('user_id', user.id)
-    .neq('status', 'dismissed')
+  // All queries in parallel — eliminates sequential waterfall latency
+  const [savedResult, experiencedResult, sourcesResult] = await Promise.all([
+    supabase
+      .from('recommendations')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', user.id)
+      .neq('status', 'dismissed'),
+    supabase
+      .from('recommendations')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', user.id)
+      .neq('status', 'saved')
+      .neq('status', 'dismissed'),
+    supabase
+      .from('recommendations')
+      .select('source_name')
+      .eq('user_id', user.id)
+      .neq('status', 'dismissed'),
+  ])
 
-  const { count: experiencedCount } = await supabase
-    .from('recommendations')
-    .select('*', { count: 'exact', head: true })
-    .eq('user_id', user.id)
-    .neq('status', 'saved')
-    .neq('status', 'dismissed')
+  const savedCount      = savedResult.count      ?? 0
+  const experiencedCount = experiencedResult.count ?? 0
 
-  // Top source for feedback personalisation
-  const { data: recs } = await supabase
-    .from('recommendations')
-    .select('source_name')
-    .eq('user_id', user.id)
-    .neq('status', 'dismissed')
-
+  // Top source from already-fetched data — no extra round-trip
   const counts: Record<string, number> = {}
-  recs?.forEach(r => { counts[r.source_name] = (counts[r.source_name] ?? 0) + 1 })
+  sourcesResult.data?.forEach(r => {
+    counts[r.source_name] = (counts[r.source_name] ?? 0) + 1
+  })
   const topSource = Object.entries(counts).sort((a, b) => b[1] - a[1])[0]?.[0] ?? null
 
   const name   = user.user_metadata?.full_name ?? user.email?.split('@')[0] ?? 'You'
@@ -60,34 +60,59 @@ export default async function ProfilePage() {
       margin:        '0 auto',
       minHeight:     '100dvh',
       background:    '#080f0a',
-      // Extra bottom padding: nav bar (64px) + some breathing room
-      paddingBottom: '100px',
+      paddingBottom: '120px',
     }}>
 
-      {/* ── HEADER — name and avatar ─────────────────────────── */}
-      <header style={{ padding: '60px 20px 0', textAlign: 'center' }}>
+      {/* ── BACK TO VAULT — top left, always ──────────────── */}
+      {/*
+        This is the correct position. Profile is reached via the nav bar.
+        The way back is a clear top-left back button — not a bottom bar
+        that sits beside sign out and creates accidental tap risk.
+      */}
+      <div style={{ padding: '52px 20px 0' }}>
+        <Link
+          href="/dashboard"
+          aria-label="Back to vault"
+          style={{
+            display:                 'inline-flex',
+            alignItems:              'center',
+            gap:                     '5px',
+            color:                   '#1fce94',
+            fontFamily:              'var(--f-body)',
+            fontSize:                '12px',
+            fontWeight:              500,
+            letterSpacing:           '0.04em',
+            textDecoration:          'none',
+            textShadow:              '0 0 10px rgba(31,206,148,0.40)',
+            minHeight:               '44px',
+            WebkitTapHighlightColor: 'transparent',
+          }}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+            stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+            <polyline points="15 18 9 12 15 6"/>
+          </svg>
+          vault
+        </Link>
+      </div>
 
+      {/* ── AVATAR + NAME ─────────────────────────────────── */}
+      <header style={{ padding: '20px 20px 0', textAlign: 'center' }}>
         {avatar ? (
-          <img
-            src={avatar}
-            alt={name}
-            style={{
-              width:        '72px', height: '72px',
-              borderRadius: '50%',
-              border:       '1.5px solid rgba(31,206,148,0.28)',
-              margin:       '0 auto 16px', display: 'block',
-              objectFit:    'cover',
-            }}
-          />
+          <img src={avatar} alt={name} style={{
+            width: '68px', height: '68px', borderRadius: '50%',
+            border: '1.5px solid rgba(31,206,148,0.28)',
+            margin: '0 auto 14px', display: 'block', objectFit: 'cover',
+          }} />
         ) : (
           <div style={{
-            width:          '72px', height: '72px', borderRadius: '50%',
-            border:         '1.5px solid rgba(31,206,148,0.18)',
-            background:     'rgba(31,206,148,0.05)',
-            margin:         '0 auto 16px',
-            display:        'flex', alignItems: 'center', justifyContent: 'center',
+            width: '68px', height: '68px', borderRadius: '50%',
+            border: '1.5px solid rgba(31,206,148,0.18)',
+            background: 'rgba(31,206,148,0.05)',
+            margin: '0 auto 14px',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
           }}>
-            <svg width="26" height="26" viewBox="0 0 24 24" fill="none"
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none"
               stroke="rgba(31,206,148,0.45)" strokeWidth="1.5" strokeLinecap="round">
               <circle cx="12" cy="8" r="4"/>
               <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/>
@@ -95,62 +120,55 @@ export default async function ProfilePage() {
           </div>
         )}
 
-        {/* Name — Cormorant italic, same register as wordmark */}
         <h1 style={{
-          fontFamily:    'var(--font-cormorant), Georgia, serif',
+          fontFamily:    'var(--f-display)',
           fontWeight:    400, fontStyle: 'italic',
-          fontSize:      '28px', letterSpacing: '-0.01em',
-          color:         'rgba(240,230,200,0.95)',
-          margin:        '0 0 4px',
+          fontSize:      '26px', letterSpacing: '-0.01em',
+          color:         'rgba(240,230,200,0.95)', margin: '0 0 4px',
         }}>
           {name}
         </h1>
-
         <p style={{
-          fontFamily: 'var(--font-dm-sans), system-ui, sans-serif',
-          fontSize:   '12px', color: 'rgba(240,230,200,0.32)',
-          marginBottom: '0',
+          fontFamily: 'var(--f-body)',
+          fontSize:   '12px', color: 'rgba(240,230,200,0.30)',
         }}>
           {email}
         </p>
 
-        {/* Hairline */}
         <div style={{
-          height: '0.5px', margin: '20px auto',
+          height: '0.5px', margin: '18px auto',
           maxWidth: '80px',
           background: 'linear-gradient(to right, transparent, rgba(31,206,148,0.30), transparent)',
         }} />
       </header>
 
-      {/* ── STATS ────────────────────────────────────────────── */}
+      {/* ── STATS ─────────────────────────────────────────── */}
       <div style={{ padding: '0 20px 20px', display: 'flex', gap: '10px' }}>
         {[
-          { n: savedCount ?? 0,       label: 'saved'       },
-          { n: experiencedCount ?? 0, label: 'experienced' },
+          { n: savedCount,       label: 'saved'       },
+          { n: experiencedCount, label: 'experienced' },
         ].map(s => (
           <div key={s.label} style={{
-            flex:         1,
-            textAlign:    'center',
-            background:   'rgba(240,230,200,0.03)',
-            border:       '1px solid rgba(240,230,200,0.07)',
-            borderRadius: '14px',
-            padding:      '18px 12px',
+            flex: 1, textAlign: 'center',
+            background: 'rgba(240,230,200,0.03)',
+            border: '1px solid rgba(240,230,200,0.07)',
+            borderRadius: '14px', padding: '16px 12px',
           }}>
             <div style={{
-              fontFamily:   'var(--font-cormorant), Georgia, serif',
+              fontFamily:   'var(--f-display)',
               fontWeight:   400, fontStyle: 'italic',
-              fontSize:     '36px', lineHeight: 1,
+              fontSize:     '34px', lineHeight: 1,
               color:        '#1fce94',
-              textShadow:   '0 0 20px rgba(31,206,148,0.45)',
+              textShadow:   '0 0 18px rgba(31,206,148,0.45)',
               marginBottom: '4px',
             }}>
               {s.n}
             </div>
             <div style={{
-              fontFamily:    'var(--font-dm-sans), system-ui, sans-serif',
-              fontSize:      '10px', fontWeight: 600,
-              letterSpacing: '0.08em', textTransform: 'uppercase',
-              color:         'rgba(240,230,200,0.32)',
+              fontFamily:    'var(--f-ui)',
+              fontSize:      '9px', fontWeight: 700,
+              letterSpacing: '0.10em', textTransform: 'uppercase',
+              color:         'rgba(240,230,200,0.30)',
             }}>
               {s.label}
             </div>
@@ -158,81 +176,31 @@ export default async function ProfilePage() {
         ))}
       </div>
 
-      {/* Section divider */}
-      <div style={{
-        height: '0.5px', margin: '0 20px 16px',
-        background: 'rgba(240,230,200,0.05)',
-      }} />
+      {/* Divider */}
+      <div style={{ height:'0.5px', margin:'0 20px 20px', background:'rgba(240,230,200,0.05)' }} />
 
-      {/* ── FEEDBACK ─────────────────────────────────────────── */}
+      {/* ── FEEDBACK ─────────────────────────────────────── */}
       <div style={{ padding: '0 20px' }}>
         <ProfileClient
           userEmail={email}
           userName={name}
-          saveCount={savedCount ?? 0}
+          saveCount={savedCount}
           topSource={topSource}
         />
       </div>
 
-      {/* Section divider */}
-      <div style={{
-        height: '0.5px', margin: '28px 20px',
-        background: 'rgba(240,230,200,0.05)',
-      }} />
+      {/* Divider */}
+      <div style={{ height:'0.5px', margin:'24px 20px', background:'rgba(240,230,200,0.05)' }} />
 
-      {/* ── SIGN OUT ─────────────────────────────────────────── */}
+      {/* ── SIGN OUT — clearly separated, bottom ─────────── */}
+      {/*
+        Sign out is a destructive action. It lives at the very bottom
+        of the page, clearly separated from everything else.
+        No fixed bars. No proximity to the back button.
+      */}
       <div style={{ padding: '0 20px' }}>
         <SignOutButton />
       </div>
-
-      {/* ── RETURN TO VAULT ──────────────────────────────────── */}
-      {/*
-        This is the redesigned back mechanism.
-        Not a top-left footnote. A deliberate, visible affordance.
-        Fixed above the nav bar. Full width. Neon.
-        When you're done with your profile, it is unmissably there.
-        It says "← back to vault" — specific, honest, warm.
-      */}
-      <Link
-        href="/dashboard"
-        style={{
-          position:               'fixed',
-          bottom:                 '72px', // sits just above the nav bar
-          left:                   '50%',
-          transform:              'translateX(-50%)',
-          width:                  'calc(100% - 32px)',
-          maxWidth:               '398px',
-          height:                 '48px',
-          borderRadius:           '14px',
-          background:             'rgba(8,15,10,0.97)',
-          backdropFilter:         'blur(24px)',
-          WebkitBackdropFilter:   'blur(24px)',
-          border:                 '1px solid rgba(31,206,148,0.22)',
-          display:                'flex',
-          alignItems:             'center',
-          justifyContent:         'center',
-          gap:                    '8px',
-          textDecoration:         'none',
-          fontFamily:             'var(--font-rajdhani), system-ui, sans-serif',
-          fontSize:               '13px',
-          fontWeight:             700,
-          letterSpacing:          '0.07em',
-          textTransform:          'uppercase',
-          color:                  '#1fce94',
-          textShadow:             '0 0 12px rgba(31,206,148,0.40)',
-          WebkitTapHighlightColor:'transparent',
-          zIndex:                 50,
-          transition:             'border-color 160ms ease, background 160ms ease',
-          boxShadow:              '0 4px 24px rgba(0,0,0,0.50)',
-        }}
-        aria-label="Return to vault"
-      >
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
-          stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
-          <polyline points="15 18 9 12 15 6"/>
-        </svg>
-        back to vault
-      </Link>
 
     </div>
   )
