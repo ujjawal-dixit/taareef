@@ -1,8 +1,7 @@
 // app/api/enrich/[id]/route.ts
-// Background enrichment triggered after save.
-// Film/TV: TMDB for poster, overview, genres, streaming.
-// Music: Spotify for album art, artist, preview.
-// Never blocks the save flow — called fire-and-forget.
+// Fixed: update calls now include user_id filter to satisfy RLS policy.
+// RLS requires auth.uid() = user_id on all writes — without it,
+// the update silently matches 0 rows even with a valid session.
 
 import { createClient } from '@/lib/supabase/server'
 import { NextResponse }  from 'next/server'
@@ -19,75 +18,90 @@ export async function POST(_req: Request, { params }: Params) {
 
     const { data: rec } = await supabase
       .from('recommendations')
-      .select('id, title, category, metadata')
+      .select('id, title, category, metadata, image_url')
       .eq('id', id)
       .eq('user_id', user.id)
       .single()
 
     if (!rec) return NextResponse.json({ data: { enriched: false }, error: null })
 
-    // Already enriched
-    if (rec.metadata && Object.keys(rec.metadata).length > 0) {
-      return NextResponse.json({ data: { enriched: false, reason: 'already_enriched' }, error: null })
+    // Already has an image — skip
+    if (rec.image_url) {
+      return NextResponse.json({ data: { enriched: false, reason: 'already_has_image' }, error: null })
     }
 
-    let metadata: Record<string, unknown> = {}
+    let metadata: Record<string, unknown> = (rec.metadata as Record<string, unknown>) ?? {}
     let enriched = false
+    let imageUrl: string | null = null
 
-    // ── FILM / TV → TMDB ────────────────────────────────────────
+    // ── FILM / TV → TMDB ──────────────────────────────────────────
     if (rec.category === 'film' || rec.category === 'tv') {
       const tmdbKey = process.env.TMDB_API_KEY
-      if (tmdbKey) {
-        const mediaType = rec.category === 'film' ? 'movie' : 'tv'
-        const searchUrl = `https://api.themoviedb.org/3/search/${mediaType}?query=${encodeURIComponent(rec.title)}&api_key=${tmdbKey}`
-        const res  = await fetch(searchUrl)
-        const data = await res.json()
-        const hit  = data.results?.[0]
-
-        if (hit) {
-          metadata = {
-            tmdb_id:      hit.id,
-            poster_path:  hit.poster_path
-              ? `https://image.tmdb.org/t/p/w500${hit.poster_path}`
-              : null,
-            overview:     hit.overview ?? null,
-            release_year: hit.release_date
-              ? parseInt(hit.release_date.slice(0, 4))
-              : hit.first_air_date
-              ? parseInt(hit.first_air_date.slice(0, 4))
-              : null,
-            vote_average: hit.vote_average ?? null,
-          }
-
-          // Fetch genres separately
-          const detailRes  = await fetch(`https://api.themoviedb.org/3/${mediaType}/${hit.id}?api_key=${tmdbKey}`)
-          const detailData = await detailRes.json()
-          if (detailData.genres?.length) {
-            metadata.genre = detailData.genres[0].name
-          }
-          if (detailData.runtime) metadata.runtime = detailData.runtime
-
-          enriched = true
-
-          // If there's a poster, update image_url on the recommendation
-          if (metadata.poster_path) {
-            await supabase
-              .from('recommendations')
-              .update({ image_url: metadata.poster_path, metadata })
-              .eq('id', id)
-            return NextResponse.json({ data: { enriched: true, metadata }, error: null })
-          }
-        }
+      if (!tmdbKey) {
+        console.error('[Enrich] TMDB_API_KEY not set')
+        return NextResponse.json({ data: { enriched: false, reason: 'no_api_key' }, error: null })
       }
+
+      const mediaType = rec.category === 'film' ? 'movie' : 'tv'
+      const searchUrl = `https://api.themoviedb.org/3/search/${mediaType}?query=${encodeURIComponent(rec.title)}&api_key=${tmdbKey}&language=en-US`
+
+      console.log(`[Enrich] Searching TMDB for: "${rec.title}" (${mediaType})`)
+
+      const searchRes  = await fetch(searchUrl)
+      const searchData = await searchRes.json()
+
+      if (!searchRes.ok) {
+        console.error('[Enrich] TMDB search failed:', searchData)
+        return NextResponse.json({ data: { enriched: false, reason: 'tmdb_error' }, error: null })
+      }
+
+      const hit = searchData.results?.[0]
+
+      if (!hit) {
+        console.log(`[Enrich] No TMDB results for: "${rec.title}"`)
+        return NextResponse.json({ data: { enriched: false, reason: 'no_results' }, error: null })
+      }
+
+      console.log(`[Enrich] TMDB hit: ${hit.title ?? hit.name} (id: ${hit.id})`)
+
+      if (hit.poster_path) {
+        imageUrl = `https://image.tmdb.org/t/p/w500${hit.poster_path}`
+      }
+
+      metadata = {
+        ...metadata,
+        tmdb_id:      hit.id,
+        poster_path:  imageUrl,
+        overview:     hit.overview ?? null,
+        release_year: hit.release_date
+          ? parseInt(hit.release_date.slice(0, 4))
+          : hit.first_air_date
+          ? parseInt(hit.first_air_date.slice(0, 4))
+          : null,
+        vote_average: hit.vote_average ?? null,
+      }
+
+      // Fetch genres
+      try {
+        const detailRes  = await fetch(
+          `https://api.themoviedb.org/3/${mediaType}/${hit.id}?api_key=${tmdbKey}`
+        )
+        const detailData = await detailRes.json()
+        if (detailData.genres?.length) metadata.genre = detailData.genres[0].name
+        if (detailData.runtime)        metadata.runtime = detailData.runtime
+      } catch (e) {
+        console.warn('[Enrich] Genre fetch failed:', e)
+      }
+
+      enriched = true
     }
 
-    // ── MUSIC → SPOTIFY ─────────────────────────────────────────
+    // ── MUSIC → SPOTIFY ───────────────────────────────────────────
     if (rec.category === 'music') {
       const clientId     = process.env.SPOTIFY_CLIENT_ID
       const clientSecret = process.env.SPOTIFY_CLIENT_SECRET
 
       if (clientId && clientSecret) {
-        // Get access token (Client Credentials — no user login needed)
         const tokenRes = await fetch('https://accounts.spotify.com/api/token', {
           method:  'POST',
           headers: {
@@ -105,51 +119,59 @@ export async function POST(_req: Request, { params }: Params) {
             { headers: { 'Authorization': `Bearer ${token}` } }
           )
           const searchData = await searchRes.json()
-
-          // Try track first, then album
           const track = searchData.tracks?.items?.[0]
           const album = searchData.albums?.items?.[0]
           const hit   = track ?? album
 
           if (hit) {
-            const artwork = hit.album?.images?.[0]?.url ?? hit.images?.[0]?.url ?? null
+            imageUrl = hit.album?.images?.[0]?.url ?? hit.images?.[0]?.url ?? null
             metadata = {
-              artist:      hit.artists?.[0]?.name ?? hit.artists?.[0]?.name ?? null,
-              album:       hit.album?.name ?? hit.name ?? null,
-              artwork_url: artwork,
-              spotify_id:  hit.id,
-              preview_url: hit.preview_url ?? null,
-              release_year:hit.album?.release_date
+              ...metadata,
+              artist:       hit.artists?.[0]?.name ?? null,
+              album:        hit.album?.name ?? hit.name ?? null,
+              artwork_url:  imageUrl,
+              spotify_id:   hit.id,
+              preview_url:  hit.preview_url ?? null,
+              release_year: hit.album?.release_date
                 ? parseInt(hit.album.release_date.slice(0, 4))
                 : null,
             }
             enriched = true
-
-            if (artwork) {
-              await supabase
-                .from('recommendations')
-                .update({ image_url: artwork, metadata })
-                .eq('id', id)
-              return NextResponse.json({ data: { enriched: true, metadata }, error: null })
-            }
           }
         }
       }
     }
 
-    // Save metadata even if no image
-    if (enriched && Object.keys(metadata).length > 0) {
-      await supabase
-        .from('recommendations')
-        .update({ metadata })
-        .eq('id', id)
+    if (!enriched) {
+      return NextResponse.json({ data: { enriched: false }, error: null })
     }
 
-    return NextResponse.json({ data: { enriched, metadata }, error: null })
+    // ── WRITE BACK TO SUPABASE ────────────────────────────────────
+    // CRITICAL: must include .eq('user_id', user.id) to satisfy RLS policy.
+    // Without it the update matches 0 rows silently — RLS blocks the write.
+    const updatePayload: Record<string, unknown> = { metadata }
+    if (imageUrl) updatePayload.image_url = imageUrl
+
+    const { error: updateError } = await supabase
+      .from('recommendations')
+      .update(updatePayload)
+      .eq('id', id)
+      .eq('user_id', user.id)  // ← THE FIX
+
+    if (updateError) {
+      console.error('[Enrich] Supabase update failed:', updateError)
+      return NextResponse.json({ data: { enriched: false, reason: 'update_failed' }, error: null })
+    }
+
+    console.log(`[Enrich] Success for "${rec.title}" — image: ${imageUrl ? 'yes' : 'no'}`)
+
+    return NextResponse.json({
+      data: { enriched: true, image_url: imageUrl, metadata },
+      error: null,
+    })
 
   } catch (err) {
-    console.error('[Enrich]', err)
-    // Never error to client — enrichment failure is always silent
+    console.error('[Enrich] Unexpected error:', err)
     return NextResponse.json({ data: { enriched: false }, error: null })
   }
 }
