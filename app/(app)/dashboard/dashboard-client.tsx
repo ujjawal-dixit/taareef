@@ -1,274 +1,339 @@
 'use client'
 
 // app/(app)/dashboard/dashboard-client.tsx
-// Fix: category strip sticky positioning.
-// The strip must be sticky relative to the page scroll, not a flex container.
-// Solution: remove flex from the parent, let the strip be a block element
-// with position:sticky top:0. The viewport is the scroll root.
+// Direction B: Category mosaic homepage.
+//
+// The vault is not a feed. It is a map of taste.
+// 8 category tiles, 2 columns, 4 rows — the entire vault visible at once.
+// Each tile: blurred latest image OR WKW light, category name, count, latest title.
+// Tapping a tile navigates to /dashboard/[category] — the category list view.
+//
+// The user sees the shape of everything they've saved before seeing any card.
+// That is what "user as the base" means.
 
-import { useState, useMemo, useCallback, useRef } from 'react'
-import { useRouter }              from 'next/navigation'
-import { RecommendationCard }     from '@/components/features/cards/recommendation-card'
-import { EmptyState }             from '@/components/features/vault/empty-state'
-import { AppShell }               from '@/components/features/navigation/app-shell'
-import { useCreateRecommendation } from '@/hooks/use-recommendations'
-import { useToast }               from '@/components/ui/toast'
-import { CATEGORIES }             from '@/constants/categories'
-import type { Recommendation, Category, CreateRecommendationInput } from '@/lib/types'
+import { useState, useCallback }     from 'react'
+import { useRouter }                 from 'next/navigation'
+import { AppShell }                  from '@/components/features/navigation/app-shell'
+import { useCreateRecommendation }   from '@/hooks/use-recommendations'
+import { useToast }                  from '@/components/ui/toast'
+import type { CategoryConfig }       from '@/constants/categories'
+import type { Recommendation, CreateRecommendationInput } from '@/lib/types'
 
-type Props = {
-  recommendations:    Recommendation[]
-  userId:             string
-  nudgeAnsweredCount: number
-  userEmail:          string
-  userName:           string
+type TileData = {
+  category:   CategoryConfig
+  count:      number
+  latest:     Recommendation
+  hasReacted: boolean
 }
 
-export function DashboardClient({ recommendations: serverRecs }: Props) {
+type Props = {
+  tiles:      TileData[]
+  totalSaved: number
+  userName:   string
+  userEmail:  string
+  userId:     string
+}
+
+// WKW atmospheric light per category — shown when no image exists
+const TILE_LIGHTS: Record<string, string> = {
+  film:       'radial-gradient(ellipse at 20% 80%, rgba(200,21,30,0.50) 0%, rgba(26,82,200,0.18) 60%, transparent 100%)',
+  book:       'radial-gradient(ellipse at 80% 20%, rgba(184,120,32,0.55) 0%, rgba(184,120,32,0.10) 60%, transparent 100%)',
+  tv:         'radial-gradient(ellipse at 15% 85%, rgba(21,90,138,0.55) 0%, rgba(21,90,138,0.12) 60%, transparent 100%)',
+  music:      'radial-gradient(ellipse at 85% 15%, rgba(154,21,114,0.55) 0%, rgba(154,21,114,0.12) 60%, transparent 100%)',
+  restaurant: 'radial-gradient(ellipse at 50% 50%, rgba(200,21,30,0.40) 0%, transparent 70%)',
+  bar:        'radial-gradient(ellipse at 30% 70%, rgba(106,21,200,0.50) 0%, rgba(106,21,200,0.10) 60%, transparent 100%)',
+  city:       'radial-gradient(ellipse at 50% 20%, rgba(31,206,148,0.40) 0%, transparent 65%)',
+  activity:   'radial-gradient(ellipse at 70% 70%, rgba(21,138,106,0.45) 0%, transparent 65%)',
+}
+
+export function DashboardClient({ tiles, totalSaved, userName, userEmail, userId }: Props) {
   const router    = useRouter()
   const { toast } = useToast()
   const { create } = useCreateRecommendation()
 
-  const [localRecs,      setLocalRecs]      = useState<Recommendation[]>(serverRecs)
-  const [activeCategory, setActiveCategory] = useState<Category | null>(null)
-
-  const sectionRefs = useRef<Record<string, HTMLElement | null>>({})
-
-  function scrollToCategory(catId: string) {
-    setActiveCategory(catId as Category)
-    const el = sectionRefs.current[catId]
-    if (el) {
-      // Account for sticky strip height (~52px) + some breathing room
-      const top = el.getBoundingClientRect().top + window.scrollY - 60
-      window.scrollTo({ top, behavior: 'smooth' })
-    }
-  }
+  // Optimistically add a new tile count when user saves something
+  const [localExtra, setLocalExtra] = useState(0)
 
   const handleSave = useCallback(async (input: CreateRecommendationInput) => {
-    const tempId = `temp-${Date.now()}`
-    const temp: Recommendation = {
-      id: tempId, user_id: '', status: 'saved', reaction: null,
-      priority: input.priority ?? 'medium', metadata: input.metadata ?? {},
-      url: input.url ?? null, image_url: input.image_url ?? null,
-      notes: input.notes ?? null, location: input.location ?? null,
-      created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
-      ...input,
-    }
-    setLocalRecs(prev => [temp, ...prev])
+    setLocalExtra(prev => prev + 1)
     await create(input, undefined,
-      (real) => {
-        setLocalRecs(prev => prev.map(r => r.id === tempId ? real : r))
-        toast('Saved ✦', 'success')
-        setTimeout(() => scrollToCategory(real.category), 500)
-      },
-      (err) => {
-        setLocalRecs(prev => prev.filter(r => r.id !== tempId))
-        toast(err, 'error')
-      }
+      () => { toast('Saved ✦', 'success') },
+      (err) => { setLocalExtra(prev => prev - 1); toast(err, 'error') }
     )
-  }, [create, toast])
+    // Refresh to show updated tile
+    router.refresh()
+  }, [create, toast, router])
 
-  const grouped = useMemo(() => {
-    const map: Record<string, Recommendation[]> = {}
-    localRecs.forEach(r => {
-      if (!map[r.category]) map[r.category] = []
-      map[r.category].push(r)
-    })
-    return map
-  }, [localRecs])
+  const count = totalSaved + localExtra
 
-  const populatedCategories = CATEGORIES.filter(c => (grouped[c.id]?.length ?? 0) > 0)
-  const hasAny = localRecs.length > 0
+  // Tile height: fill available vertical space with 4 rows + gaps
+  // Available = 100dvh - wordmark(~130px) - nav(64px) - padding(24px top, 14px bottom)
+  // = 100dvh - 232px divided into 4 rows with 10px gaps (3 gaps = 30px)
+  // Each tile = (100dvh - 262px) / 4
+  const tileHeight = 'calc((100dvh - 262px) / 4)'
 
   return (
     <AppShell onSaveRecommendation={handleSave}>
 
-      {/* ── HEADER ────────────────────────────────────────── */}
-      <header style={{ padding: '56px 20px 0', textAlign: 'center' }}>
+      {/* ── WORDMARK ──────────────────────────────────────── */}
+      <header style={{ padding: '52px 20px 0', textAlign: 'center' }}>
         <h1 aria-label="taareef" style={{
-          fontFamily:    'var(--font-cormorant), Georgia, serif',
-          fontWeight:    300, fontStyle: 'italic',
-          fontSize:      '42px', letterSpacing: '-0.01em',
-          lineHeight:    1, color: '#1fce94',
-          textShadow:    '0 0 20px rgba(31,206,148,0.65), 0 0 48px rgba(31,206,148,0.28), 0 0 88px rgba(31,206,148,0.10)',
-          margin: 0,
+          fontFamily:  'var(--f-display)',
+          fontWeight:  300, fontStyle: 'italic',
+          fontSize:    '42px', letterSpacing: '-0.01em',
+          lineHeight:  1, color: '#1fce94',
+          textShadow:  '0 0 20px rgba(31,206,148,0.65), 0 0 48px rgba(31,206,148,0.28)',
+          margin:      0,
         }}>
           taareef
         </h1>
         <p style={{
-          fontFamily: 'var(--font-dm-sans), system-ui, sans-serif',
-          fontSize: '11.5px', fontWeight: 400,
-          color: 'rgba(240,230,200,0.50)', letterSpacing: '0.05em', marginTop: '7px',
+          fontFamily:    'var(--f-body)',
+          fontSize:      '11px', fontWeight: 400,
+          color:         'rgba(240,230,200,0.45)',
+          letterSpacing: '0.05em', marginTop: '6px',
         }}>
-          {localRecs.length === 0 ? 'your vault is ready' : `${localRecs.length} saved`}
+          {count === 0 ? 'your vault is ready' : `${count} saved`}
         </p>
         <div style={{
-          height: '0.5px', margin: '16px auto 0', maxWidth: '160px',
-          background: 'linear-gradient(to right, transparent, rgba(31,206,148,0.18) 20%, rgba(31,206,148,0.55) 50%, rgba(31,206,148,0.18) 80%, transparent)',
+          height:     '0.5px', margin: '14px auto 0', maxWidth: '140px',
+          background: 'linear-gradient(to right, transparent, rgba(31,206,148,0.45) 50%, transparent)',
         }} aria-hidden="true" />
       </header>
 
-      {/* ── CATEGORY STRIP ────────────────────────────────── */}
+      {/* ── MOSAIC GRID ───────────────────────────────────── */}
       {/*
-        STICKY FIX:
-        position:sticky only works when the element is inside a scroll container
-        that is the window (or has overflow:auto/scroll).
-        The AppShell uses a div with overflowX:hidden — this doesn't prevent
-        vertical scroll on window. The sticky should work.
-        Key: the strip must NOT be inside a flex column that has height:auto.
-        We keep the strip as a direct block child of the scroll document.
+        2 columns, 4 rows.
+        Every populated category gets a tile.
+        Empty categories are shown as ghost tiles — dimmer, no image.
+        The grid always shows all 8 so the user sees the full shape of their vault.
       */}
-      {hasAny && (
-        <div
-          role="navigation"
-          aria-label="Jump to category"
-          style={{
-            position:             'sticky',
-            top:                  0,
-            zIndex:               50,
-            background:           'rgba(8,15,10,0.98)',
-            backdropFilter:       'blur(24px)',
-            WebkitBackdropFilter: 'blur(24px)',
-            borderBottom:         '0.5px solid rgba(240,230,200,0.06)',
-            marginTop:            '20px',
-          }}
-        >
+      <section
+        aria-label="Your vault"
+        style={{
+          display:             'grid',
+          gridTemplateColumns: '1fr 1fr',
+          gap:                 '10px',
+          padding:             '20px 14px 0',
+        }}
+      >
+        {tiles.length === 0 ? (
+          // Empty vault — full-width invitation
           <div style={{
-            display:    'flex',
-            gap:        '6px',
-            padding:    '10px 14px',
-            overflowX:  'auto',
-            scrollbarWidth: 'none',
-            msOverflowStyle: 'none',
+            gridColumn:     '1 / -1',
+            display:        'flex',
+            flexDirection:  'column',
+            alignItems:     'center',
+            justifyContent: 'center',
+            minHeight:      '320px',
+            gap:            '16px',
           }}>
-            <style>{`::-webkit-scrollbar { display: none; }`}</style>
-
-            {/* All */}
-            <button
-              onClick={() => { setActiveCategory(null); window.scrollTo({ top: 0, behavior: 'smooth' }) }}
-              aria-pressed={activeCategory === null}
-              style={{
-                padding:       '7px 14px', borderRadius: '20px', flexShrink: 0,
-                border:        `1px solid ${activeCategory === null ? 'rgba(31,206,148,0.55)' : 'rgba(240,230,200,0.12)'}`,
-                background:    activeCategory === null ? 'rgba(31,206,148,0.12)' : 'rgba(240,230,200,0.03)',
-                fontFamily:    'var(--font-rajdhani), system-ui, sans-serif',
-                fontSize:      '11px', fontWeight: 700,
-                letterSpacing: '0.06em', textTransform: 'uppercase',
-                color:         activeCategory === null ? '#1fce94' : 'rgba(240,230,200,0.50)',
-                cursor:        'pointer', whiteSpace: 'nowrap',
-                transition:    'all 180ms ease',
-                WebkitTapHighlightColor: 'transparent',
-              }}
-            >
-              All
-            </button>
-
-            {populatedCategories.map(cat => {
-              const isActive = activeCategory === cat.id
-              const count    = grouped[cat.id]?.length ?? 0
-              return (
-                <button
-                  key={cat.id}
-                  onClick={() => scrollToCategory(cat.id)}
-                  aria-pressed={isActive}
-                  style={{
-                    display:       'flex', alignItems: 'center', gap: '5px',
-                    padding:       '7px 14px', borderRadius: '20px', flexShrink: 0,
-                    border:        `1px solid ${isActive ? cat.colourHex + '80' : 'rgba(240,230,200,0.12)'}`,
-                    background:    isActive ? cat.colourHex + '18' : 'rgba(240,230,200,0.03)',
-                    fontFamily:    'var(--font-rajdhani), system-ui, sans-serif',
-                    fontSize:      '11px', fontWeight: 700,
-                    letterSpacing: '0.06em', textTransform: 'uppercase',
-                    color:         isActive ? cat.colourHex : 'rgba(240,230,200,0.50)',
-                    cursor:        'pointer', whiteSpace: 'nowrap',
-                    transition:    'all 180ms ease',
-                    WebkitTapHighlightColor: 'transparent',
-                  }}
-                >
-                  {cat.label}
-                  <span style={{
-                    fontSize: '9px', fontWeight: 700,
-                    color: isActive ? cat.colourHex : 'rgba(240,230,200,0.28)',
-                    transition: 'color 180ms ease',
-                  }}>
-                    {count}
-                  </span>
-                </button>
-              )
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* ── VAULT ─────────────────────────────────────────── */}
-      <main aria-label="Your vault" style={{ padding: '0 0 24px' }}>
-        {!hasAny ? (
-          <div style={{ padding: '0 14px' }}>
-            <EmptyState />
+            <p style={{
+              fontFamily:  'var(--f-display)',
+              fontStyle:   'italic', fontWeight: 300,
+              fontSize:    '22px',
+              color:       'rgba(240,230,200,0.55)',
+              textAlign:   'center', lineHeight: 1.4,
+            }}>
+              Your vault is waiting.
+            </p>
+            <p style={{
+              fontFamily: 'var(--f-body)',
+              fontSize:   '12px', fontWeight: 300,
+              color:      'rgba(240,230,200,0.35)',
+              textAlign:  'center', lineHeight: 1.7,
+              maxWidth:   '200px',
+            }}>
+              Tap + to save your first recommendation.
+            </p>
           </div>
         ) : (
-          CATEGORIES
-            .filter(cat => {
-              const hasRecs = (grouped[cat.id]?.length ?? 0) > 0
-              if (!hasRecs) return false
-              if (activeCategory && activeCategory !== cat.id) return false
-              return true
-            })
-            .map(cat => {
-              const recs = grouped[cat.id] ?? []
-              return (
-                <section
-                  key={cat.id}
-                  ref={el => { sectionRefs.current[cat.id] = el }}
-                  aria-label={cat.labelPlural}
-                  style={{ marginTop: '28px' }}
-                >
-                  {/* Room label */}
-                  <div style={{
-                    display: 'flex', alignItems: 'baseline', gap: '10px',
-                    padding: '0 18px 12px',
-                    borderBottom: `0.5px solid ${cat.colourHex}18`,
-                    marginBottom: '12px',
-                  }}>
-                    <h2 style={{
-                      fontFamily:    'var(--font-cormorant), Georgia, serif',
-                      fontWeight:    400, fontStyle: 'italic',
-                      fontSize:      '22px', letterSpacing: '-0.01em',
-                      color:         'rgba(240,230,200,0.90)', margin: 0,
-                    }}>
-                      {cat.label}
-                    </h2>
-                    <span style={{
-                      fontFamily: 'var(--font-dm-sans), system-ui, sans-serif',
-                      fontSize: '11px', color: 'rgba(240,230,200,0.28)',
-                    }}>
-                      {recs.length}
-                    </span>
-                    <div style={{
-                      flex: 1, height: '0.5px',
-                      background: `linear-gradient(to right, ${cat.colourHex}35, transparent)`,
-                    }} aria-hidden="true" />
-                  </div>
-
-                  {/* Cards */}
-                  <div style={{ padding: '0 14px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                    {recs.map((rec, i) => (
-                      <RecommendationCard
-                        key={rec.id}
-                        recommendation={rec}
-                        isHero={i === 0 && recs.length >= 2}
-                        onClick={() => {
-                          if (!rec.id.startsWith('temp-')) router.push(`/rec/${rec.id}`)
-                        }}
-                      />
-                    ))}
-                  </div>
-                </section>
-              )
-            })
+          tiles.map((tile, i) => (
+            <CategoryTile
+              key={tile.category.id}
+              tile={tile}
+              tileHeight={tileHeight}
+              index={i}
+              onClick={() => router.push(`/dashboard/${tile.category.id}`)}
+            />
+          ))
         )}
-      </main>
+      </section>
 
     </AppShell>
   )
+}
+
+// ── CATEGORY TILE ──────────────────────────────────────────────────
+
+function CategoryTile({ tile, tileHeight, index, onClick }: {
+  tile:       TileData
+  tileHeight: string
+  index:      number
+  onClick:    () => void
+}) {
+  const { category: cat, count, latest } = tile
+  const light    = TILE_LIGHTS[cat.id] ?? TILE_LIGHTS.film
+  const hasImage = !!latest.image_url
+  const meta     = (latest.metadata ?? {}) as Record<string, unknown>
+
+  // Signal line — the one piece of metadata that earns its place on the tile
+  const signal = getTileSignal(cat.id, latest, meta)
+
+  return (
+    <button
+      onClick={onClick}
+      aria-label={`${cat.labelPlural}, ${count} saved`}
+      style={{
+        height:                  tileHeight,
+        minHeight:               '120px',
+        maxHeight:               '180px',
+        borderRadius:            '16px',
+        border:                  `1px solid ${cat.colourHex}28`,
+        overflow:                'hidden',
+        position:                'relative',
+        cursor:                  'pointer',
+        display:                 'flex',
+        flexDirection:           'column',
+        justifyContent:          'flex-end',
+        padding:                 '12px',
+        background:              '#0d1910',
+        animation:               `tileEnter 320ms cubic-bezier(0.16,1,0.3,1) ${index * 40}ms both`,
+        WebkitTapHighlightColor: 'transparent',
+        transition:              'transform 160ms ease, border-color 160ms ease',
+        textAlign:               'left',
+      }}
+    >
+      {/* Background: blurred image or WKW light */}
+      <div aria-hidden="true" style={{
+        position: 'absolute', inset: 0,
+        background: light,
+        opacity:    hasImage ? 0.6 : 1,
+      }} />
+
+      {hasImage && (
+        <img
+          src={latest.image_url!}
+          alt=""
+          aria-hidden="true"
+          loading="lazy"
+          style={{
+            position:  'absolute', inset: 0,
+            width:     '100%', height: '100%',
+            objectFit: 'cover',
+            opacity:   0.45,
+            filter:    'blur(1px)',
+          }}
+        />
+      )}
+
+      {/* Dark vignette — content always readable */}
+      <div aria-hidden="true" style={{
+        position:   'absolute', inset: 0,
+        background: 'linear-gradient(to bottom, rgba(8,15,10,0.10) 0%, rgba(8,15,10,0.82) 60%, rgba(8,15,10,0.96) 100%)',
+      }} />
+
+      {/* Count badge — top right */}
+      <div style={{
+        position:      'absolute', top: '10px', right: '10px',
+        fontFamily:    'var(--f-ui)',
+        fontSize:      '10px', fontWeight: 700,
+        letterSpacing: '0.06em',
+        color:         cat.colourHex,
+        background:    `${cat.colourHex}18`,
+        border:        `0.5px solid ${cat.colourHex}35`,
+        borderRadius:  '20px', padding: '2px 8px',
+        backdropFilter:'blur(8px)',
+      }}>
+        {count}
+      </div>
+
+      {/* Content — sits at the bottom of the tile */}
+      <div style={{ position: 'relative', zIndex: 1 }}>
+
+        {/* Category name */}
+        <div style={{
+          fontFamily:    'var(--f-ui)',
+          fontSize:      '9px', fontWeight: 700,
+          letterSpacing: '0.10em', textTransform: 'uppercase',
+          color:         cat.colourHex,
+          marginBottom:  '4px',
+        }}>
+          {cat.label}
+        </div>
+
+        {/* Latest title — Plus Jakarta Sans */}
+        <div style={{
+          fontFamily:   'var(--f-title)',
+          fontSize:     '14px', fontWeight: 600,
+          color:        'rgba(240,230,200,0.95)',
+          lineHeight:   1.2,
+          marginBottom: '3px',
+          overflow:     'hidden',
+          display:      '-webkit-box',
+          WebkitLineClamp: 2,
+          WebkitBoxOrient: 'vertical',
+        }}>
+          {latest.title}
+        </div>
+
+        {/* Source — always present */}
+        <div style={{
+          fontFamily: 'var(--f-body)',
+          fontSize:   '10px', fontWeight: 500,
+          color:      '#c8151e',
+          overflow:   'hidden',
+          whiteSpace: 'nowrap',
+          textOverflow: 'ellipsis',
+        }}>
+          From {latest.source_name}
+        </div>
+
+        {/* Signal — dim, subordinate */}
+        {signal && (
+          <div style={{
+            fontFamily:  'var(--f-body)',
+            fontSize:    '10px', fontWeight: 400,
+            color:       'rgba(240,230,200,0.35)',
+            marginTop:   '2px',
+            overflow:    'hidden',
+            whiteSpace:  'nowrap',
+            textOverflow:'ellipsis',
+          }}>
+            {signal}
+          </div>
+        )}
+      </div>
+    </button>
+  )
+}
+
+// One signal line per category — the most relevant single piece of metadata
+function getTileSignal(
+  catId: string,
+  rec:   Recommendation,
+  meta:  Record<string, unknown>
+): string | null {
+  switch (catId) {
+    case 'film':
+    case 'tv': {
+      const parts: string[] = []
+      if (typeof meta.genre        === 'string') parts.push(meta.genre)
+      if (typeof meta.release_year === 'number') parts.push(String(meta.release_year))
+      return parts.join(' · ') || null
+    }
+    case 'music':
+      return typeof meta.artist === 'string' ? meta.artist : null
+    case 'book':
+      return typeof meta.author === 'string' ? meta.author : null
+    case 'restaurant':
+    case 'bar':
+      return rec.location?.city ?? (typeof meta.neighbourhood === 'string' ? meta.neighbourhood : null)
+    case 'city':
+      return rec.location?.country ?? null
+    case 'activity':
+      return rec.location?.city ?? null
+    default:
+      return null
+  }
 }
