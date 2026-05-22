@@ -37,14 +37,14 @@ export function GoogleSignInButton() {
           </svg>
         )}
         <span style={{
-          fontFamily: 'var(--font-rajdhani), system-ui, sans-serif',
+          fontFamily: 'var(--f-ui)',
           fontSize: '15px', fontWeight: 700, letterSpacing: '0.04em',
           textTransform: 'uppercase', color: 'rgba(240,230,200,0.95)',
         }}>
           {loading ? 'Signing in...' : 'Continue with Google'}
         </span>
       </button>
-      {error && <p role="alert" style={{ fontFamily: 'var(--font-dm-sans), system-ui, sans-serif', fontSize: '12px', color: '#c8151e', textAlign: 'center', marginTop: '12px' }}>{error}</p>}
+      {error && <p role="alert" style={{ fontFamily: 'var(--f-body)', fontSize: '12px', color: '#c8151e', textAlign: 'center', marginTop: '12px' }}>{error}</p>}
     </div>
   )
 }
