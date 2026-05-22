@@ -36,7 +36,7 @@ function ToastItem({ toast }: { toast: Toast }) {
   }, [])
   const colours: Record<ToastType,string> = { success:'#1fce94', error:'#c8151e', info:'rgba(240,230,200,0.95)' }
   return (
-    <div ref={ref} role="status" style={{ background:'rgba(20,32,20,0.97)', backdropFilter:'blur(16px)', border:`1px solid ${colours[toast.type]}30`, borderRadius:'12px', padding:'12px 16px', fontFamily:'var(--font-dm-sans), system-ui, sans-serif', fontSize:'13px', fontWeight:500, color:colours[toast.type], boxShadow:'0 4px 20px rgba(0,0,0,0.50)', pointerEvents:'auto', textAlign:'center' }}>
+    <div ref={ref} role="status" style={{ background:'rgba(20,32,20,0.97)', backdropFilter:'blur(16px)', border:`1px solid ${colours[toast.type]}30`, borderRadius:'12px', padding:'12px 16px', fontFamily:'var(--f-body)', fontSize:'13px', fontWeight:500, color:colours[toast.type], boxShadow:'0 4px 20px rgba(0,0,0,0.50)', pointerEvents:'auto', textAlign:'center' }}>
       {toast.message}
     </div>
   )
