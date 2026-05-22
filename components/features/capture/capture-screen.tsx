@@ -152,7 +152,7 @@ function ChooseMethod({ onSelect, onClose }: {
     <>
       <div style={{ padding: '52px 22px 20px', position: 'relative' }}>
         <h1 style={{
-          fontFamily: 'var(--font-cormorant), Georgia, serif',
+          fontFamily: 'var(--f-display)',
           fontWeight: 400, fontStyle: 'italic',
           fontSize: '30px', letterSpacing: '-0.01em',
           color: 'rgba(240,230,200,0.95)', lineHeight: 1.1,
@@ -161,7 +161,7 @@ function ChooseMethod({ onSelect, onClose }: {
           save a<br />recommendation
         </h1>
         <p style={{
-          fontFamily: 'var(--font-dm-sans), system-ui, sans-serif',
+          fontFamily: 'var(--f-body)',
           fontSize: '12px', color: 'rgba(240,230,200,0.35)',
           letterSpacing: '0.03em', marginTop: '6px',
         }}>
@@ -259,7 +259,7 @@ function Option({ grad, shadow, icon, label, desc, onClick }: {
       </div>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{
-          fontFamily: 'var(--font-cormorant), Georgia, serif',
+          fontFamily: 'var(--f-display)',
           fontWeight: 400, fontStyle: 'italic',
           fontSize: '21px', color: 'rgba(240,230,200,0.96)',
           lineHeight: 1.1, marginBottom: '3px',
@@ -267,7 +267,7 @@ function Option({ grad, shadow, icon, label, desc, onClick }: {
           {label}
         </div>
         <div style={{
-          fontFamily: 'var(--font-dm-sans), system-ui, sans-serif',
+          fontFamily: 'var(--f-body)',
           fontSize: '12px', fontWeight: 300,
           color: 'rgba(240,230,200,0.42)', lineHeight: 1.45,
         }}>
@@ -292,7 +292,7 @@ function BackBtn({ label, onClick }: { label: string; onClick: () => void }) {
       style={{
         display: 'flex', alignItems: 'center', gap: '5px',
         color: 'rgba(240,230,200,0.85)',
-        fontFamily: 'var(--font-dm-sans), system-ui, sans-serif',
+        fontFamily: 'var(--f-body)',
         fontSize: '12px', letterSpacing: '0.04em',
         minHeight: '44px',
         WebkitTapHighlightColor: 'transparent',
@@ -320,7 +320,7 @@ function ScreenHeader({ title, subtitle, onBack, backLabel }: {
     <div style={{ padding: '48px 22px 20px', position: 'relative' }}>
       <BackBtn label={backLabel} onClick={onBack} />
       <h1 style={{
-        fontFamily: 'var(--font-cormorant), Georgia, serif',
+        fontFamily: 'var(--f-display)',
         fontWeight: 400, fontStyle: 'italic',
         fontSize: '30px', letterSpacing: '-0.01em',
         color: 'rgba(240,230,200,0.95)', lineHeight: 1.1,
@@ -330,7 +330,7 @@ function ScreenHeader({ title, subtitle, onBack, backLabel }: {
       </h1>
       {subtitle && (
         <p style={{
-          fontFamily: 'var(--font-dm-sans), system-ui, sans-serif',
+          fontFamily: 'var(--f-body)',
           fontSize: '12px', color: 'rgba(240,230,200,0.35)',
           letterSpacing: '0.02em', marginTop: '5px',
         }}>
@@ -363,12 +363,12 @@ function JotForm({ onSave, onBack, saving, error }: {
     width: '100%', background: 'rgba(240,230,200,0.04)',
     border: '1px solid rgba(240,230,200,0.11)', borderRadius: '10px',
     padding: '13px 14px',
-    fontFamily: 'var(--font-dm-sans), system-ui, sans-serif',
+    fontFamily: 'var(--f-body)',
     fontSize: '15px', fontWeight: 400, color: 'rgba(240,230,200,0.95)',
     outline: 'none', transition: 'border-color 160ms ease', caretColor: '#1fce94',
   }
   const labelStyle: React.CSSProperties = {
-    fontFamily: 'var(--font-dm-sans), system-ui, sans-serif',
+    fontFamily: 'var(--f-body)',
     fontSize: '10px', fontWeight: 600, letterSpacing: '0.10em',
     textTransform: 'uppercase', color: 'rgba(240,230,200,0.38)',
     display: 'block', marginBottom: '7px',
@@ -407,7 +407,7 @@ function JotForm({ onSave, onBack, saving, error }: {
                     padding: '9px 4px', borderRadius: '8px',
                     border: `1px solid ${sel ? cat.colourHex : 'rgba(240,230,200,0.09)'}`,
                     background: sel ? `${cat.colourHex}1a` : 'rgba(240,230,200,0.025)',
-                    fontFamily: 'var(--font-rajdhani), system-ui, sans-serif',
+                    fontFamily: 'var(--f-ui)',
                     fontSize: '8px', fontWeight: 700, letterSpacing: '0.06em',
                     textTransform: 'uppercase',
                     color: sel ? cat.colourHex : 'rgba(240,230,200,0.52)',
@@ -448,7 +448,7 @@ function JotForm({ onSave, onBack, saving, error }: {
         </div>
 
         {error && (
-          <p role="alert" style={{ fontFamily: 'var(--font-dm-sans), system-ui, sans-serif', fontSize: '13px', color: '#c8151e', textAlign: 'center' }}>
+          <p role="alert" style={{ fontFamily: 'var(--f-body)', fontSize: '13px', color: '#c8151e', textAlign: 'center' }}>
             {error}
           </p>
         )}
@@ -578,7 +578,7 @@ function AudioCapture({ onExtracted, onBack, onError, error }: {
         </button>
 
         <p style={{
-          fontFamily:   'var(--font-dm-sans), system-ui, sans-serif',
+          fontFamily:   'var(--f-body)',
           fontSize:     '13px', color: 'rgba(240,230,200,0.45)',
           textAlign:    'center', lineHeight: 1.5,
         }}>
@@ -589,7 +589,7 @@ function AudioCapture({ onExtracted, onBack, onError, error }: {
 
         {recording && (
           <p style={{
-            fontFamily:   'var(--font-cormorant), Georgia, serif',
+            fontFamily:   'var(--f-display)',
             fontStyle:    'italic', fontSize: '15px',
             color:        'rgba(240,230,200,0.38)', textAlign: 'center',
           }}>
@@ -599,7 +599,7 @@ function AudioCapture({ onExtracted, onBack, onError, error }: {
 
         {error && (
           <p role="alert" style={{
-            fontFamily: 'var(--font-dm-sans), system-ui, sans-serif',
+            fontFamily: 'var(--f-body)',
             fontSize: '13px', color: '#c8151e', textAlign: 'center',
           }}>
             {error}
@@ -687,7 +687,7 @@ function OcrCapture({ onExtracted, onBack, onError, error }: {
             <div style={{ textAlign: 'center', padding: '32px 20px' }}>
               <CameraIcon />
               <p style={{
-                fontFamily: 'var(--font-dm-sans), system-ui, sans-serif',
+                fontFamily: 'var(--f-body)',
                 fontSize: '13px', color: 'rgba(240,230,200,0.40)',
                 marginTop: '12px', lineHeight: 1.5,
               }}>
@@ -711,7 +711,7 @@ function OcrCapture({ onExtracted, onBack, onError, error }: {
                 animation: 'spin 0.8s linear infinite',
               }} />
               <p style={{
-                fontFamily: 'var(--font-dm-sans), system-ui, sans-serif',
+                fontFamily: 'var(--f-body)',
                 fontSize: '12px', color: 'rgba(240,230,200,0.50)',
               }}>
                 Reading your screenshot...
@@ -728,7 +728,7 @@ function OcrCapture({ onExtracted, onBack, onError, error }: {
 
         {error && (
           <p role="alert" style={{
-            fontFamily: 'var(--font-dm-sans), system-ui, sans-serif',
+            fontFamily: 'var(--f-body)',
             fontSize: '13px', color: '#c8151e', textAlign: 'center',
           }}>
             {error}
@@ -763,12 +763,12 @@ function ConfirmCard({ prefill, method, onSave, onBack, saving, error }: {
     width: '100%', background: 'rgba(240,230,200,0.04)',
     border: '1px solid rgba(240,230,200,0.11)', borderRadius: '10px',
     padding: '13px 14px',
-    fontFamily: 'var(--font-dm-sans), system-ui, sans-serif',
+    fontFamily: 'var(--f-body)',
     fontSize: '15px', color: 'rgba(240,230,200,0.95)',
     outline: 'none', caretColor: '#1fce94',
   }
   const labelStyle: React.CSSProperties = {
-    fontFamily: 'var(--font-dm-sans), system-ui, sans-serif',
+    fontFamily: 'var(--f-body)',
     fontSize: '10px', fontWeight: 600, letterSpacing: '0.10em',
     textTransform: 'uppercase', color: 'rgba(240,230,200,0.38)',
     display: 'block', marginBottom: '7px',
@@ -784,7 +784,7 @@ function ConfirmCard({ prefill, method, onSave, onBack, saving, error }: {
         {/* Confidence indicator */}
         <div style={{ marginTop: '10px', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '8px' }}>
           <h1 style={{
-            fontFamily: 'var(--font-cormorant), Georgia, serif',
+            fontFamily: 'var(--f-display)',
             fontWeight: 400, fontStyle: 'italic',
             fontSize: '26px', color: 'rgba(240,230,200,0.95)',
             letterSpacing: '-0.01em', margin: 0,
@@ -793,7 +793,7 @@ function ConfirmCard({ prefill, method, onSave, onBack, saving, error }: {
           </h1>
           {prefill.confidence === 'low' && (
             <span style={{
-              fontFamily: 'var(--font-dm-sans), system-ui, sans-serif',
+              fontFamily: 'var(--f-body)',
               fontSize: '10px', fontWeight: 600,
               letterSpacing: '0.08em', textTransform: 'uppercase',
               color: '#b87820', background: 'rgba(184,120,32,0.12)',
@@ -805,7 +805,7 @@ function ConfirmCard({ prefill, method, onSave, onBack, saving, error }: {
           )}
         </div>
         <p style={{
-          fontFamily: 'var(--font-dm-sans), system-ui, sans-serif',
+          fontFamily: 'var(--f-body)',
           fontSize: '12px', color: 'rgba(240,230,200,0.35)',
           letterSpacing: '0.02em',
         }}>
@@ -834,7 +834,7 @@ function ConfirmCard({ prefill, method, onSave, onBack, saving, error }: {
                     padding: '9px 4px', borderRadius: '8px',
                     border: `1px solid ${sel ? cat.colourHex : 'rgba(240,230,200,0.09)'}`,
                     background: sel ? `${cat.colourHex}1a` : 'rgba(240,230,200,0.025)',
-                    fontFamily: 'var(--font-rajdhani), system-ui, sans-serif',
+                    fontFamily: 'var(--f-ui)',
                     fontSize: '8px', fontWeight: 700, letterSpacing: '0.06em',
                     textTransform: 'uppercase',
                     color: sel ? cat.colourHex : 'rgba(240,230,200,0.52)',
@@ -871,7 +871,7 @@ function ConfirmCard({ prefill, method, onSave, onBack, saving, error }: {
 
         {error && (
           <p role="alert" style={{
-            fontFamily: 'var(--font-dm-sans), system-ui, sans-serif',
+            fontFamily: 'var(--f-body)',
             fontSize: '13px', color: '#c8151e', textAlign: 'center',
           }}>
             {error}
@@ -907,7 +907,7 @@ function SaveButton({ canSave, saving, onSave }: {
         width: '100%', height: '52px', borderRadius: '12px', border: 'none',
         background:    canSave && !saving ? '#1fce94' : 'rgba(240,230,200,0.07)',
         color:         canSave && !saving ? '#080f0a' : 'rgba(240,230,200,0.28)',
-        fontFamily:    'var(--font-rajdhani), system-ui, sans-serif',
+        fontFamily:    'var(--f-ui)',
         fontSize:      '15px', fontWeight: 700,
         letterSpacing: '0.08em', textTransform: 'uppercase',
         cursor:        canSave && !saving ? 'pointer' : 'not-allowed',
