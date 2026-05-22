@@ -174,7 +174,7 @@ function NavBtn({ href, label, isActive, icon }: NavBtnProps) {
     >
       {icon}
       <span style={{
-        fontFamily:    'var(--font-rajdhani), system-ui, sans-serif',
+        fontFamily:    'var(--f-ui)',
         fontSize:      '9px',
         fontWeight:    700,
         letterSpacing: '0.09em',
