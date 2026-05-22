@@ -13,10 +13,10 @@ export function EmptyState({ category, onAdd }: Props) {
           <path d="M6 3h12l4 6-10 13L2 9z"/><path d="M2 9h20M12 3l4 6M12 3l-4 6"/>
         </svg>
       </div>
-      <h2 style={{ fontFamily:'var(--font-cormorant), Georgia, serif', fontWeight:400, fontStyle:'italic', fontSize:'24px', letterSpacing:'-0.01em', color:'rgba(240,230,200,0.95)', lineHeight:1.2, marginBottom:'10px' }}>{config.emptyState.headline}</h2>
-      <p style={{ fontFamily:'var(--font-dm-sans), system-ui, sans-serif', fontSize:'13px', fontWeight:300, color:'rgba(240,230,200,0.50)', lineHeight:1.70, maxWidth:'220px', marginBottom:'32px' }}>{config.emptyState.body}</p>
+      <h2 style={{ fontFamily:'var(--f-display)', fontWeight:400, fontStyle:'italic', fontSize:'24px', letterSpacing:'-0.01em', color:'rgba(240,230,200,0.95)', lineHeight:1.2, marginBottom:'10px' }}>{config.emptyState.headline}</h2>
+      <p style={{ fontFamily:'var(--f-body)', fontSize:'13px', fontWeight:300, color:'rgba(240,230,200,0.50)', lineHeight:1.70, maxWidth:'220px', marginBottom:'32px' }}>{config.emptyState.body}</p>
       {onAdd && (
-        <button onClick={onAdd} style={{ background:config.colourHex, color:'#080f0a', fontFamily:'var(--font-rajdhani), system-ui, sans-serif', fontSize:'13px', fontWeight:700, letterSpacing:'0.08em', textTransform:'uppercase', padding:'0 24px', height:'48px', borderRadius:'10px', border:'none', cursor:'pointer', boxShadow:`0 4px 20px ${config.colourHex}42`, WebkitTapHighlightColor:'transparent', display:'flex', alignItems:'center' }}>
+        <button onClick={onAdd} style={{ background:config.colourHex, color:'#080f0a', fontFamily:'var(--f-ui)', fontSize:'13px', fontWeight:700, letterSpacing:'0.08em', textTransform:'uppercase', padding:'0 24px', height:'48px', borderRadius:'10px', border:'none', cursor:'pointer', boxShadow:`0 4px 20px ${config.colourHex}42`, WebkitTapHighlightColor:'transparent', display:'flex', alignItems:'center' }}>
           {config.emptyState.cta}
         </button>
       )}
@@ -32,12 +32,12 @@ function HomeEmpty({ onAdd }: { onAdd?: () => void }) {
           <path d="M6 3h12l4 6-10 13L2 9z"/><path d="M2 9h20M12 3l4 6M12 3l-4 6"/>
         </svg>
       </div>
-      <h2 style={{ fontFamily:'var(--font-cormorant), Georgia, serif', fontWeight:400, fontStyle:'italic', fontSize:'24px', letterSpacing:'-0.01em', color:'rgba(240,230,200,0.95)', lineHeight:1.2, marginBottom:'10px' }}>Your vault is waiting</h2>
-      <p style={{ fontFamily:'var(--font-dm-sans), system-ui, sans-serif', fontSize:'13px', fontWeight:300, color:'rgba(240,230,200,0.50)', lineHeight:1.75, maxWidth:'210px', marginBottom:'32px' }}>Every recommendation someone gives you — restaurants, films, music, books — one place, with who told you, always.</p>
+      <h2 style={{ fontFamily:'var(--f-display)', fontWeight:400, fontStyle:'italic', fontSize:'24px', letterSpacing:'-0.01em', color:'rgba(240,230,200,0.95)', lineHeight:1.2, marginBottom:'10px' }}>Your vault is waiting</h2>
+      <p style={{ fontFamily:'var(--f-body)', fontSize:'13px', fontWeight:300, color:'rgba(240,230,200,0.50)', lineHeight:1.75, maxWidth:'210px', marginBottom:'32px' }}>Every recommendation someone gives you — restaurants, films, music, books — one place, with who told you, always.</p>
       {onAdd && (
         <button onClick={onAdd} aria-label="Save your first recommendation" style={{ display:'flex', alignItems:'center', gap:'14px', background:'none', border:'none', cursor:'pointer', padding:'10px 0', WebkitTapHighlightColor:'transparent' }}>
           <div style={{ height:'0.5px', width:'32px', background:'#1fce94', opacity:0.38 }} />
-          <span style={{ fontFamily:'var(--font-dm-sans), system-ui, sans-serif', fontSize:'11px', fontWeight:600, letterSpacing:'0.13em', textTransform:'uppercase', color:'#1fce94' }}>Save your first one</span>
+          <span style={{ fontFamily:'var(--f-body)', fontSize:'11px', fontWeight:600, letterSpacing:'0.13em', textTransform:'uppercase', color:'#1fce94' }}>Save your first one</span>
           <div style={{ height:'0.5px', width:'32px', background:'#1fce94', opacity:0.38 }} />
         </button>
       )}
