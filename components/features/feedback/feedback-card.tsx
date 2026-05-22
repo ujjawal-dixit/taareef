@@ -116,7 +116,7 @@ export function FeedbackCard({ userEmail, userName, saveCount, topSource }: Prop
       }}>
         <div style={{ fontSize: '22px', marginBottom: '14px', opacity: 0.85 }}>✦</div>
         <p style={{
-          fontFamily:   'var(--font-cormorant), Georgia, serif',
+          fontFamily:   'var(--f-display)',
           fontStyle:    'italic', fontWeight: 400, fontSize: '21px',
           color:        'rgba(240,230,200,0.92)',
           lineHeight:   1.3, marginBottom: '8px',
@@ -124,14 +124,14 @@ export function FeedbackCard({ userEmail, userName, saveCount, topSource }: Prop
           Thank you, {firstName}.
         </p>
         <p style={{
-          fontFamily: 'var(--font-dm-sans), system-ui, sans-serif',
+          fontFamily: 'var(--f-body)',
           fontSize:   '13px', color: 'rgba(240,230,200,0.38)',
           lineHeight: 1.6, marginBottom: '20px',
         }}>
           We'll read this tonight.
         </p>
         <button onClick={reset} style={{
-          fontFamily:    'var(--font-dm-sans), system-ui, sans-serif',
+          fontFamily:    'var(--f-body)',
           fontSize:      '11px', fontWeight: 600,
           letterSpacing: '0.08em', textTransform: 'uppercase',
           color:         'rgba(240,230,200,0.30)',
@@ -155,7 +155,7 @@ export function FeedbackCard({ userEmail, userName, saveCount, topSource }: Prop
       {/* Section label */}
       <div style={{
         padding:       '16px 20px 0',
-        fontFamily:    'var(--font-dm-sans), system-ui, sans-serif',
+        fontFamily:    'var(--f-body)',
         fontSize:      '9px', fontWeight: 700,
         letterSpacing: '0.16em', textTransform: 'uppercase',
         color:         'rgba(240,230,200,0.28)',
@@ -165,7 +165,7 @@ export function FeedbackCard({ userEmail, userName, saveCount, topSource }: Prop
 
       {/* Opening — personal */}
       <p style={{
-        fontFamily:   'var(--font-cormorant), Georgia, serif',
+        fontFamily:   'var(--f-display)',
         fontStyle:    'italic', fontWeight: 400, fontSize: '17px',
         color:        'rgba(240,230,200,0.82)',
         lineHeight:   1.45, margin: '10px 20px 16px',
@@ -207,7 +207,7 @@ export function FeedbackCard({ userEmail, userName, saveCount, topSource }: Prop
               </span>
               <div style={{ minWidth: 0 }}>
                 <div style={{
-                  fontFamily: 'var(--font-dm-sans), system-ui, sans-serif',
+                  fontFamily: 'var(--f-body)',
                   fontSize:   '13px', fontWeight: sel ? 600 : 400,
                   color:      sel ? 'rgba(240,230,200,0.95)' : 'rgba(240,230,200,0.55)',
                   marginBottom: '1px', transition: 'all 180ms ease',
@@ -215,7 +215,7 @@ export function FeedbackCard({ userEmail, userName, saveCount, topSource }: Prop
                   {m.label}
                 </div>
                 <div style={{
-                  fontFamily: 'var(--font-dm-sans), system-ui, sans-serif',
+                  fontFamily: 'var(--f-body)',
                   fontSize:   '11px', fontWeight: 300,
                   color:      'rgba(240,230,200,0.30)', lineHeight: 1.35,
                 }}>
@@ -242,7 +242,7 @@ export function FeedbackCard({ userEmail, userName, saveCount, topSource }: Prop
               background:   'rgba(240,230,200,0.04)',
               border:       `1px solid ${(selected?.colour ?? 'rgba(240,230,200,0.10)') + '28'}`,
               borderRadius: '10px', padding: '12px 14px',
-              fontFamily:   'var(--font-dm-sans), system-ui, sans-serif',
+              fontFamily:   'var(--f-body)',
               fontSize:     '13px', color: 'rgba(240,230,200,0.90)',
               outline:      'none', resize: 'none', lineHeight: 1.65,
               caretColor:   '#1fce94', marginBottom: '10px',
@@ -251,7 +251,7 @@ export function FeedbackCard({ userEmail, userName, saveCount, topSource }: Prop
           />
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <span style={{
-              fontFamily: 'var(--font-dm-sans), system-ui, sans-serif',
+              fontFamily: 'var(--f-body)',
               fontSize:   '11px', color: 'rgba(240,230,200,0.20)',
             }}>
               {message.length}/500
@@ -269,7 +269,7 @@ export function FeedbackCard({ userEmail, userName, saveCount, topSource }: Prop
                 color:                   canSend && !sending
                   ? (selected?.textColour ?? '#080f0a')
                   : 'rgba(240,230,200,0.22)',
-                fontFamily:              'var(--font-rajdhani), system-ui, sans-serif',
+                fontFamily:              'var(--f-ui)',
                 fontSize:                '12px', fontWeight: 700,
                 letterSpacing:           '0.08em', textTransform: 'uppercase',
                 cursor:                  canSend && !sending ? 'pointer' : 'not-allowed',
