@@ -94,7 +94,7 @@ function PosterCard({ recommendation: rec, isHero, onClick }: CardProps) {
           background:           config.badgeBg,
           border:               `0.5px solid ${config.badgeBorder}`,
           borderRadius:         '6px', padding: '3px 10px',
-          fontFamily:           'var(--font-rajdhani), system-ui, sans-serif',
+          fontFamily:           'var(--f-ui)',
           fontSize:             '9px', fontWeight: 700,
           letterSpacing:        '0.08em', textTransform: 'uppercase',
           color:                'rgba(240,230,200,0.96)',
@@ -125,7 +125,7 @@ function PosterCard({ recommendation: rec, isHero, onClick }: CardProps) {
       {/* Body */}
       <div style={{ padding: isHero ? '16px 18px 22px' : '14px 18px 20px' }}>
         <h3 style={{
-          fontFamily:    'var(--font-rajdhani), system-ui, sans-serif',
+          fontFamily:    'var(--f-ui)',
           fontSize:      '22px', fontWeight: 700, letterSpacing: '0.02em',
           color:         'rgba(240,230,200,0.96)',
           lineHeight:    1.1, marginBottom: '7px',
@@ -134,7 +134,7 @@ function PosterCard({ recommendation: rec, isHero, onClick }: CardProps) {
         </h3>
 
         <span style={{
-          fontFamily:    'var(--font-dm-sans), system-ui, sans-serif',
+          fontFamily:    'var(--f-body)',
           fontSize:      '13px', fontWeight: 600,
           color:         '#c8151e', display: 'block',
           marginBottom:  '9px', letterSpacing: '0.01em',
@@ -145,7 +145,7 @@ function PosterCard({ recommendation: rec, isHero, onClick }: CardProps) {
         {signal.length > 0 && (
           <div style={{
             display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '5px',
-            fontFamily: 'var(--font-dm-sans), system-ui, sans-serif',
+            fontFamily: 'var(--f-body)',
             fontSize: '11px', color: 'rgba(240,230,200,0.38)',
           }}>
             {signal.map((part, i) => (
@@ -201,7 +201,7 @@ function SplitCard({ recommendation: rec, onClick }: CardProps) {
         <div style={{
           display: 'inline-flex', alignItems: 'center',
           padding: '3px 9px', borderRadius: '6px',
-          fontFamily:    'var(--font-rajdhani), system-ui, sans-serif',
+          fontFamily:    'var(--f-ui)',
           fontSize:      '9px', fontWeight: 700,
           letterSpacing: '0.08em', textTransform: 'uppercase',
           color:         config.colourHex,
@@ -213,7 +213,7 @@ function SplitCard({ recommendation: rec, onClick }: CardProps) {
         </div>
 
         <h3 style={{
-          fontFamily:    'var(--font-rajdhani), system-ui, sans-serif',
+          fontFamily:    'var(--f-ui)',
           fontSize:      '21px', fontWeight: 700, letterSpacing: '0.02em',
           color:         'rgba(240,230,200,0.96)',
           lineHeight:    1.1, marginBottom: '7px',
@@ -223,7 +223,7 @@ function SplitCard({ recommendation: rec, onClick }: CardProps) {
         </h3>
 
         <span style={{
-          fontFamily:   'var(--font-dm-sans), system-ui, sans-serif',
+          fontFamily:   'var(--f-body)',
           fontSize:     '13px', fontWeight: 600, color: '#c8151e',
           display:      'block', marginBottom: signals.length ? '7px' : '0',
         }}>
@@ -233,7 +233,7 @@ function SplitCard({ recommendation: rec, onClick }: CardProps) {
         {signals.length > 0 && (
           <div style={{
             display: 'flex', alignItems: 'center', gap: '5px',
-            fontFamily: 'var(--font-dm-sans), system-ui, sans-serif',
+            fontFamily: 'var(--f-body)',
             fontSize: '11px', color: 'rgba(240,230,200,0.38)',
           }}>
             {signals.map((s, i) => (
