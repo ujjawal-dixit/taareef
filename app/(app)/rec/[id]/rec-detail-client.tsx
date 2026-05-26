@@ -1,51 +1,57 @@
 'use client'
 
-import { useState } from 'react'
-import Link from 'next/link'
-import Image from 'next/image'
-import { getCategoryBloom, CATEGORY_MAP } from '@/constants/categories'
-import { hasValidImage } from '@/lib/utils/fallback'
-import type { Recommendation, Reaction, Category } from '@/lib/types'
+// app/(app)/rec/[id]/rec-detail-client.tsx
 
+import { useState }        from 'react'
+import Link                from 'next/link'
+import Image               from 'next/image'
+import { getCategoryBloom } from '@/constants/categories'
+import { hasValidImage }   from '@/lib/utils/fallback'
+import type { CategoryConfig } from '@/constants/categories'
+import type { Recommendation, Reaction } from '@/lib/types'
+
+// Accepts categoryConfig from page.tsx — uses it directly
 type RecDetailClientProps = {
-  recommendation: Recommendation
+  recommendation:  Recommendation
+  categoryConfig:  CategoryConfig
 }
 
 const REACTIONS = [
-  { value: 'loved' as Reaction, symbol: '♥', label: 'Loved it', color: '#f43f5e', bg: 'rgba(244,63,94,0.10)', border: 'rgba(244,63,94,0.35)' },
-  { value: 'good'  as Reaction, symbol: '✓', label: 'Good',     color: '#10b981', bg: 'rgba(16,185,129,0.10)', border: 'rgba(16,185,129,0.35)' },
-  { value: 'okay'  as Reaction, symbol: '–', label: 'Okay',     color: '#f59e0b', bg: 'rgba(245,158,11,0.10)',  border: 'rgba(245,158,11,0.35)' },
+  { value: 'loved' as Reaction, symbol: '♥', label: 'Loved it', color: '#f43f5e', bg: 'rgba(244,63,94,0.10)',   border: 'rgba(244,63,94,0.35)'   },
+  { value: 'good'  as Reaction, symbol: '✓', label: 'Good',     color: '#10b981', bg: 'rgba(16,185,129,0.10)',  border: 'rgba(16,185,129,0.35)'  },
+  { value: 'okay'  as Reaction, symbol: '–', label: 'Okay',     color: '#f59e0b', bg: 'rgba(245,158,11,0.10)',  border: 'rgba(245,158,11,0.35)'  },
   { value: 'skip'  as Reaction, symbol: '✕', label: 'Skip it',  color: 'rgba(242,230,205,0.35)', bg: 'rgba(242,230,205,0.04)', border: 'rgba(242,230,205,0.10)' },
 ]
 
-export function RecDetailClient({ recommendation }: RecDetailClientProps) {
-  const [reaction, setReaction]           = useState<Reaction | null>(recommendation.reaction)
-  const [note, setNote]                   = useState(recommendation.notes ?? '')
-  const [saving, setSaving]               = useState(false)
-  const [showRemove, setShowRemove]       = useState(false)
-  const [error, setError]                 = useState<string | null>(null)
+export function RecDetailClient({ recommendation, categoryConfig: cfg }: RecDetailClientProps) {
+  const [reaction,     setReaction]     = useState<Reaction | null>(recommendation.reaction)
+  const [note,         setNote]         = useState(recommendation.notes ?? '')
+  const [saving,       setSaving]       = useState(false)
+  const [showRemove,   setShowRemove]   = useState(false)
+  const [error,        setError]        = useState<string | null>(null)
 
-  const config      = CATEGORY_MAP[recommendation.category as Category]
-  const hasImage    = hasValidImage(recommendation.image_url)
+  const hasImage      = hasValidImage(recommendation.image_url)
   const isExperienced = recommendation.status !== 'saved'
-  const meta        = recommendation.metadata as Record<string, unknown>
+  const meta          = recommendation.metadata as Record<string, unknown>
 
-  const genre   = Array.isArray(meta?.genres) ? (meta.genres as string[])[0] : typeof meta?.genres === 'string' ? meta.genres : null
-  const year    = meta?.release_year ?? meta?.year ?? null
-  const runtime = meta?.runtime_minutes ? `${meta.runtime_minutes} min` : null
-  const rating  = meta?.rating ? `★ ${meta.rating}` : null
+  const genre    = Array.isArray(meta?.genres) ? (meta.genres as string[])[0]
+                 : typeof meta?.genres === 'string' ? meta.genres : null
+  const year     = meta?.release_year ?? meta?.year ?? null
+  const runtime  = meta?.runtime_minutes ? `${meta.runtime_minutes} min` : null
+  const rating   = meta?.rating ? `★ ${meta.rating}` : null
   const overview = typeof meta?.overview === 'string' ? meta.overview : null
 
-  const detailParts = [genre, year, runtime, rating].filter(Boolean).map(String).slice(0, 4)
+  const detailParts = [genre, year, runtime, rating]
+    .filter(Boolean).map(String).slice(0, 4)
 
   async function patch(body: Record<string, unknown>) {
     setSaving(true)
     setError(null)
     try {
       const res  = await fetch(`/api/recommendations/${recommendation.id}`, {
-        method: 'PATCH',
+        method:  'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
+        body:    JSON.stringify(body),
       })
       const json = await res.json()
       if (json.error) setError(json.error)
@@ -73,12 +79,10 @@ export function RecDetailClient({ recommendation }: RecDetailClientProps) {
 
   function handleTellSource() {
     const text = reaction === 'loved'
-      ? `Finally ${config.verbPast} ${recommendation.title} — you were so right. Thank you ♥`
-      : `${config.verbPast.charAt(0).toUpperCase() + config.verbPast.slice(1)} ${recommendation.title} — it was great! Thanks for the rec.`
+      ? `Finally ${cfg.verbPast} ${recommendation.title} — you were so right. Thank you ♥`
+      : `${cfg.verbPast.charAt(0).toUpperCase() + cfg.verbPast.slice(1)} ${recommendation.title} — it was great! Thanks for the rec.`
     if (navigator.share) navigator.share({ text }).catch(() => {})
   }
-
-  if (!config) return null
 
   return (
     <div style={{ minHeight: '100vh', background: '#080f0a' }}>
@@ -104,24 +108,30 @@ export function RecDetailClient({ recommendation }: RecDetailClientProps) {
       {/* Hero */}
       <div
         style={{
-          margin: '14px 16px 0',
+          margin:     '14px 16px 0',
           borderRadius: '22px',
-          height: '210px',
-          overflow: 'hidden',
-          position: 'relative',
-          background: getCategoryBloom(recommendation.category as Category),
-          boxShadow: `inset 5px 0 0 ${config.vividColor}`,
+          height:     '210px',
+          overflow:   'hidden',
+          position:   'relative',
+          background: getCategoryBloom(recommendation.category),
+          boxShadow:  `inset 5px 0 0 ${cfg.vividColor}`,
         }}
       >
         {hasImage && (
-          <Image src={recommendation.image_url!} alt={recommendation.title} fill style={{ objectFit: 'cover' }} sizes="(max-width:480px) 100vw, 480px"/>
+          <Image
+            src={recommendation.image_url!}
+            alt={recommendation.title}
+            fill
+            style={{ objectFit: 'cover' }}
+            sizes="(max-width:480px) 100vw, 480px"
+          />
         )}
-        <div style={{ position: 'absolute', top: '12px', left: '12px', background: `${config.vividColor}28`, border: `1px solid ${config.vividColor}44`, color: config.vividColor, fontFamily: 'var(--f-ui)', fontSize: '9px', fontWeight: 700, letterSpacing: '2px', padding: '4px 12px', borderRadius: '20px' }}>
-          {config.label.toUpperCase()}
+        <div style={{ position: 'absolute', top: '12px', left: '12px', background: `${cfg.vividColor}28`, border: `1px solid ${cfg.vividColor}44`, color: cfg.vividColor, fontFamily: 'var(--f-ui)', fontSize: '9px', fontWeight: 700, letterSpacing: '2px', padding: '4px 12px', borderRadius: '20px' }}>
+          {cfg.label.toUpperCase()}
         </div>
         {isExperienced && (
           <div style={{ position: 'absolute', top: '12px', right: '12px', border: '1px solid rgba(31,206,148,0.4)', color: '#1fce94', fontFamily: 'var(--f-ui)', fontSize: '9px', fontWeight: 700, letterSpacing: '2px', padding: '4px 12px', borderRadius: '20px' }}>
-            {config.verbPast.toUpperCase()}
+            {cfg.verbPast.toUpperCase()}
           </div>
         )}
       </div>
@@ -145,7 +155,6 @@ export function RecDetailClient({ recommendation }: RecDetailClientProps) {
           </p>
         )}
 
-        {/* Divider */}
         <div style={{ height: '0.5px', background: 'linear-gradient(to right, transparent, rgba(255,255,255,0.12), transparent)', margin: '0 0 18px' }}/>
 
         {/* Reactions */}
@@ -186,7 +195,6 @@ export function RecDetailClient({ recommendation }: RecDetailClientProps) {
           </div>
         )}
 
-        {/* Divider */}
         <div style={{ height: '0.5px', background: 'linear-gradient(to right, transparent, rgba(255,255,255,0.12), transparent)', margin: '0 0 18px' }}/>
 
         {/* Note */}
@@ -208,7 +216,11 @@ export function RecDetailClient({ recommendation }: RecDetailClientProps) {
           <span style={{ textTransform: 'capitalize' }}>{recommendation.source_type}</span>
         </div>
 
-        {error && <div style={{ marginTop: '12px', fontFamily: 'var(--f-body)', fontSize: '12px', color: '#f43f5e', textAlign: 'center' }}>{error}</div>}
+        {error && (
+          <div style={{ marginTop: '12px', fontFamily: 'var(--f-body)', fontSize: '12px', color: '#f43f5e', textAlign: 'center' }}>
+            {error}
+          </div>
+        )}
       </div>
 
       {/* Remove experience sheet */}
