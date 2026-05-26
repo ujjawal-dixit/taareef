@@ -168,12 +168,6 @@ function ChooseMethod({ onSelect, onClose }: {
           How did it arrive?
         </p>
 
-        {/*
-          CLOSE BUTTON
-          Destination: back to vault. Not navigating — dismissing.
-          Cream 80%: clearly visible, not competing with content.
-          44×44 touch target minimum.
-        */}
         <button
           onClick={onClose} aria-label="Close"
           style={{
@@ -244,67 +238,35 @@ function Option({ grad, shadow, icon, label, desc, onClick }: {
         display: 'flex', alignItems: 'center', gap: '16px',
         cursor: 'pointer',
         background: grad, boxShadow: shadow,
-        border: '1px solid rgba(255,255,255,0.07)',
-        transition: 'transform 160ms ease',
+        border: '1px solid rgba(240,230,200,0.06)',
         WebkitTapHighlightColor: 'transparent',
-        position: 'relative', overflow: 'hidden',
+        transition: 'transform 140ms ease',
       }}
     >
       <div style={{
-        width: '48px', height: '48px', borderRadius: '12px', flexShrink: 0,
-        background: 'rgba(255,255,255,0.09)', border: '0.5px solid rgba(255,255,255,0.14)',
+        width: '40px', height: '40px', flexShrink: 0,
         display: 'flex', alignItems: 'center', justifyContent: 'center',
       }}>
         {icon}
       </div>
-      <div style={{ flex: 1, minWidth: 0 }}>
+      <div>
         <div style={{
           fontFamily: 'var(--f-display)',
           fontWeight: 400, fontStyle: 'italic',
-          fontSize: '21px', color: 'rgba(240,230,200,0.96)',
-          lineHeight: 1.1, marginBottom: '3px',
+          fontSize: '20px', color: 'rgba(240,230,200,0.92)',
+          lineHeight: 1.1, marginBottom: '4px',
         }}>
           {label}
         </div>
         <div style={{
           fontFamily: 'var(--f-body)',
-          fontSize: '12px', fontWeight: 300,
-          color: 'rgba(240,230,200,0.42)', lineHeight: 1.45,
+          fontSize: '12px', color: 'rgba(240,230,200,0.42)',
+          lineHeight: 1.4,
         }}>
           {desc}
         </div>
       </div>
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none"
-        stroke="rgba(240,230,200,0.25)" strokeWidth="2" strokeLinecap="round">
-        <polyline points="9 18 15 12 9 6"/>
-      </svg>
     </div>
-  )
-}
-
-// ── BACK BUTTON (sub-screens) ─────────────────────────────────────
-// Destination: previous step in a flow. Cream 70% — neutral, not neon.
-
-function BackBtn({ label, onClick }: { label: string; onClick: () => void }) {
-  return (
-    <button
-      onClick={onClick}
-      style={{
-        display: 'flex', alignItems: 'center', gap: '5px',
-        color: 'rgba(240,230,200,0.85)',
-        fontFamily: 'var(--f-body)',
-        fontSize: '12px', letterSpacing: '0.04em',
-        minHeight: '44px',
-        WebkitTapHighlightColor: 'transparent',
-        transition: 'color 160ms ease',
-      }}
-    >
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
-        stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
-        <polyline points="15 18 9 12 15 6"/>
-      </svg>
-      {label}
-    </button>
   )
 }
 
@@ -338,6 +300,30 @@ function ScreenHeader({ title, subtitle, onBack, backLabel }: {
         </p>
       )}
     </div>
+  )
+}
+
+// ── BACK BUTTON ───────────────────────────────────────────────────
+
+function BackBtn({ label, onClick }: { label: string; onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        display: 'flex', alignItems: 'center', gap: '5px',
+        color: 'rgba(240,230,200,0.85)', fontFamily: 'var(--f-body)',
+        fontSize: '12px', fontWeight: 500, letterSpacing: '0.04em',
+        background: 'none', border: 'none', cursor: 'pointer',
+        padding: 0, minHeight: '44px',
+        WebkitTapHighlightColor: 'transparent',
+      }}
+    >
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+        stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+        <polyline points="15 18 9 12 15 6"/>
+      </svg>
+      {label}
+    </button>
   )
 }
 
@@ -388,7 +374,13 @@ function JotForm({ onSave, onBack, saving, error }: {
           <input
             id="jot-title" ref={titleRef} type="text"
             value={title} onChange={e => setTitle(e.target.value)}
-            onKeyDown={e => { if (e.key === 'Enter' && canSave) onSave({ title: title.trim(), category: category!, source_type: 'friend', source_name: sourceName.trim() || 'Someone', notes: notes.trim() || undefined }) }}
+            onKeyDown={e => {
+              if (e.key === 'Enter' && canSave) onSave({
+                title: title.trim(), category: category!,
+                source_type: 'friend', source_name: sourceName.trim() || 'Someone',
+                notes: notes.trim() || undefined,
+              })
+            }}
             placeholder="Restaurant name, film title, album..." style={fieldStyle}
             autoComplete="off" autoCorrect="off" spellCheck={false}
           />
@@ -396,7 +388,7 @@ function JotForm({ onSave, onBack, saving, error }: {
 
         <div>
           <label style={labelStyle}>What kind?</label>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '6px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '6px' }}>
             {CATEGORIES.map(cat => {
               const sel = category === cat.id
               return (
@@ -405,18 +397,18 @@ function JotForm({ onSave, onBack, saving, error }: {
                   aria-pressed={sel}
                   style={{
                     padding: '9px 4px', borderRadius: '8px',
-                    border: `1px solid ${sel ? cat.colourHex : 'rgba(240,230,200,0.09)'}`,
-                    background: sel ? `${cat.colourHex}1a` : 'rgba(240,230,200,0.025)',
+                    border: `1px solid ${sel ? cat.vividColor : 'rgba(240,230,200,0.09)'}`,
+                    background: sel ? `${cat.vividColor}1a` : 'rgba(240,230,200,0.025)',
                     fontFamily: 'var(--f-ui)',
                     fontSize: '8px', fontWeight: 700, letterSpacing: '0.06em',
                     textTransform: 'uppercase',
-                    color: sel ? cat.colourHex : 'rgba(240,230,200,0.52)',
+                    color: sel ? cat.vividColor : 'rgba(240,230,200,0.52)',
                     cursor: 'pointer', transition: 'all 160ms ease',
-                    boxShadow: sel ? `inset 0 2px 0 ${cat.colourHex}` : 'none',
+                    boxShadow: sel ? `inset 0 2px 0 ${cat.vividColor}` : 'none',
                     WebkitTapHighlightColor: 'transparent',
                   }}
                 >
-                  {cat.shortLabel}
+                  {cat.label}
                 </button>
               )
             })}
@@ -475,12 +467,12 @@ function AudioCapture({ onExtracted, onBack, onError, error }: {
   onError:     (e: string) => void
   error:       string | null
 }) {
-  const [recording,   setRecording]   = useState(false)
-  const [processing,  setProcessing]  = useState(false)
-  const [seconds,     setSeconds]     = useState(0)
-  const mediaRef    = useRef<MediaRecorder | null>(null)
-  const chunksRef   = useRef<Blob[]>([])
-  const timerRef    = useRef<ReturnType<typeof setInterval> | null>(null)
+  const [recording,  setRecording]  = useState(false)
+  const [processing, setProcessing] = useState(false)
+  const [seconds,    setSeconds]    = useState(0)
+  const mediaRef  = useRef<MediaRecorder | null>(null)
+  const chunksRef = useRef<Blob[]>([])
+  const timerRef  = useRef<ReturnType<typeof setInterval> | null>(null)
 
   function startRecording() {
     chunksRef.current = []
@@ -537,16 +529,18 @@ function AudioCapture({ onExtracted, onBack, onError, error }: {
         onBack={onBack} backLabel="← options"
       />
 
-      <div style={{ padding: '0 16px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '28px', flex: 1, minHeight: 'calc(100dvh - 220px)' }}>
-
-        {/* Recording button */}
+      <div style={{
+        padding: '0 16px', display: 'flex', flexDirection: 'column',
+        alignItems: 'center', justifyContent: 'center',
+        gap: '28px', flex: 1, minHeight: 'calc(100dvh - 220px)',
+      }}>
         <button
           onClick={recording ? stopRecording : startRecording}
           disabled={processing}
           aria-label={recording ? 'Stop recording' : 'Start recording'}
           style={{
             width: '96px', height: '96px', borderRadius: '50%',
-            background:   recording
+            background: recording
               ? 'radial-gradient(circle at 38% 32%, #8e0c12 0%, #5c0b10 60%, #300208 100%)'
               : 'radial-gradient(circle at 38% 32%, #0a2018 0%, #071510 100%)',
             border: `2px solid ${recording ? '#c8151e' : 'rgba(31,206,148,0.40)'}`,
@@ -568,40 +562,34 @@ function AudioCapture({ onExtracted, onBack, onError, error }: {
               animation: 'spin 0.8s linear infinite',
             }} />
           ) : recording ? (
-            <div style={{
-              width: '20px', height: '20px', borderRadius: '3px',
-              background: '#c8151e',
-            }} />
+            <div style={{ width: '20px', height: '20px', borderRadius: '3px', background: '#c8151e' }} />
           ) : (
             <MicIcon />
           )}
         </button>
 
         <p style={{
-          fontFamily:   'var(--f-body)',
-          fontSize:     '13px', color: 'rgba(240,230,200,0.45)',
-          textAlign:    'center', lineHeight: 1.5,
+          fontFamily: 'var(--f-body)',
+          fontSize: '13px', color: 'rgba(240,230,200,0.45)',
+          textAlign: 'center', lineHeight: 1.5,
         }}>
-          {processing  ? 'Reading your voice...'            :
+          {processing  ? 'Reading your voice...' :
            recording   ? `Recording — tap to stop ${fmt(seconds)}` :
            'Tap to start. Speak naturally.'}
         </p>
 
         {recording && (
           <p style={{
-            fontFamily:   'var(--f-display)',
-            fontStyle:    'italic', fontSize: '15px',
-            color:        'rgba(240,230,200,0.38)', textAlign: 'center',
+            fontFamily: 'var(--f-display)',
+            fontStyle: 'italic', fontSize: '15px',
+            color: 'rgba(240,230,200,0.38)', textAlign: 'center',
           }}>
             "Rohit told me about this place in Bandra..."
           </p>
         )}
 
         {error && (
-          <p role="alert" style={{
-            fontFamily: 'var(--f-body)',
-            fontSize: '13px', color: '#c8151e', textAlign: 'center',
-          }}>
+          <p role="alert" style={{ fontFamily: 'var(--f-body)', fontSize: '13px', color: '#c8151e', textAlign: 'center' }}>
             {error}
           </p>
         )}
@@ -612,9 +600,7 @@ function AudioCapture({ onExtracted, onBack, onError, error }: {
           0%,100% { box-shadow: 0 0 0 8px rgba(200,21,30,0.10), 0 8px 32px rgba(200,21,30,0.40); }
           50%      { box-shadow: 0 0 0 14px rgba(200,21,30,0.05), 0 8px 32px rgba(200,21,30,0.55); }
         }
-        @keyframes spin {
-          to { transform: rotate(360deg); }
-        }
+        @keyframes spin { to { transform: rotate(360deg); } }
       `}</style>
     </>
   )
@@ -664,58 +650,61 @@ function OcrCapture({ onExtracted, onBack, onError, error }: {
         onBack={onBack} backLabel="← options"
       />
 
-      <div style={{ padding: '0 16px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '24px', flex: 1, minHeight: 'calc(100dvh - 220px)' }}>
-
-        {/* Upload zone */}
+      <div style={{
+        padding: '0 16px', display: 'flex', flexDirection: 'column',
+        alignItems: 'center', justifyContent: 'center',
+        gap: '20px', flex: 1, minHeight: 'calc(100dvh - 220px)',
+      }}>
         <div
           onClick={() => !processing && inputRef.current?.click()}
           style={{
-            width: '100%', minHeight: '180px', borderRadius: '16px',
-            border: `1.5px dashed ${processing ? 'rgba(31,206,148,0.30)' : 'rgba(240,230,200,0.15)'}`,
-            background: preview ? 'transparent' : 'rgba(240,230,200,0.025)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            cursor: processing ? 'wait' : 'pointer',
+            width: '100%', maxWidth: '320px',
+            border: '1px dashed rgba(240,230,200,0.20)',
+            borderRadius: '18px', padding: '40px 24px',
+            display: 'flex', flexDirection: 'column',
+            alignItems: 'center', justifyContent: 'center', gap: '14px',
+            cursor: processing ? 'not-allowed' : 'pointer',
+            background: preview ? 'transparent' : 'rgba(240,230,200,0.02)',
             position: 'relative', overflow: 'hidden',
-            transition: 'border-color 200ms ease',
-            WebkitTapHighlightColor: 'transparent',
+            transition: 'border-color 160ms ease',
           }}
         >
           {preview ? (
-            <img src={preview} alt="Screenshot preview"
-              style={{ width: '100%', height: '100%', objectFit: 'contain', maxHeight: '240px' }} />
+            <img src={preview} alt="Preview" style={{
+              width: '100%', borderRadius: '12px',
+              objectFit: 'cover', maxHeight: '200px',
+              opacity: processing ? 0.5 : 1,
+            }} />
           ) : (
-            <div style={{ textAlign: 'center', padding: '32px 20px' }}>
-              <CameraIcon />
-              <p style={{
-                fontFamily: 'var(--f-body)',
-                fontSize: '13px', color: 'rgba(240,230,200,0.40)',
-                marginTop: '12px', lineHeight: 1.5,
-              }}>
-                Tap to upload a screenshot<br />
-                <span style={{ fontSize: '11px', opacity: 0.6 }}>WhatsApp, Instagram, anything</span>
-              </p>
-            </div>
+            <CameraIcon />
           )}
 
           {processing && (
             <div style={{
               position: 'absolute', inset: 0,
-              background: 'rgba(6,16,10,0.85)',
-              display: 'flex', flexDirection: 'column',
-              alignItems: 'center', justifyContent: 'center', gap: '12px',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              background: 'rgba(6,16,10,0.7)', borderRadius: '18px',
             }}>
               <div style={{
                 width: '28px', height: '28px', borderRadius: '50%',
-                border: '2px solid rgba(240,230,200,0.15)',
+                border: '2px solid rgba(240,230,200,0.20)',
                 borderTopColor: '#1fce94',
                 animation: 'spin 0.8s linear infinite',
               }} />
-              <p style={{
-                fontFamily: 'var(--f-body)',
-                fontSize: '12px', color: 'rgba(240,230,200,0.50)',
+            </div>
+          )}
+
+          {!preview && (
+            <div style={{ textAlign: 'center' }}>
+              <div style={{
+                fontFamily: 'var(--f-body)', fontSize: '14px',
+                color: 'rgba(240,230,200,0.65)', marginBottom: '4px',
               }}>
-                Reading your screenshot...
-              </p>
+                Tap to upload a screenshot
+              </div>
+              <div style={{ fontFamily: 'var(--f-body)', fontSize: '11px', color: 'rgba(240,230,200,0.30)' }}>
+                WhatsApp, Instagram, anything
+              </div>
             </div>
           )}
         </div>
@@ -727,10 +716,7 @@ function OcrCapture({ onExtracted, onBack, onError, error }: {
         />
 
         {error && (
-          <p role="alert" style={{
-            fontFamily: 'var(--f-body)',
-            fontSize: '13px', color: '#c8151e', textAlign: 'center',
-          }}>
+          <p role="alert" style={{ fontFamily: 'var(--f-body)', fontSize: '13px', color: '#c8151e', textAlign: 'center' }}>
             {error}
           </p>
         )}
@@ -742,7 +728,6 @@ function OcrCapture({ onExtracted, onBack, onError, error }: {
 }
 
 // ── CONFIRM CARD ──────────────────────────────────────────────────
-// Pre-filled card from audio or OCR. User can edit before saving.
 
 function ConfirmCard({ prefill, method, onSave, onBack, saving, error }: {
   prefill: Prefill
@@ -781,7 +766,6 @@ function ConfirmCard({ prefill, method, onSave, onBack, saving, error }: {
       <div style={{ padding: '48px 22px 16px' }}>
         <BackBtn label={backLabel} onClick={onBack} />
 
-        {/* Confidence indicator */}
         <div style={{ marginTop: '10px', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '8px' }}>
           <h1 style={{
             fontFamily: 'var(--f-display)',
@@ -823,7 +807,7 @@ function ConfirmCard({ prefill, method, onSave, onBack, saving, error }: {
 
         <div>
           <label style={labelStyle}>What kind?</label>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '6px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '6px' }}>
             {CATEGORIES.map(cat => {
               const sel = category === cat.id
               return (
@@ -832,18 +816,18 @@ function ConfirmCard({ prefill, method, onSave, onBack, saving, error }: {
                   aria-pressed={sel}
                   style={{
                     padding: '9px 4px', borderRadius: '8px',
-                    border: `1px solid ${sel ? cat.colourHex : 'rgba(240,230,200,0.09)'}`,
-                    background: sel ? `${cat.colourHex}1a` : 'rgba(240,230,200,0.025)',
+                    border: `1px solid ${sel ? cat.vividColor : 'rgba(240,230,200,0.09)'}`,
+                    background: sel ? `${cat.vividColor}1a` : 'rgba(240,230,200,0.025)',
                     fontFamily: 'var(--f-ui)',
                     fontSize: '8px', fontWeight: 700, letterSpacing: '0.06em',
                     textTransform: 'uppercase',
-                    color: sel ? cat.colourHex : 'rgba(240,230,200,0.52)',
+                    color: sel ? cat.vividColor : 'rgba(240,230,200,0.52)',
                     cursor: 'pointer', transition: 'all 160ms ease',
-                    boxShadow: sel ? `inset 0 2px 0 ${cat.colourHex}` : 'none',
+                    boxShadow: sel ? `inset 0 2px 0 ${cat.vividColor}` : 'none',
                     WebkitTapHighlightColor: 'transparent',
                   }}
                 >
-                  {cat.shortLabel}
+                  {cat.label}
                 </button>
               )
             })}
@@ -870,10 +854,7 @@ function ConfirmCard({ prefill, method, onSave, onBack, saving, error }: {
         </div>
 
         {error && (
-          <p role="alert" style={{
-            fontFamily: 'var(--f-body)',
-            fontSize: '13px', color: '#c8151e', textAlign: 'center',
-          }}>
+          <p role="alert" style={{ fontFamily: 'var(--f-body)', fontSize: '13px', color: '#c8151e', textAlign: 'center' }}>
             {error}
           </p>
         )}
