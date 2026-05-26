@@ -79,7 +79,7 @@ export function CategoryListClient({ recommendations: serverRecs, categoryConfig
               fontSize:      '28px', letterSpacing: '-0.01em',
               color:         'rgba(240,230,200,0.95)', margin: 0,
             }}>
-              {cfg.labelPlural}
+              {cfg.label}
             </h1>
             <span style={{
               fontFamily: 'var(--f-body)',
