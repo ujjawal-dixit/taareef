@@ -1,6 +1,6 @@
 'use client'
 
-// app/(app)/dashboard/[category]/category-list-client.tsx
+//app/(app)/dashboard/[category]/category-list-client.tsx
 
 import { useState, useCallback } from 'react'
 import { useRouter }             from 'next/navigation'
