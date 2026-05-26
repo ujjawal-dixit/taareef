@@ -1,152 +1,130 @@
-// app/api/capture/audio/route.ts
-// Audio transcription via Groq Whisper (whisper-large-v3-turbo).
-// Free tier: 28,800 seconds/day. Same GROQ_API_KEY as OCR.
-// 
-// Flow: browser records audio → POST to this route →
-// Groq transcribes → Groq Vision extracts recommendation →
-// pre-filled card returned to client.
-//
-// Model: whisper-large-v3-turbo (faster) or whisper-large-v3 (more accurate).
-// We use turbo — speed matters more than marginal accuracy for voice saves.
-
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
+import { createClient } from '@/lib/supabase/server'
 import type { ApiResponse } from '@/lib/types'
 
-const EXTRACT_PROMPT = `You are extracting a recommendation from a spoken note.
-The person has verbally described something they want to save.
-
-Return ONLY a valid JSON object. No prose. No markdown fences.
-
-{
-  "title": string or null,
-  "category": one of [restaurant, bar, film, tv, music, book, city, activity] or null,
-  "source_name": string or null,
-  "source_type": one of [friend, family, colleague, instagram, twitter, youtube, article, newsletter, podcast, self] or null,
-  "notes": string or null (max 15 words — capture the essence of what they said about it),
-  "confidence": "high" or "medium" or "low"
-}`
-
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
-    const groqKey = process.env.GROQ_API_KEY
-    if (!groqKey) {
+    const supabase = await createClient()
+    const { data: { user }, error: authError } = await supabase.auth.getUser()
+    if (authError || !user) {
       return NextResponse.json<ApiResponse<null>>(
-        { data: null, error: 'Audio capture not configured' }, { status: 503 }
+        { data: null, error: 'You must be logged in' }, { status: 401 }
       )
     }
 
-    const form  = await request.formData()
-    const audio = form.get('audio') as File | null
-
-    if (!audio) {
+    const formData = await request.formData()
+    const audioFile = formData.get('audio') as File | null
+    if (!audioFile) {
       return NextResponse.json<ApiResponse<null>>(
-        { data: null, error: 'No audio provided' }, { status: 400 }
+        { data: null, error: 'No audio file provided' }, { status: 400 }
       )
     }
 
-    if (audio.size > 25 * 1024 * 1024) {
+    const groqApiKey = process.env.GROQ_API_KEY
+    if (!groqApiKey) {
       return NextResponse.json<ApiResponse<null>>(
-        { data: null, error: 'Audio must be under 25MB' }, { status: 400 }
+        { data: null, error: 'Audio capture is not configured' }, { status: 503 }
       )
     }
 
-    // ── STEP 1: Transcribe with Groq Whisper ───────────────────
-    // Point request to Groq audio endpoint, use whisper-large-v3-turbo
-    const groqForm = new FormData()
-    groqForm.append('file',  audio, audio.name || 'recording.webm')
-    groqForm.append('model', 'whisper-large-v3-turbo')
-    groqForm.append('response_format', 'json')
+    const whisperForm = new FormData()
+    whisperForm.append('file', audioFile, 'audio.webm')
+    whisperForm.append('model', 'whisper-large-v3-turbo')
+    whisperForm.append('response_format', 'json')
 
-    const transcribeRes = await fetch(
-      'https://api.groq.com/openai/v1/audio/transcriptions',
-      {
-        method:  'POST',
-        headers: { 'Authorization': `Bearer ${groqKey}` },
-        body:    groqForm,
-      }
-    )
+    const transcribeRes = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${groqApiKey}` },
+      body: whisperForm,
+    })
 
     if (!transcribeRes.ok) {
-      const err = await transcribeRes.text()
-      console.error('[Audio] Groq transcription error:', transcribeRes.status, err)
+      console.error('[audio/transcribe]', await transcribeRes.text())
       return NextResponse.json<ApiResponse<null>>(
-        { data: null, error: "Couldn't hear that clearly — try again?" },
-        { status: 503 }
+        { data: null, error: 'Could not transcribe audio — please try again' }, { status: 503 }
       )
     }
 
-    const transcription = await transcribeRes.json()
-    const spokenText    = transcription.text?.trim()
-
-    if (!spokenText) {
+    const { text: transcript } = await transcribeRes.json()
+    if (!transcript || transcript.trim() === '') {
       return NextResponse.json<ApiResponse<null>>(
-        { data: null, error: "Couldn't make out the audio — try again in a quieter spot?" },
-        { status: 422 }
+        { data: null, error: "Couldn't catch that — please try again" }, { status: 400 }
       )
     }
 
-    // ── STEP 2: Extract recommendation with Groq LLM ───────────
-    const extractRes = await fetch(
-      'https://api.groq.com/openai/v1/chat/completions',
-      {
-        method:  'POST',
-        headers: {
-          'Authorization': `Bearer ${groqKey}`,
-          'Content-Type':  'application/json',
-        },
-        body: JSON.stringify({
-          model:      'llama-3.3-70b-versatile',
-          max_tokens: 512,
-          messages: [
-            { role: 'system', content: EXTRACT_PROMPT },
-            {
-              role:    'user',
-              content: `Spoken note: "${spokenText}"`,
-            },
-          ],
-        }),
-      }
-    )
+    const extractRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${groqApiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'llama-3.3-70b-versatile',
+        max_tokens: 500,
+        messages: [
+          {
+            role: 'system',
+            content: `You extract recommendation data from spoken text.
+Return ONLY valid JSON, no prose, no markdown.
 
-    const extractData = await extractRes.json()
-    const raw         = extractData.choices?.[0]?.message?.content?.trim() ?? ''
+Valid categories: watch, listen, read, eat, drink, go, do, see
+- watch: films, TV shows, series
+- listen: music, albums, podcasts
+- read: books
+- eat: restaurants, food places
+- drink: bars, cafes for drinks, wine bars
+- go: cities, countries, travel destinations
+- do: activities, experiences, adventures, hikes
+- see: exhibitions, galleries, performances, theatre, concerts
 
-    // Strip markdown fences defensively
-    const clean = raw
-      .replace(/^```(?:json)?\n?/, '')
-      .replace(/\n?```$/, '')
-      .trim()
+Valid source types: friend, family, colleague, instagram, twitter, youtube, article, newsletter, podcast, self
 
-    let parsed: Record<string, unknown>
+JSON shape:
+{
+  "title": string or null,
+  "category": one of the valid categories or null,
+  "source_type": one of the valid source types or null,
+  "source_name": string or null,
+  "notes": string (max 100 chars) or null,
+  "confidence": "high" | "medium" | "low"
+}`,
+          },
+          {
+            role: 'user',
+            content: `Extract the recommendation from this spoken text:\n\n"${transcript}"`,
+          },
+        ],
+      }),
+    })
+
+    if (!extractRes.ok) {
+      console.error('[audio/extract]', await extractRes.text())
+      return NextResponse.json<ApiResponse<null>>(
+        { data: null, error: 'Could not process audio — please try again' }, { status: 503 }
+      )
+    }
+
+    const extractJson = await extractRes.json()
+    const rawContent = extractJson.choices?.[0]?.message?.content ?? ''
+
+    let extracted: Record<string, unknown>
     try {
-      parsed = JSON.parse(clean)
+      extracted = JSON.parse(rawContent.replace(/```json|```/g, '').trim())
     } catch {
-      // Extraction failed but transcription succeeded
-      // Return the raw text as title so the user can still save it
-      return NextResponse.json({
-        data: {
-          title:       spokenText,
-          category:    null,
-          source_name: null,
-          source_type: null,
-          notes:       null,
-          confidence:  'low',
-          transcription: spokenText,
-        },
-        error: null,
-      }, { status: 200 })
+      console.error('[audio/parse]', rawContent)
+      return NextResponse.json<ApiResponse<null>>(
+        { data: null, error: 'Could not understand the recommendation — please try again' }, { status: 422 }
+      )
     }
 
-    return NextResponse.json({
-      data: { ...parsed, transcription: spokenText },
+    return NextResponse.json<ApiResponse<Record<string, unknown>>>({
+      data: { ...extracted, transcript },
       error: null,
-    }, { status: 200 })
-
+    })
   } catch (err) {
-    console.error('[Audio] Unexpected:', err)
+    console.error('[POST /api/capture/audio] unexpected', err)
     return NextResponse.json<ApiResponse<null>>(
-      { data: null, error: 'Something went wrong — please try again' },
-      { status: 500 }
+      { data: null, error: 'Something went wrong — please try again' }, { status: 500 }
     )
   }
 }
