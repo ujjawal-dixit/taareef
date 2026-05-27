@@ -1,17 +1,26 @@
 // lib/types/index.ts
-// Taareef — All TypeScript types
-// Single source of truth — never inline types elsewhere
+// Single source of truth for all TypeScript types.
+// Never inline types in component files.
 
+// ── CATEGORY ─────────────────────────────────────────────────────
+// 6 experience-based categories. Locked.
 export type Category =
-  | 'watch'
-  | 'listen'
-  | 'read'
-  | 'eat'
-  | 'drink'
-  | 'go'
-  | 'do'
-  | 'see'
+  | 'watch'   // Film · Series · Documentary
+  | 'listen'  // Album · Song · Podcast · Artist
+  | 'read'    // Book
+  | 'dine'    // Restaurant · Bar · Café · Street food
+  | 'do'      // Hike · Adventure · Ride
+  | 'visit'   // Exhibition · Concert · Theatre · Gallery
 
+export const VALID_CATEGORIES: Category[] = [
+  'watch', 'listen', 'read', 'dine', 'do', 'visit',
+]
+
+export function isValidCategory(value: string): value is Category {
+  return VALID_CATEGORIES.includes(value as Category)
+}
+
+// ── SOURCE TYPE ───────────────────────────────────────────────────
 export type SourceType =
   | 'friend'
   | 'family'
@@ -24,10 +33,14 @@ export type SourceType =
   | 'podcast'
   | 'self'
 
+// ── REACTION ──────────────────────────────────────────────────────
+// Set only after experiencing. Never at save time.
 export type Reaction = 'loved' | 'good' | 'okay' | 'skip'
 
+// ── PRIORITY ──────────────────────────────────────────────────────
 export type Priority = 'low' | 'medium' | 'high'
 
+// ── LOCATION ──────────────────────────────────────────────────────
 export type Location = {
   city?: string
   country?: string
@@ -36,6 +49,7 @@ export type Location = {
   lng?: number
 }
 
+// ── RECOMMENDATION ────────────────────────────────────────────────
 export type Recommendation = {
   id: string
   user_id: string
@@ -55,15 +69,14 @@ export type Recommendation = {
   updated_at: string
 }
 
+// ── API RESPONSE ──────────────────────────────────────────────────
 export type ApiResponse<T> = {
   data: T | null
   error: string | null
-  meta?: {
-    total?: number
-    page?: number
-  }
+  meta?: { total?: number; page?: number }
 }
 
+// ── CREATE INPUT ──────────────────────────────────────────────────
 export type CreateRecommendationInput = {
   title: string
   category: Category
@@ -77,6 +90,7 @@ export type CreateRecommendationInput = {
   metadata?: Record<string, unknown>
 }
 
+// ── UPDATE INPUT ──────────────────────────────────────────────────
 export type UpdateRecommendationInput = {
   title?: string
   source_name?: string
@@ -87,12 +101,4 @@ export type UpdateRecommendationInput = {
   priority?: Priority
   location?: Location
   metadata?: Record<string, unknown>
-}
-
-export const VALID_CATEGORIES: Category[] = [
-  'watch', 'listen', 'read', 'eat', 'drink', 'go', 'do', 'see'
-]
-
-export function isValidCategory(value: string): value is Category {
-  return VALID_CATEGORIES.includes(value as Category)
 }
