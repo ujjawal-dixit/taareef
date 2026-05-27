@@ -11,6 +11,7 @@
 import Link from 'next/link'
 import Image from 'next/image'
 import { CATEGORY_MAP, getCardGradient, getCardVignette } from '@/constants/categories'
+import type { CategoryConfig } from '@/constants/categories'
 import { hasValidImage } from '@/lib/utils/fallback'
 import type { Recommendation, Category } from '@/lib/types'
 
