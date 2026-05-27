@@ -235,9 +235,11 @@ export function RecommendationCard({ recommendation, variant = 'full' }: Props) 
 }
 
 // Compact row — for category list view
+import type { CategoryConfig } from '@/constants/categories'
+
 function CompactRow({ rec, config, metaLine }: {
   rec: Recommendation
-  config: ReturnType<typeof CATEGORY_MAP[Category]['valueOf']>
+  config: CategoryConfig
   metaLine: string
 }) {
   const hasImage = hasValidImage(rec.image_url)
