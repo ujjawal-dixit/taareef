@@ -381,14 +381,14 @@ function JotForm({ onSave, onBack, saving, error }: {
                 notes: notes.trim() || undefined,
               })
             }}
-            placeholder="Restaurant name, film title, album..." style={fieldStyle}
+            placeholder="Film title, restaurant name, book..." style={fieldStyle}
             autoComplete="off" autoCorrect="off" spellCheck={false}
           />
         </div>
 
         <div>
           <label style={labelStyle}>What kind?</label>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '6px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '6px' }}>
             {CATEGORIES.map(cat => {
               const sel = category === cat.id
               return (
@@ -807,7 +807,7 @@ function ConfirmCard({ prefill, method, onSave, onBack, saving, error }: {
 
         <div>
           <label style={labelStyle}>What kind?</label>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '6px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '6px' }}>
             {CATEGORIES.map(cat => {
               const sel = category === cat.id
               return (
