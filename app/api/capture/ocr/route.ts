@@ -49,13 +49,20 @@ export async function POST(request: NextRequest) {
                 text: `Look at this screenshot and extract any recommendation it contains.
 Return ONLY valid JSON, no prose, no markdown fences.
 
-Valid categories: watch, listen, read, dine, do, visit
-- watch: films, TV shows, series, documentaries
-- listen: music, albums, songs, podcasts, artists
-- read: books, fiction, non-fiction, poetry
-- dine: restaurants, bars, cafes, street food — anything food or drink related
-- do: hikes, adventures, rides, activities, experiences
-- visit: exhibitions, galleries, concerts, theatre, performances
+Valid categories: watch, listen, read, eat, drink, go, do, see
+- watch: films, TV shows, series
+- listen: music, albums, podcasts
+- read: books
+- eat: restaurants, food places
+- drink: bars, cafes for drinks, wine bars
+- go: cities, countries, travel destinations
+- do: activities, experiences, adventures, hikes
+- visit: exhibitions, galleries, concerts, plays, theatre, performances
+
+For dine category, also extract if visible:
+  "what_to_order": the specific dish, drink, or item mentioned (string or null)
+For visit category, also extract if visible:
+  "dates": closing date or run dates e.g. "Until 15 Jun" or "12–28 June 2026" (string or null)
 
 Valid source types: friend, family, colleague, instagram, twitter, youtube, article, newsletter, podcast, self
 
