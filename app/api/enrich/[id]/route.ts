@@ -43,17 +43,18 @@ export async function POST(_req: Request, { params }: Params) {
     if (rec.image_url) return NextResponse.json({ data: { enriched: false, reason: 'already_has_image' }, error: null })
 
     // ── FILM / TV → TMDB ──────────────────────────────────
-    if (rec.category === 'film' || rec.category === 'tv') {
+    if (rec.category === 'watch') {
       const tmdbKey = process.env.TMDB_API_KEY
       if (!tmdbKey) {
         console.error('[Enrich] TMDB_API_KEY not set')
         return NextResponse.json({ data: { enriched: false, reason: 'no_api_key' }, error: null })
       }
 
-      const mediaType = rec.category === 'film' ? 'movie' : 'tv'
+      // Default to movie search for watch category; series will be caught by title matching
+      const mediaType = 'movie'
       const searchUrl = `https://api.themoviedb.org/3/search/${mediaType}?query=${encodeURIComponent(rec.title)}&api_key=${tmdbKey}&language=en-US`
 
-      console.log(`[Enrich] Searching TMDB for: "${rec.title}" (${mediaType})`)
+      console.log(`[Enrich] Searching TMDB for: "${rec.title}" (watch → ${mediaType})`)
 
       const searchRes  = await fetch(searchUrl)
       const searchData = await searchRes.json()
@@ -118,7 +119,7 @@ export async function POST(_req: Request, { params }: Params) {
     }
 
     // ── MUSIC → SPOTIFY ───────────────────────────────────
-    if (rec.category === 'music') {
+    if (rec.category === 'listen') {
       const clientId     = process.env.SPOTIFY_CLIENT_ID
       const clientSecret = process.env.SPOTIFY_CLIENT_SECRET
 
