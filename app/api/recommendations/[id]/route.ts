@@ -26,6 +26,7 @@ export async function PATCH(request: Request, { params }: Params) {
     if (body.title       !== undefined) payload.title       = body.title.trim()
     if (body.source_name !== undefined) payload.source_name = body.source_name.trim()
     if (body.source_type !== undefined) payload.source_type = body.source_type
+    if ((body as Record<string,unknown>).category !== undefined) payload.category = (body as Record<string,unknown>).category
     if (body.notes       !== undefined) payload.notes       = body.notes.trim() || null
     if (body.status      !== undefined) payload.status      = body.status
     if (body.reaction    !== undefined) payload.reaction    = body.reaction
