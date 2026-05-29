@@ -1,7 +1,8 @@
 // constants/categories.ts
 // 6 experience-based categories — design spec locked.
-// Every color, gradient, nudge, verb, and empty state lives here.
-// Components never hardcode category data.
+// Color system: Albers/Itten. Each category has a vivid color family.
+// The vividColor is full saturation — no compromises.
+// The gradient starts at 100% vivid and dissolves to matte black.
 
 import type { Category } from '@/lib/types'
 
@@ -12,13 +13,13 @@ export type CategoryConfig = {
   label: string
   verb: string
   verbPast: string
-  vividColor: string   // pure hex — for borders, glows, badges
-  vividRgb: string     // "r,g,b" — for rgba() in gradient strings
-  deepDark: string     // info zone bg — deepest dark of this color family
+  vividColor: string   // pure hex — full saturation, no alpha
+  vividRgb: string     // "r,g,b" — for rgba() construction
+  deepDark: string     // card info zone background — same hue family, near-black
   emptyHeadline: string
   emptyBody: string
   emptyCta: string
-  nudges: string[]     // subcategory pills shown on tile when empty
+  nudges: string[]     // max 3 — subcategory pills on tile
   statusOptions: string[]
 }
 
@@ -28,8 +29,8 @@ export const CATEGORIES: CategoryConfig[] = [
     label: 'Watch',
     verb: 'I watched',
     verbPast: 'watched',
-    vividColor: '#3C82FF',
-    vividRgb: '60,130,255',
+    vividColor: '#4A8FFF',   // cobalt — saturated, readable on dark
+    vividRgb: '74,143,255',
     deepDark: '#030810',
     emptyHeadline: 'Films worth watching',
     emptyBody: 'Every film someone swears by — saved here, ready for the next free evening.',
@@ -42,13 +43,13 @@ export const CATEGORIES: CategoryConfig[] = [
     label: 'Listen',
     verb: 'I listened to',
     verbPast: 'listened to',
-    vividColor: '#DC3C82',
-    vividRgb: '220,60,130',
+    vividColor: '#E8449A',   // rani pink — vivid magenta, unmistakable
+    vividRgb: '232,68,154',
     deepDark: '#090206',
     emptyHeadline: 'Music worth remembering',
-    emptyBody: 'That album someone played in the car. The artist from the podcast. Save them here.',
+    emptyBody: 'That album someone played in the car. The artist from the podcast.',
     emptyCta: 'Save something to listen to',
-    nudges: ['Album', 'Song', 'Podcast', 'Artist'],
+    nudges: ['Album', 'Song', 'Podcast'],
     statusOptions: ['saved', 'experienced', 'dismissed'],
   },
   {
@@ -56,8 +57,8 @@ export const CATEGORIES: CategoryConfig[] = [
     label: 'Read',
     verb: 'I read',
     verbPast: 'read',
-    vividColor: '#F09114',
-    vividRgb: '240,145,20',
+    vividColor: '#F59B1E',   // saffron — warm amber, the most Indian color
+    vividRgb: '245,155,30',
     deepDark: '#080401',
     emptyHeadline: 'Books you will actually read',
     emptyBody: 'Every book that sounds exactly right — saved here until you are ready.',
@@ -70,13 +71,13 @@ export const CATEGORIES: CategoryConfig[] = [
     label: 'Dine',
     verb: 'I went to',
     verbPast: 'went to',
-    vividColor: '#DA5526',
-    vividRgb: '218,85,38',
+    vividColor: '#E05C2A',   // terracotta — warm, earthy, appetizing
+    vividRgb: '224,92,42',
     deepDark: '#090300',
     emptyHeadline: 'The next great meal is waiting',
     emptyBody: 'When someone says you have to try this place, save it here in seconds.',
     emptyCta: 'Save a place',
-    nudges: ['Restaurant', 'Bar', 'Café', 'Street food'],
+    nudges: ['Restaurant', 'Bar', 'Café'],
     statusOptions: ['saved', 'experienced', 'dismissed'],
   },
   {
@@ -84,8 +85,8 @@ export const CATEGORIES: CategoryConfig[] = [
     label: 'Do',
     verb: 'I did',
     verbPast: 'did',
-    vividColor: '#10C3B6',
-    vividRgb: '16,195,182',
+    vividColor: '#12CEC0',   // jaipur teal — clear, energetic, outdoors
+    vividRgb: '18,206,192',
     deepDark: '#010e0d',
     emptyHeadline: 'Things worth doing',
     emptyBody: 'The hike, the class, the experience someone keeps telling you about.',
@@ -98,13 +99,13 @@ export const CATEGORIES: CategoryConfig[] = [
     label: 'Visit',
     verb: 'I visited',
     verbPast: 'visited',
-    vividColor: '#1991E1',
-    vividRgb: '25,145,225',
+    vividColor: '#1E9FEB',   // cerulean — considered, cultural, Mughal blue
+    vividRgb: '30,159,235',
     deepDark: '#010810',
     emptyHeadline: 'Things worth witnessing',
     emptyBody: 'The exhibition, the concert, the performance someone says you would love.',
     emptyCta: 'Save something to visit',
-    nudges: ['Exhibition', 'Concert', 'Theatre', 'Gallery'],
+    nudges: ['Exhibition', 'Concert', 'Theatre'],
     statusOptions: ['saved', 'experienced', 'dismissed'],
   },
 ]
@@ -119,27 +120,32 @@ export function getCategoryConfig(id: CategoryId): CategoryConfig {
   return CATEGORY_MAP[id]
 }
 
-// Tile gradient — vivid left wash dissolving right to matte black
-// Used on dashboard tiles
+// Tile gradient — vivid floods left, dissolves right to matte black
+// Left edge: full opacity. Vivid holds to 55% before dissolving.
 export function getTileGradient(id: CategoryId): string {
   const c = CATEGORY_MAP[id]
-  return `linear-gradient(100deg, rgba(${c.vividRgb},0.90) 0%, rgba(${c.vividRgb},0.28) 42%, rgba(17,17,17,0.98) 100%)`
+  return `linear-gradient(105deg,
+    rgba(${c.vividRgb},1.0)  0%,
+    rgba(${c.vividRgb},0.80) 30%,
+    rgba(${c.vividRgb},0.35) 55%,
+    rgba(${c.vividRgb},0.08) 75%,
+    rgba(17,17,17,1)          100%)`
 }
 
 // Card image zone gradient — Criterion mode (no poster)
-// Albers: warm bloom from top-left, dissolves to deepDark
+// WKW radial bloom from top-left corner, dissolves to deepDark
 export function getCardGradient(id: CategoryId): string {
   const c = CATEGORY_MAP[id]
   return [
-    `radial-gradient(ellipse at 32% 22%, rgba(${c.vividRgb},0.75) 0%, transparent 45%)`,
-    `radial-gradient(ellipse at 70% 65%, rgba(${c.vividRgb},0.45) 0%, transparent 42%)`,
-    `radial-gradient(ellipse at 50% 90%, rgba(${c.vividRgb},0.30) 0%, transparent 35%)`,
-    `linear-gradient(148deg, ${c.deepDark} 0%, #111111 100%)`,
+    `radial-gradient(ellipse at 28% 20%, rgba(${c.vividRgb},0.80) 0%, transparent 48%)`,
+    `radial-gradient(ellipse at 72% 65%, rgba(${c.vividRgb},0.50) 0%, transparent 44%)`,
+    `radial-gradient(ellipse at 50% 95%, rgba(${c.vividRgb},0.35) 0%, transparent 38%)`,
+    `linear-gradient(150deg, ${c.deepDark} 0%, #111111 100%)`,
   ].join(', ')
 }
 
-// Vignette — dissolves to deepDark for seamless image→info transition
-// The shared color family is what makes the transition organic, not a hard edge
+// Vignette — dissolves from poster/gradient to deepDark
+// Shared hue family = no hard edge, organic transition
 export function getCardVignette(id: CategoryId): string {
   const c = CATEGORY_MAP[id]
   const d = c.deepDark
@@ -149,9 +155,10 @@ export function getCardVignette(id: CategoryId): string {
   return [
     `linear-gradient(to top,`,
     `${d} 0%,`,
-    `rgba(${r},${g},${b},0.92) 22%,`,
-    `rgba(${r},${g},${b},0.60) 48%,`,
-    `rgba(${r},${g},${b},0.15) 75%,`,
+    `rgba(${r},${g},${b},0.95) 18%,`,
+    `rgba(${r},${g},${b},0.75) 40%,`,
+    `rgba(${r},${g},${b},0.30) 65%,`,
+    `rgba(${r},${g},${b},0.05) 85%,`,
     `transparent 100%)`,
   ].join(' ')
 }
