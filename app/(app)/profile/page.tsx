@@ -92,23 +92,28 @@ export default async function ProfilePage() {
       <header style={{ padding:'28px 20px 0', textAlign:'center' }}>
         {avatar ? (
           <img src={avatar} alt={name} style={{
-            width:'68px', height:'68px', borderRadius:'50%',
-            border:'1.5px solid rgba(31,206,148,0.28)',
+            width:'72px', height:'72px', borderRadius:'50%',
+            border:'1.5px solid rgba(31,206,148,0.32)',
             margin:'0 auto 14px', display:'block', objectFit:'cover',
           }} />
         ) : (
+          // Neon initial — no external color dependencies
           <div style={{
-            width:'68px', height:'68px', borderRadius:'50%',
-            border:'1.5px solid rgba(31,206,148,0.18)',
-            background:'rgba(31,206,148,0.05)',
+            width:'72px', height:'72px', borderRadius:'50%',
+            border:'1.5px solid rgba(31,206,148,0.55)',
+            background:'#0d1810',
             margin:'0 auto 14px',
             display:'flex', alignItems:'center', justifyContent:'center',
+            boxShadow:'0 0 20px rgba(31,206,148,0.12)',
           }}>
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none"
-              stroke="rgba(31,206,148,0.45)" strokeWidth="1.5" strokeLinecap="round">
-              <circle cx="12" cy="8" r="4"/>
-              <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/>
-            </svg>
+            <span style={{
+              fontFamily:'var(--f-display)', fontStyle:'italic', fontWeight:300,
+              fontSize:'32px', color:'#1fce94',
+              textShadow:'0 0 14px rgba(31,206,148,0.50)',
+              lineHeight:1,
+            }}>
+              {name.charAt(0).toUpperCase()}
+            </span>
           </div>
         )}
 
