@@ -86,6 +86,16 @@ export function RecEditClient({ recommendation: rec }: Props) {
   const [sourceType, setSourceType] = useState<SourceType>(rec.source_type)
   const [sourceName, setSourceName] = useState(rec.source_name)
   const [note,       setNote]       = useState(rec.notes ?? '')
+  const [whatToOrder, setWhatToOrder] = useState(
+    typeof (rec.metadata as Record<string,unknown>).what_to_order === 'string'
+      ? (rec.metadata as Record<string,unknown>).what_to_order as string
+      : ''
+  )
+  const [dates,      setDates]      = useState(
+    typeof (rec.metadata as Record<string,unknown>).dates === 'string'
+      ? (rec.metadata as Record<string,unknown>).dates as string
+      : ''
+  )
   const [saving,     setSaving]     = useState(false)
   const [error,      setError]      = useState<string | null>(null)
 
@@ -108,6 +118,11 @@ export function RecEditClient({ recommendation: rec }: Props) {
           source_type: sourceType,
           source_name: sourceName.trim(),
           notes:       note.trim() || null,
+          metadata: {
+            ...((rec.metadata as Record<string,unknown>) ?? {}),
+            ...(category === 'dine' && whatToOrder.trim() ? { what_to_order: whatToOrder.trim() } : {}),
+            ...(category === 'visit' && dates.trim() ? { dates: dates.trim() } : {}),
+          },
         }),
       })
       const json = await res.json()
@@ -261,6 +276,40 @@ export function RecEditClient({ recommendation: rec }: Props) {
               onBlur={e => { e.target.style.borderColor = 'rgba(255,255,255,0.08)' }}
             />
           </div>
+
+          {/* Dine — what to order */}
+          {category === 'dine' && (
+            <div>
+              <label style={labelStyle}>What to order <span style={{ color: 'rgba(255,255,255,0.20)', fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>optional</span></label>
+              <input
+                type="text"
+                value={whatToOrder}
+                onChange={e => setWhatToOrder(e.target.value)}
+                maxLength={300}
+                placeholder="The dish, the drink, the thing everyone orders"
+                style={inputStyle}
+                onFocus={e => { e.target.style.borderColor = `rgba(${selectedCat?.vividRgb ?? '255,255,255'},0.42)` }}
+                onBlur={e => { e.target.style.borderColor = 'rgba(255,255,255,0.08)' }}
+              />
+            </div>
+          )}
+
+          {/* Visit — closing dates */}
+          {category === 'visit' && (
+            <div>
+              <label style={labelStyle}>Dates <span style={{ color: 'rgba(255,255,255,0.20)', fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>optional</span></label>
+              <input
+                type="text"
+                value={dates}
+                onChange={e => setDates(e.target.value)}
+                maxLength={100}
+                placeholder="Until 15 Jun · Closes 12 June 2026"
+                style={inputStyle}
+                onFocus={e => { e.target.style.borderColor = `rgba(${selectedCat?.vividRgb ?? '255,255,255'},0.42)` }}
+                onBlur={e => { e.target.style.borderColor = 'rgba(255,255,255,0.08)' }}
+              />
+            </div>
+          )}
 
           {/* Note */}
           <div>
