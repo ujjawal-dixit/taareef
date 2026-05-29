@@ -60,61 +60,140 @@ function Rangoli({ rgb }: { rgb: string }) {
   )
 }
 
-// Build category-specific meta line from enrichment metadata
+// Build category-specific meta line from enrichment metadata.
+// Stacked view: scanning mode — only what earns its place.
+// Each case reflects the confirmed information layer decisions.
 function buildMetaLine(category: Category, meta: Record<string, unknown>): string {
   const parts: string[] = []
+
   switch (category) {
+
+    // ── WATCH ─────────────────────────────────────────────────────
+    // Film: Director · Genre · Year · Runtime
+    // Series: Created by · Status (Ongoing/Completed) · Seasons
+    // Documentary: Director · Subject · Year
     case 'watch': {
+      const subtype  = typeof meta.subtype === 'string' ? meta.subtype : null
       const director = typeof meta.director === 'string' ? meta.director : null
-      const genre = Array.isArray(meta.genres) ? (meta.genres as string[])[0]
+      const creator  = typeof meta.created_by === 'string' ? meta.created_by : null
+      const genre = Array.isArray(meta.genres)
+        ? (meta.genres as string[])[0]
         : typeof meta.genres === 'string' ? meta.genres : null
-      const year = meta.release_year ?? meta.year
+      const year    = meta.release_year ?? meta.year
       const runtime = meta.runtime_minutes ? `${meta.runtime_minutes} min` : null
-      if (director) parts.push(director)
-      if (genre) parts.push(String(genre))
-      if (year) parts.push(String(year))
-      if (runtime) parts.push(runtime)
+      const status  = typeof meta.series_status === 'string' ? meta.series_status : null
+      const seasons = meta.seasons ? `${meta.seasons} seasons` : null
+
+      if (subtype === 'series') {
+        if (creator) parts.push(creator)
+        if (status)  parts.push(status)
+        if (seasons) parts.push(seasons)
+      } else {
+        // film or documentary
+        if (director) parts.push(director)
+        if (genre)    parts.push(String(genre))
+        if (year)     parts.push(String(year))
+        if (runtime)  parts.push(runtime)
+      }
       break
     }
+
+    // ── LISTEN ────────────────────────────────────────────────────
+    // Album: Artist · Year
+    // Song: Artist · Album
+    // Podcast: Host
+    // Artist: Genre
     case 'listen': {
-      const artist = typeof meta.artist === 'string' ? meta.artist : null
-      const genre = typeof meta.genre === 'string' ? meta.genre : null
-      const year = meta.release_year ?? meta.year
-      if (artist) parts.push(artist)
-      if (genre) parts.push(genre)
-      if (year) parts.push(String(year))
+      const subtype = typeof meta.subtype === 'string' ? meta.subtype : null
+      const artist  = typeof meta.artist === 'string' ? meta.artist : null
+      const host    = typeof meta.host === 'string' ? meta.host : null
+      const genre   = typeof meta.genre === 'string' ? meta.genre : null
+      const year    = meta.release_year ?? meta.year
+      const album   = typeof meta.album === 'string' ? meta.album : null
+
+      if (subtype === 'podcast') {
+        if (host) parts.push(host)
+      } else if (subtype === 'song') {
+        if (artist) parts.push(artist)
+        if (album)  parts.push(album)
+      } else if (subtype === 'artist') {
+        if (genre) parts.push(genre)
+      } else {
+        // album (default)
+        if (artist) parts.push(artist)
+        if (year)   parts.push(String(year))
+      }
       break
     }
+
+    // ── READ ──────────────────────────────────────────────────────
+    // Author · Sub-genre · Year (sub-genre replaces publisher)
     case 'read': {
-      const author = typeof meta.author === 'string' ? meta.author : null
-      const year = meta.year ?? meta.published_year
-      if (author) parts.push(author)
-      if (year) parts.push(String(year))
+      const author    = typeof meta.author === 'string' ? meta.author : null
+      const subgenre  = typeof meta.subgenre === 'string' ? meta.subgenre
+        : typeof meta.genre === 'string' ? meta.genre : null
+      const year      = meta.year ?? meta.published_year
+      if (author)   parts.push(author)
+      if (year)     parts.push(String(year))
+      if (subgenre) parts.push(subgenre)
       break
     }
+
+    // ── DINE ──────────────────────────────────────────────────────
+    // Stacked: Type · City (cuisine removed per confirmed decision)
     case 'dine': {
-      const cuisine = typeof meta.cuisine === 'string' ? meta.cuisine : null
       const type = typeof meta.type === 'string' ? meta.type : null
-      if (cuisine) parts.push(cuisine)
+      const city = typeof meta.city === 'string' ? meta.city
+        : typeof (meta.location as Record<string,unknown>)?.city === 'string'
+          ? (meta.location as Record<string,unknown>).city as string
+          : null
       if (type) parts.push(type)
+      if (city) parts.push(city)
       break
     }
+
+    // ── DO ────────────────────────────────────────────────────────
+    // Location · Difficulty · Distance/Duration
     case 'do': {
+      const location   = typeof meta.city === 'string' ? meta.city
+        : typeof meta.location === 'string' ? meta.location : null
       const difficulty = typeof meta.difficulty === 'string' ? meta.difficulty : null
-      const duration = typeof meta.duration === 'string' ? meta.duration : null
+      const duration   = typeof meta.duration === 'string' ? meta.duration : null
+      if (location)   parts.push(location)
       if (difficulty) parts.push(difficulty)
-      if (duration) parts.push(duration)
+      if (duration)   parts.push(duration)
       break
     }
+
+    // ── VISIT ─────────────────────────────────────────────────────
+    // Venue · City — dates handled separately with urgency logic
     case 'visit': {
       const venue = typeof meta.venue === 'string' ? meta.venue : null
-      const dates = typeof meta.dates === 'string' ? meta.dates : null
+      const city  = typeof meta.city === 'string' ? meta.city : null
       if (venue) parts.push(venue)
-      if (dates) parts.push(dates)
+      if (city)  parts.push(city)
+      // Dates are rendered separately with urgency color — not in plain meta string
       break
     }
   }
+
   return parts.slice(0, 3).join(' · ')
+}
+
+// Compute urgency level for Visit dates.
+// Returns: 'none' | 'info' | 'soon' | 'urgent' | 'closed'
+function getDateUrgency(dateStr: string | null): 'none' | 'info' | 'soon' | 'urgent' | 'closed' {
+  if (!dateStr) return 'none'
+  // Try to extract a closing date — format varies (e.g. "Until 15 Jun", "Closes 12 June 2026", "12 Jun 2026")
+  const cleaned = dateStr.replace(/until|closes|closing|through/gi, '').trim()
+  const parsed  = new Date(cleaned)
+  if (isNaN(parsed.getTime())) return 'info' // date string exists but can't parse — show it dimly
+  const now  = new Date()
+  const days = Math.ceil((parsed.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
+  if (days < 0)  return 'closed'
+  if (days <= 7)  return 'urgent'
+  if (days <= 30) return 'soon'
+  return 'info'
 }
 
 type Props = {
@@ -285,6 +364,24 @@ function CompactRow({ rec, config, metaLine }: {
             {metaLine}
           </div>
         )}
+        {rec.category === 'visit' && (() => {
+          const meta = rec.metadata as Record<string, unknown>
+          const dateStr = typeof meta.dates === 'string' ? meta.dates : null
+          const urgency = getDateUrgency(dateStr)
+          if (!dateStr || urgency === 'none') return null
+          const urgencyStyle: Record<string, React.CSSProperties> = {
+            info:   { color: 'rgba(255,255,255,0.35)' },
+            soon:   { color: `rgba(30,159,235,0.70)` },
+            urgent: { color: `rgba(30,159,235,1.0)`, fontWeight: 600 },
+            closed: { color: 'rgba(255,255,255,0.20)', textDecoration: 'line-through' },
+          }
+          return (
+            <div style={{ fontFamily: 'var(--f-body)', fontSize: '10px', display: 'flex', alignItems: 'center', gap: '4px', ...urgencyStyle[urgency] }}>
+              {urgency === 'urgent' && <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: 'rgba(30,159,235,1)', flexShrink: 0, display: 'inline-block' }} />}
+              {dateStr}
+            </div>
+          )
+        })()}
       </div>
       {/* Reaction dot + chevron */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
