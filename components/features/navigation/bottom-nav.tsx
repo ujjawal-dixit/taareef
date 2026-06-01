@@ -50,6 +50,7 @@ export function BottomNav({ onFabTap }: Props) {
       {isVault && (
         <button
           onClick={onFabTap}
+          data-fab="true"
           aria-label="Save a recommendation"
           style={{
             width:                   '64px',
