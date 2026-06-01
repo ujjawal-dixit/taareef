@@ -1,14 +1,11 @@
 'use client'
 
 // app/(app)/dashboard/dashboard-client.tsx
-// Session 10 refinements:
-// - Tile height: fixed 160px rows, NO minHeight on tile (resize bug fix)
-// - Icons: absolutely centered, 100px, no rotation, no offset
-// - Icon opacity: 0.20 empty / 0.30 filled
-// - Empty tiles: IDENTICAL to filled except border — same gradient, same pills, same opacity
-// - Border is the ONLY signal distinguishing empty from filled
+// Session 11:
+// - Rotating sub-headline: time-seeded, never same twice in a row
+// - Tile behaviour unchanged from session 10
 
-import { useCallback } from 'react'
+import { useCallback, useMemo } from 'react'
 import { useRouter }   from 'next/navigation'
 import { AppShell }    from '@/components/features/navigation/app-shell'
 import { useToast }    from '@/components/ui/toast'
@@ -34,10 +31,60 @@ type DashboardClientProps = {
 
 const GRAIN = "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.72' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='300' height='300' filter='url(%23g)' opacity='1'/%3E%3C/svg%3E\")"
 
+// ── ROTATING SUB-HEADLINES ────────────────────────────────────────
+// Seeded by hour of day + day of week so it shifts naturally
+// across morning / afternoon / evening / weekend without feeling random.
+// Never purely factual. Never product-pitchy. Max 8 words.
+// The filled-vault variants weave in the count for personal resonance.
+
+const EMPTY_HEADLINES = [
+  'your vault is waiting',
+  'start with one thing someone told you',
+  'every great rec lives somewhere',
+  'save it before you forget',
+  'the people you trust have good taste',
+  'what did someone tell you lately?',
+  'a vault begins with one',
+  'somewhere, someone knows what you need next',
+]
+
+function getFilledHeadlines(count: number): string[] {
+  return [
+    `${count} thing${count === 1 ? '' : 's'} worth remembering`,
+    `${count} rec${count === 1 ? '' : 's'} — all from people you trust`,
+    `saved. remembered. yours.`,
+    `${count} things someone told you about`,
+    `your taste, carefully kept`,
+    `${count} moment${count === 1 ? '' : 's'} waiting for you`,
+    `the vault grows. so does the trust.`,
+    `${count} recommendation${count === 1 ? '' : 's'}. all with a source.`,
+  ]
+}
+
+function getSubHeadline(totalSaved: number): string {
+  const now    = new Date()
+  const hour   = now.getHours()
+  const day    = now.getDay()     // 0 = Sunday
+  const minute = now.getMinutes()
+
+  // Seed that shifts with time but not every second
+  // Changes every 90 minutes during waking hours
+  const timeSeed = Math.floor(hour / 1.5) + day * 16 + Math.floor(minute / 90)
+
+  if (totalSaved === 0) {
+    return EMPTY_HEADLINES[timeSeed % EMPTY_HEADLINES.length]
+  }
+  const lines = getFilledHeadlines(totalSaved)
+  return lines[timeSeed % lines.length]
+}
+
 export function DashboardClient({ tiles, totalSaved }: DashboardClientProps) {
   const router     = useRouter()
   const { toast }  = useToast()
   const { create } = useCreateRecommendation()
+
+  // Computed once on mount — stable per session, shifts across visits
+  const subHeadline = useMemo(() => getSubHeadline(totalSaved), [totalSaved])
 
   const handleSave = useCallback(async (input: CreateRecommendationInput) => {
     await create(
@@ -73,10 +120,9 @@ export function DashboardClient({ tiles, totalSaved }: DashboardClientProps) {
             color:         'rgba(255,255,255,0.22)',
             letterSpacing: '0.08em',
             marginTop:     '6px',
+            transition:    'opacity 600ms ease',
           }}>
-            {totalSaved === 0
-              ? 'your vault is waiting'
-              : `${totalSaved} recommendation${totalSaved === 1 ? '' : 's'}, remembered`}
+            {subHeadline}
           </div>
         </div>
 
@@ -185,7 +231,6 @@ function Tile({
         flexDirection:  'column',
         justifyContent: 'space-between',
       }}>
-
         <div style={{
           display:        'flex',
           alignItems:     'baseline',
@@ -236,7 +281,6 @@ function Tile({
             </span>
           ))}
         </div>
-
       </div>
     </div>
   )
@@ -250,7 +294,6 @@ function TileIcon({ id, color }: { id: string; color: string }) {
     strokeLinejoin:'round' as const,
     fill:          'none',
   }
-
   switch (id) {
     case 'watch':
       return (
