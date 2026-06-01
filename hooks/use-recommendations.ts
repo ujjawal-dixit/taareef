@@ -51,7 +51,8 @@ export function useCreateRecommendation() {
       // Trigger background enrichment for categories that benefit from it.
       // Film/TV get TMDB posters. Music gets Spotify artwork.
       // Fire-and-forget — never blocks the UI.
-      const ENRICHABLE = ['film', 'tv', 'music'] as const
+      // Categories that get background enrichment — watch→TMDB, listen→Spotify
+      const ENRICHABLE = ['watch', 'listen'] as const
       if (ENRICHABLE.includes(saved.category as typeof ENRICHABLE[number])) {
         triggerEnrichment(saved.id)
       }
