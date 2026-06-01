@@ -320,28 +320,19 @@ export function RecDetailClient({ recommendation: rec, categoryConfig: cfg }: Pr
   async function handleDelete() {
     setDeleting(true)
     try {
-      // Soft delete — status set to 'deleted', wiped by cron after 7 days
-      const res  = await fetch(`/api/recommendations/${rec.id}`, {
-        method:  'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({
-          status:   'deleted',
-          metadata: {
-            ...((rec.metadata as Record<string,unknown>) ?? {}),
-            deleted_at: new Date().toISOString(),
-          },
-        }),
-      })
+      // Hard delete via DELETE method — immediate, clean
+      const res  = await fetch(`/api/recommendations/${rec.id}`, { method: 'DELETE' })
       const json = await res.json()
       if (json.error) {
         setError(json.error)
         setDeleting(false)
         return
       }
-      // Clear note draft from localStorage on deletion
+      // Clear note draft from localStorage
       try { localStorage.removeItem(`taareef-note-draft-${rec.id}`) } catch {}
-      // Redirect to category list with deleted param for toast
-      router.push(`/dashboard/${rec.category}?deleted=${rec.id}`)
+      // Navigate back to category list
+      router.push(`/dashboard/${rec.category}`)
+      router.refresh()
     } catch {
       setError('Could not delete — try again?')
       setDeleting(false)
@@ -974,7 +965,7 @@ export function RecDetailClient({ recommendation: rec, categoryConfig: cfg }: Pr
 
         {/* Footer */}
         <div style={{
-          marginTop:      '32px',
+          marginTop:      '24px',
           display:        'flex',
           justifyContent: 'space-between',
           fontFamily:     'var(--f-body)',
@@ -989,10 +980,8 @@ export function RecDetailClient({ recommendation: rec, categoryConfig: cfg }: Pr
             {rec.source_type}
           </span>
         </div>
-      </div>
 
-      {/* Delete card — quiet destructive action below all content */}
-      <div style={{ padding: '0 20px 8px' }}>
+        {/* Delete card — inside interaction layer, not floating below */}
         <button
           onClick={() => setShowDelete(true)}
           style={{
@@ -1010,6 +999,7 @@ export function RecDetailClient({ recommendation: rec, categoryConfig: cfg }: Pr
             cursor:                  'pointer',
             transition:              'all 160ms ease',
             WebkitTapHighlightColor: 'transparent',
+            marginTop:               '16px',
           }}
           onMouseEnter={e => {
             (e.currentTarget as HTMLElement).style.background = 'rgba(244,63,94,0.06)'
@@ -1025,6 +1015,8 @@ export function RecDetailClient({ recommendation: rec, categoryConfig: cfg }: Pr
           Delete card
         </button>
       </div>
+
+
 
       {/* Remove experience sheet */}
       {showRemove && (
