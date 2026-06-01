@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
-import type { ApiResponse } from '@/lib/types'
+import { createClient }              from '@/lib/supabase/server'
+import type { ApiResponse }          from '@/lib/types'
+import type { UnderstandResult }     from '../understand/route'
+
+// app/api/capture/audio/route.ts
+// Step 1: Transcribe voice via Groq Whisper (fast, accurate, handles Indian accents)
+// Step 2: Forward transcript to /api/capture/understand for intelligent extraction
+// The understand route handles all LLM logic — this route only does transcription.
 
 export async function POST(request: NextRequest) {
   try {
@@ -12,7 +18,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const formData = await request.formData()
+    const formData  = await request.formData()
     const audioFile = formData.get('audio') as File | null
     if (!audioFile) {
       return NextResponse.json<ApiResponse<null>>(
@@ -27,107 +33,72 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // ── STEP 1: TRANSCRIBE ────────────────────────────────────────
     const whisperForm = new FormData()
     whisperForm.append('file', audioFile, 'audio.webm')
     whisperForm.append('model', 'whisper-large-v3-turbo')
-    whisperForm.append('response_format', 'json')
+    whisperForm.append('response_format', 'verbose_json') // verbose gives us word-level confidence
+    whisperForm.append('language', 'en') // Hint English primary — still handles Hinglish well
 
     const transcribeRes = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
-      method: 'POST',
+      method:  'POST',
       headers: { Authorization: `Bearer ${groqApiKey}` },
-      body: whisperForm,
+      body:    whisperForm,
     })
 
     if (!transcribeRes.ok) {
       console.error('[audio/transcribe]', await transcribeRes.text())
       return NextResponse.json<ApiResponse<null>>(
-        { data: null, error: 'Could not transcribe audio — please try again' }, { status: 503 }
+        { data: null, error: "Couldn't hear that clearly — please try again" }, { status: 503 }
       )
     }
 
-    const { text: transcript } = await transcribeRes.json()
+    const transcribeData = await transcribeRes.json()
+    const transcript     = transcribeData.text as string | undefined
+
     if (!transcript || transcript.trim() === '') {
       return NextResponse.json<ApiResponse<null>>(
-        { data: null, error: "Couldn't catch that — please try again" }, { status: 400 }
+        { data: null, error: "We didn't catch anything — please try again" }, { status: 400 }
       )
     }
 
-    const extractRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${groqApiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'llama-3.3-70b-versatile',
-        max_tokens: 500,
-        messages: [
-          {
-            role: 'system',
-            content: `You extract recommendation data from spoken text.
-Return ONLY valid JSON, no prose, no markdown.
+    console.log(`[audio] transcript="${transcript.slice(0, 80)}…"`)
 
-Valid categories: watch, listen, read, eat, drink, go, do, see
-- watch: films, TV shows, series
-- listen: music, albums, podcasts
-- read: books
-- eat: restaurants, food places
-- drink: bars, cafes for drinks, wine bars
-- go: cities, countries, travel destinations
-- do: activities, experiences, adventures, hikes
-- visit: exhibitions, galleries, concerts, plays, theatre, performances
+    // ── STEP 2: UNDERSTAND ────────────────────────────────────────
+    // Forward to understand route with full auth cookie context
+    const understandRes = await fetch(
+      `${process.env.NEXT_PUBLIC_APP_URL}/api/capture/understand`,
+      {
+        method:  'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          // Forward the auth cookie so the understand route can verify the user
+          Cookie: request.headers.get('cookie') ?? '',
+        },
+        body: JSON.stringify({
+          input:      transcript,
+          input_type: 'voice',
+        }),
+      }
+    )
 
-For dine category, also extract if visible:
-  "what_to_order": the specific dish, drink, or item mentioned (string or null)
-For visit category, also extract if visible:
-  "dates": closing date or run dates e.g. "Until 15 Jun" or "12–28 June 2026" (string or null)
+    const understandJson: ApiResponse<UnderstandResult> = await understandRes.json()
 
-Valid source types: friend, family, colleague, instagram, twitter, youtube, article, newsletter, podcast, self
-
-JSON shape:
-{
-  "title": string or null,
-  "category": one of the valid categories or null,
-  "source_type": one of the valid source types or null,
-  "source_name": string or null,
-  "notes": string (max 100 chars) or null,
-  "confidence": "high" | "medium" | "low"
-}`,
-          },
-          {
-            role: 'user',
-            content: `Extract the recommendation from this spoken text:\n\n"${transcript}"`,
-          },
-        ],
-      }),
-    })
-
-    if (!extractRes.ok) {
-      console.error('[audio/extract]', await extractRes.text())
+    if (!understandRes.ok || understandJson.error || !understandJson.data) {
       return NextResponse.json<ApiResponse<null>>(
-        { data: null, error: 'Could not process audio — please try again' }, { status: 503 }
+        { data: null, error: understandJson.error ?? 'Could not process audio — please try again' },
+        { status: 503 }
       )
     }
 
-    const extractJson = await extractRes.json()
-    const rawContent = extractJson.choices?.[0]?.message?.content ?? ''
-
-    let extracted: Record<string, unknown>
-    try {
-      extracted = JSON.parse(rawContent.replace(/```json|```/g, '').trim())
-    } catch {
-      console.error('[audio/parse]', rawContent)
-      return NextResponse.json<ApiResponse<null>>(
-        { data: null, error: 'Could not understand the recommendation — please try again' }, { status: 422 }
-      )
-    }
-
-    return NextResponse.json<ApiResponse<Record<string, unknown>>>({
-      data: { ...extracted, transcript },
+    // Attach the raw transcript so the capture screen can show it to the user
+    return NextResponse.json<ApiResponse<UnderstandResult & { transcript: string }>>({
+      data:  { ...understandJson.data, transcript },
       error: null,
     })
+
   } catch (err) {
-    console.error('[POST /api/capture/audio] unexpected', err)
+    console.error('[POST /api/capture/audio] unexpected:', err)
     return NextResponse.json<ApiResponse<null>>(
       { data: null, error: 'Something went wrong — please try again' }, { status: 500 }
     )
