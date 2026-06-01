@@ -1,26 +1,22 @@
 'use client'
 
 // components/features/capture/capture-screen.tsx
-//
-// All three capture methods wired and functional:
-//   jot    → manual form (V1, live)
-//   audio  → Groq Whisper → pre-filled card (live with GROQ_API_KEY)
-//   ocr    → Groq Vision  → pre-filled card (live with GROQ_API_KEY)
-//
-// Flow for audio + ocr:
-//   record/upload → processing → pre-filled confirmation card →
-//   user edits if needed → save
-//
-// Back button personality:
-//   close (choose screen) → cream X, 44px target, visible
-//   ← options (from any sub-screen) → cream 70%
-//   ← retake (from confirmation) → cream 60%
+// Session 9 redesign:
+// - ChooseMethod → bottom sheet with speak / scan / type (one word each)
+// - Warli-derived icons for each method (circles, lines, triangles only)
+// - Sheet slides up, drag handle at top, swipe to dismiss
+// - Dashboard dimmed behind the sheet
+// - Full-width neon pill back navigation on sub-screens
+// - Progressive disclosure on JotForm: basic fields first, "Add more detail" expands
+// - Category-responsive canvas: radial gradient shifts to category color on selection
+// - Rotating category-aware micro-prompts on note field
+// - SAVE IT always neon — alive from start
 
 import { useState, useEffect, useRef } from 'react'
 import type { CreateRecommendationInput, Category, SourceType } from '@/lib/types'
 import { CATEGORIES } from '@/constants/categories'
 
-type Method  = 'choose' | 'jot' | 'audio' | 'ocr'
+type Method  = 'choose' | 'speak' | 'scan' | 'type'
 type Stage   = 'input' | 'processing' | 'confirm'
 
 type Prefill = {
@@ -38,6 +34,32 @@ type Props = {
   onSaved: (input: CreateRecommendationInput) => Promise<void>
 }
 
+// ── SHARED STYLES ─────────────────────────────────────────────────
+
+const NEON_PILL: React.CSSProperties = {
+  display:                 'flex',
+  alignItems:              'center',
+  justifyContent:          'center',
+  gap:                     '8px',
+  height:                  '50px',
+  borderRadius:            '14px',
+  border:                  '1px solid rgba(31,206,148,0.38)',
+  background:              'rgba(31,206,148,0.06)',
+  fontFamily:              'var(--f-ui)',
+  fontSize:                '13px',
+  fontWeight:              700,
+  letterSpacing:           '0.08em',
+  textTransform:           'uppercase' as const,
+  color:                   '#1fce94',
+  textDecoration:          'none',
+  textShadow:              '0 0 12px rgba(31,206,148,0.45)',
+  boxShadow:               '0 0 24px rgba(31,206,148,0.08)',
+  WebkitTapHighlightColor: 'transparent',
+  cursor:                  'pointer',
+  transition:              'background 160ms ease',
+  width:                   '100%',
+}
+
 export function CaptureScreen({ isOpen, onClose, onSaved }: Props) {
   const [method,  setMethod]  = useState<Method>('choose')
   const [stage,   setStage]   = useState<Stage>('input')
@@ -46,9 +68,7 @@ export function CaptureScreen({ isOpen, onClose, onSaved }: Props) {
   const [error,   setError]   = useState<string | null>(null)
 
   useEffect(() => {
-    if (isOpen) {
-      document.body.style.overflow = 'hidden'
-    } else {
+    if (!isOpen) {
       document.body.style.overflow = ''
       const t = setTimeout(() => {
         setMethod('choose'); setStage('input')
@@ -84,56 +104,158 @@ export function CaptureScreen({ isOpen, onClose, onSaved }: Props) {
     setStage('confirm')
   }
 
+  // ChooseMethod = bottom sheet on top of dashboard
+  if (method === 'choose') {
+    return (
+      <>
+        {/* Backdrop — dims dashboard behind sheet */}
+        <div
+          onClick={onClose}
+          style={{
+            position:      'fixed',
+            inset:         0,
+            background:    'rgba(0,0,0,0.72)',
+            zIndex:        390,
+            opacity:       isOpen ? 1 : 0,
+            pointerEvents: isOpen ? 'auto' : 'none',
+            transition:    'opacity 220ms ease',
+          }}
+        />
+        {/* Bottom sheet */}
+        <div
+          style={{
+            position:      'fixed',
+            bottom:        0,
+            left:          0,
+            right:         0,
+            zIndex:        400,
+            transform:     isOpen ? 'translateY(0)' : 'translateY(100%)',
+            transition:    'transform 300ms cubic-bezier(0.16,1,0.3,1)',
+          }}
+        >
+          <div style={{
+            maxWidth:      '430px',
+            margin:        '0 auto',
+            background:    '#141414',
+            borderRadius:  '22px 22px 0 0',
+            border:        '1px solid rgba(255,255,255,0.07)',
+            borderBottom:  'none',
+            paddingBottom: 'env(safe-area-inset-bottom, 24px)',
+          }}>
+            {/* Drag handle */}
+            <div style={{
+              display:       'flex',
+              justifyContent:'center',
+              padding:       '14px 0 8px',
+            }}>
+              <div style={{
+                width:        '36px',
+                height:       '4px',
+                borderRadius: '2px',
+                background:   'rgba(255,255,255,0.18)',
+              }} />
+            </div>
+
+            {/* Three options — horizontal row, large Warli icons */}
+            <div style={{
+              display:        'flex',
+              justifyContent: 'space-around',
+              alignItems:     'center',
+              padding:        '20px 24px 32px',
+              gap:            '8px',
+            }}>
+              <MethodOption
+                icon={<WarlMicIcon />}
+                label="speak"
+                color="rgba(200,21,30,0.90)"
+                glow="rgba(200,21,30,0.30)"
+                onClick={() => setMethod('speak')}
+              />
+              <MethodOption
+                icon={<WarliCameraIcon />}
+                label="scan"
+                color="rgba(60,130,255,0.90)"
+                glow="rgba(60,130,255,0.30)"
+                onClick={() => setMethod('scan')}
+              />
+              <MethodOption
+                icon={<WarliPenIcon />}
+                label="type"
+                color="rgba(16,195,182,0.90)"
+                glow="rgba(16,195,182,0.30)"
+                onClick={() => setMethod('type')}
+              />
+            </div>
+          </div>
+        </div>
+      </>
+    )
+  }
+
+  // Sub-screens: full-screen, slide up
   return (
     <div
-      role="dialog" aria-modal="true" aria-label="Save a recommendation"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Save a recommendation"
       style={{
-        position:      'fixed', inset: 0,
-        background:    '#06100a',
+        position:      'fixed',
+        inset:         0,
         zIndex:        400,
-        display:       'flex', flexDirection: 'column',
+        display:       'flex',
+        flexDirection: 'column',
         overflowY:     'auto',
         opacity:       isOpen ? 1 : 0,
         pointerEvents: isOpen ? 'auto' : 'none',
-        transform:     isOpen ? 'translateY(0)' : 'translateY(12px)',
+        transform:     isOpen ? 'translateY(0)' : 'translateY(16px)',
         transition:    'opacity 240ms ease, transform 240ms cubic-bezier(0.16,1,0.3,1)',
       }}
     >
       <div style={{
-        width: '100%', maxWidth: '430px', margin: '0 auto',
-        flex: 1, display: 'flex', flexDirection: 'column', paddingBottom: '48px',
+        width:      '100%',
+        maxWidth:   '430px',
+        margin:     '0 auto',
+        flex:       1,
+        display:    'flex',
+        flexDirection:'column',
+        paddingBottom:'48px',
       }}>
 
-        {method === 'choose' && (
-          <ChooseMethod onSelect={setMethod} onClose={onClose} />
-        )}
-
-        {method === 'jot' && (
+        {method === 'type' && stage === 'input' && (
           <JotForm
-            onSave={handleSave} onBack={goBack}
-            saving={saving} error={error}
+            onSave={handleSave}
+            onBack={goBack}
+            saving={saving}
+            error={error}
           />
         )}
 
-        {method === 'audio' && stage === 'input' && (
+        {method === 'speak' && stage === 'input' && (
           <AudioCapture
-            onExtracted={onExtracted} onBack={goBack}
-            onError={setError} error={error}
+            onExtracted={onExtracted}
+            onBack={goBack}
+            onError={setError}
+            error={error}
           />
         )}
 
-        {method === 'ocr' && stage === 'input' && (
+        {method === 'scan' && stage === 'input' && (
           <OcrCapture
-            onExtracted={onExtracted} onBack={goBack}
-            onError={setError} error={error}
+            onExtracted={onExtracted}
+            onBack={goBack}
+            onError={setError}
+            error={error}
           />
         )}
 
         {stage === 'confirm' && prefill && (
           <ConfirmCard
-            prefill={prefill} method={method}
-            onSave={handleSave} onBack={goBack}
-            saving={saving} error={error}
+            prefill={prefill}
+            method={method}
+            onSave={handleSave}
+            onBack={goBack}
+            saving={saving}
+            error={error}
           />
         )}
 
@@ -142,192 +264,135 @@ export function CaptureScreen({ isOpen, onClose, onSaved }: Props) {
   )
 }
 
-// ── CHOOSE METHOD ─────────────────────────────────────────────────
+// ── METHOD OPTION ─────────────────────────────────────────────────
 
-function ChooseMethod({ onSelect, onClose }: {
-  onSelect: (m: Method) => void
-  onClose:  () => void
-}) {
-  return (
-    <>
-      <div style={{ padding: '52px 22px 20px', position: 'relative' }}>
-        <h1 style={{
-          fontFamily: 'var(--f-display)',
-          fontWeight: 400, fontStyle: 'italic',
-          fontSize: '30px', letterSpacing: '-0.01em',
-          color: 'rgba(240,230,200,0.95)', lineHeight: 1.1,
-          maxWidth: 'calc(100% - 52px)', margin: 0,
-        }}>
-          save a<br />recommendation
-        </h1>
-        <p style={{
-          fontFamily: 'var(--f-body)',
-          fontSize: '12px', color: 'rgba(240,230,200,0.35)',
-          letterSpacing: '0.03em', marginTop: '6px',
-        }}>
-          How did it arrive?
-        </p>
-
-        <button
-          onClick={onClose} aria-label="Close"
-          style={{
-            position:               'absolute', top: '48px', right: '18px',
-            width:                  '44px', height: '44px',
-            borderRadius:           '50%',
-            background:             'rgba(240,230,200,0.08)',
-            border:                 '0.5px solid rgba(240,230,200,0.16)',
-            display:                'flex', alignItems: 'center', justifyContent: 'center',
-            cursor:                 'pointer',
-            color:                  'rgba(240,230,200,0.80)',
-            WebkitTapHighlightColor:'transparent',
-            transition:             'background 160ms ease',
-          }}
-        >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
-            stroke="currentColor" strokeWidth="2.0" strokeLinecap="round">
-            <line x1="18" y1="6" x2="6" y2="18"/>
-            <line x1="6"  y1="6" x2="18" y2="18"/>
-          </svg>
-        </button>
-      </div>
-
-      <div style={{ padding: '4px 16px 24px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-        <Option
-          grad="linear-gradient(148deg,#2e0206 0%,#5c0b10 44%,#880e16 100%)"
-          shadow="0 12px 40px rgba(136,14,22,0.36)"
-          icon={<MicIcon />} label="speak it"
-          desc="Say what was recommended and who told you"
-          onClick={() => onSelect('audio')}
-        />
-        <Option
-          grad="linear-gradient(148deg,#02091a 0%,#0b1a4a 44%,#102068 100%)"
-          shadow="0 12px 40px rgba(16,32,104,0.36)"
-          icon={<CameraIcon />} label="share a screenshot"
-          desc="Upload and we'll read it for you"
-          onClick={() => onSelect('ocr')}
-        />
-        <Option
-          grad="linear-gradient(148deg,#010e06 0%,#053618 44%,#094e24 100%)"
-          shadow="0 12px 40px rgba(9,78,36,0.36)"
-          icon={<PenIcon />} label="jot it down"
-          desc="Tell us what it is and who recommended it"
-          onClick={() => onSelect('jot')}
-        />
-      </div>
-    </>
-  )
-}
-
-// ── OPTION CARD ───────────────────────────────────────────────────
-
-function Option({ grad, shadow, icon, label, desc, onClick }: {
-  grad:    string
-  shadow:  string
+function MethodOption({ icon, label, color, glow, onClick }: {
   icon:    React.ReactNode
   label:   string
-  desc:    string
+  color:   string
+  glow:    string
   onClick: () => void
 }) {
-  return (
-    <div
-      role="button" tabIndex={0}
-      onClick={onClick}
-      onKeyDown={e => { if (e.key === 'Enter') onClick() }}
-      style={{
-        borderRadius: '18px', padding: '20px',
-        display: 'flex', alignItems: 'center', gap: '16px',
-        cursor: 'pointer',
-        background: grad, boxShadow: shadow,
-        border: '1px solid rgba(240,230,200,0.06)',
-        WebkitTapHighlightColor: 'transparent',
-        transition: 'transform 140ms ease',
-      }}
-    >
-      <div style={{
-        width: '40px', height: '40px', flexShrink: 0,
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-      }}>
-        {icon}
-      </div>
-      <div>
-        <div style={{
-          fontFamily: 'var(--f-display)',
-          fontWeight: 400, fontStyle: 'italic',
-          fontSize: '20px', color: 'rgba(240,230,200,0.92)',
-          lineHeight: 1.1, marginBottom: '4px',
-        }}>
-          {label}
-        </div>
-        <div style={{
-          fontFamily: 'var(--f-body)',
-          fontSize: '12px', color: 'rgba(240,230,200,0.42)',
-          lineHeight: 1.4,
-        }}>
-          {desc}
-        </div>
-      </div>
-    </div>
-  )
-}
-
-// ── SCREEN HEADER ─────────────────────────────────────────────────
-
-function ScreenHeader({ title, subtitle, onBack, backLabel }: {
-  title:     string
-  subtitle?: string
-  onBack:    () => void
-  backLabel: string
-}) {
-  return (
-    <div style={{ padding: '48px 22px 20px', position: 'relative' }}>
-      <BackBtn label={backLabel} onClick={onBack} />
-      <h1 style={{
-        fontFamily: 'var(--f-display)',
-        fontWeight: 400, fontStyle: 'italic',
-        fontSize: '30px', letterSpacing: '-0.01em',
-        color: 'rgba(240,230,200,0.95)', lineHeight: 1.1,
-        margin: '8px 0 0',
-      }}>
-        {title}
-      </h1>
-      {subtitle && (
-        <p style={{
-          fontFamily: 'var(--f-body)',
-          fontSize: '12px', color: 'rgba(240,230,200,0.35)',
-          letterSpacing: '0.02em', marginTop: '5px',
-        }}>
-          {subtitle}
-        </p>
-      )}
-    </div>
-  )
-}
-
-// ── BACK BUTTON ───────────────────────────────────────────────────
-
-function BackBtn({ label, onClick }: { label: string; onClick: () => void }) {
   return (
     <button
       onClick={onClick}
       style={{
-        display: 'flex', alignItems: 'center', gap: '5px',
-        color: 'rgba(240,230,200,0.85)', fontFamily: 'var(--f-body)',
-        fontSize: '12px', fontWeight: 500, letterSpacing: '0.04em',
-        background: 'none', border: 'none', cursor: 'pointer',
-        padding: 0, minHeight: '44px',
+        display:                 'flex',
+        flexDirection:           'column',
+        alignItems:              'center',
+        gap:                     '14px',
+        background:              'none',
+        border:                  'none',
+        cursor:                  'pointer',
+        padding:                 '12px 20px',
+        borderRadius:            '16px',
         WebkitTapHighlightColor: 'transparent',
+        transition:              'background 140ms ease',
+        flex:                    1,
       }}
+      onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.04)' }}
+      onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'none' }}
     >
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
-        stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
-        <polyline points="15 18 9 12 15 6"/>
-      </svg>
-      {label}
+      {/* Icon with glow */}
+      <div style={{
+        width:        '64px',
+        height:       '64px',
+        display:      'flex',
+        alignItems:   'center',
+        justifyContent:'center',
+        filter:       `drop-shadow(0 0 12px ${glow})`,
+      }}>
+        {icon}
+      </div>
+      {/* One-word label */}
+      <div style={{
+        fontFamily:    'var(--f-ui)',
+        fontWeight:    700,
+        fontSize:      '11px',
+        letterSpacing: '2px',
+        textTransform: 'uppercase',
+        color:         color,
+      }}>
+        {label}
+      </div>
     </button>
   )
 }
 
-// ── JOT FORM ─────────────────────────────────────────────────────
+// ── SCREEN SHELL ──────────────────────────────────────────────────
+// Provides: category-responsive canvas background + back pill + heading
+
+function ScreenShell({ title, subtitle, onBack, selectedCategory, children }: {
+  title:            string
+  subtitle?:        string
+  onBack:           () => void
+  selectedCategory: Category | null
+  children:         React.ReactNode
+}) {
+  // Find vividRgb for selected category
+  const catCfg = selectedCategory
+    ? CATEGORIES.find(c => c.id === selectedCategory)
+    : null
+  const rgb = catCfg?.vividRgb ?? null
+
+  const bgStyle: React.CSSProperties = {
+    minHeight:   '100dvh',
+    background:  '#0e0e0e',
+    position:    'relative',
+    // Category-responsive subtle radial glow at top center
+    backgroundImage: rgb
+      ? `radial-gradient(ellipse at 50% 0%, rgba(${rgb},0.08) 0%, transparent 55%)`
+      : 'radial-gradient(ellipse at 50% 0%, rgba(31,206,148,0.05) 0%, transparent 55%)',
+    transition:  'background-image 400ms ease',
+  }
+
+  return (
+    <div style={bgStyle}>
+      {/* Back pill */}
+      <div style={{ padding: '52px 16px 0' }}>
+        <button onClick={onBack} style={NEON_PILL as React.CSSProperties}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+            stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+            <polyline points="15 18 9 12 15 6"/>
+          </svg>
+          options
+        </button>
+      </div>
+
+      {/* Heading */}
+      <div style={{ padding: '24px 20px 0' }}>
+        <h1 style={{
+          fontFamily:    'var(--f-display)',
+          fontWeight:    400,
+          fontStyle:     'italic',
+          fontSize:      '30px',
+          letterSpacing: '-0.01em',
+          color:         'rgba(240,230,200,0.95)',
+          lineHeight:    1.1,
+          margin:        0,
+        }}>
+          {title}
+        </h1>
+        {subtitle && (
+          <p style={{
+            fontFamily:  'var(--f-body)',
+            fontSize:    '12px',
+            color:       'rgba(240,230,200,0.35)',
+            marginTop:   '5px',
+          }}>
+            {subtitle}
+          </p>
+        )}
+      </div>
+
+      {children}
+    </div>
+  )
+}
+
+// ── JOT FORM (type) ───────────────────────────────────────────────
+// Progressive disclosure: basic (title + source) shown first.
+// "Add more detail →" expands category + note.
 
 function JotForm({ onSave, onBack, saving, error }: {
   onSave:  (i: CreateRecommendationInput) => Promise<void>
@@ -339,105 +404,211 @@ function JotForm({ onSave, onBack, saving, error }: {
   const [category,   setCategory]   = useState<Category | null>(null)
   const [sourceName, setSourceName] = useState('')
   const [notes,      setNotes]      = useState('')
+  const [expanded,   setExpanded]   = useState(false)
+  const [promptIdx,  setPromptIdx]  = useState(0)
   const titleRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => { setTimeout(() => titleRef.current?.focus(), 160) }, [])
 
-  const canSave = title.trim().length > 0 && category !== null
+  // Rotate prompt every 4 seconds when no note typed
+  useEffect(() => {
+    if (notes.length > 0) return
+    const catCfg = category ? CATEGORIES.find(c => c.id === category) : null
+    const prompts = catCfg?.notePlaceholders ?? [
+      'Watch it knowing nothing…',
+      'What made you save this?',
+      'Who told you, and why?',
+    ]
+    const interval = setInterval(() => {
+      setPromptIdx(i => (i + 1) % prompts.length)
+    }, 4000)
+    return () => clearInterval(interval)
+  }, [notes, category])
+
+  const canSave = title.trim().length > 0
+
+  const catCfg       = category ? CATEGORIES.find(c => c.id === category) : null
+  const prompts      = catCfg?.notePlaceholders ?? ['What made you save this?', 'One thing to remember…']
+  const notePlaceholder = prompts[promptIdx % prompts.length]
 
   const fieldStyle: React.CSSProperties = {
-    width: '100%', background: 'rgba(240,230,200,0.04)',
-    border: '1px solid rgba(240,230,200,0.11)', borderRadius: '10px',
-    padding: '13px 14px',
-    fontFamily: 'var(--f-body)',
-    fontSize: '15px', fontWeight: 400, color: 'rgba(240,230,200,0.95)',
-    outline: 'none', transition: 'border-color 160ms ease', caretColor: '#1fce94',
+    width:        '100%',
+    background:   'rgba(240,230,200,0.04)',
+    border:       '1px solid rgba(240,230,200,0.11)',
+    borderRadius: '10px',
+    padding:      '13px 14px',
+    fontFamily:   'var(--f-body)',
+    fontSize:     '15px',
+    fontWeight:   400,
+    color:        'rgba(240,230,200,0.95)',
+    outline:      'none',
+    transition:   'border-color 160ms ease',
+    caretColor:   '#1fce94',
+    boxSizing:    'border-box',
   }
+
   const labelStyle: React.CSSProperties = {
-    fontFamily: 'var(--f-body)',
-    fontSize: '10px', fontWeight: 600, letterSpacing: '0.10em',
-    textTransform: 'uppercase', color: 'rgba(240,230,200,0.38)',
-    display: 'block', marginBottom: '7px',
+    fontFamily:    'var(--f-ui)',
+    fontSize:      '9px',
+    fontWeight:    700,
+    letterSpacing: '0.10em',
+    textTransform: 'uppercase',
+    color:         'rgba(240,230,200,0.38)',
+    display:       'block',
+    marginBottom:  '7px',
+  }
+
+  function doSave() {
+    onSave({
+      title:       title.trim(),
+      category:    category ?? ('watch' as Category), // fallback if expanded not used
+      source_type: 'friend' as SourceType,
+      source_name: sourceName.trim() || 'Someone',
+      notes:       notes.trim() || undefined,
+    })
   }
 
   return (
-    <>
-      <ScreenHeader
-        title="jot it down"
-        subtitle="What was recommended, and who told you?"
-        onBack={onBack} backLabel="← options"
-      />
-      <div style={{ padding: '0 16px 32px', display: 'flex', flexDirection: 'column', gap: '22px' }}>
+    <ScreenShell
+      title="type it."
+      subtitle="What was recommended, and who told you?"
+      onBack={onBack}
+      selectedCategory={category}
+    >
+      <div style={{ padding: '24px 16px 32px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
 
+        {/* WHAT IS IT — always shown */}
         <div>
           <label htmlFor="jot-title" style={labelStyle}>What is it?</label>
           <input
-            id="jot-title" ref={titleRef} type="text"
-            value={title} onChange={e => setTitle(e.target.value)}
-            onKeyDown={e => {
-              if (e.key === 'Enter' && canSave) onSave({
-                title: title.trim(), category: category!,
-                source_type: 'friend', source_name: sourceName.trim() || 'Someone',
-                notes: notes.trim() || undefined,
-              })
-            }}
-            placeholder="Film title, restaurant name, book..." style={fieldStyle}
-            autoComplete="off" autoCorrect="off" spellCheck={false}
+            id="jot-title"
+            ref={titleRef}
+            type="text"
+            value={title}
+            onChange={e => setTitle(e.target.value)}
+            placeholder="Film title, restaurant name, book…"
+            style={fieldStyle}
+            autoComplete="off"
+            autoCorrect="off"
+            spellCheck={false}
+            onFocus={e => { e.target.style.borderColor = 'rgba(31,206,148,0.50)' }}
+            onBlur={e => { e.target.style.borderColor = 'rgba(240,230,200,0.11)' }}
           />
         </div>
 
-        <div>
-          <label style={labelStyle}>What kind?</label>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '6px' }}>
-            {CATEGORIES.map(cat => {
-              const sel = category === cat.id
-              return (
-                <button key={cat.id} type="button"
-                  onClick={() => setCategory(cat.id as Category)}
-                  aria-pressed={sel}
-                  style={{
-                    padding: '9px 4px', borderRadius: '8px',
-                    border: `1px solid ${sel ? cat.vividColor : 'rgba(240,230,200,0.09)'}`,
-                    background: sel ? `${cat.vividColor}1a` : 'rgba(240,230,200,0.025)',
-                    fontFamily: 'var(--f-ui)',
-                    fontSize: '8px', fontWeight: 700, letterSpacing: '0.06em',
-                    textTransform: 'uppercase',
-                    color: sel ? cat.vividColor : 'rgba(240,230,200,0.52)',
-                    cursor: 'pointer', transition: 'all 160ms ease',
-                    boxShadow: sel ? `inset 0 2px 0 ${cat.vividColor}` : 'none',
-                    WebkitTapHighlightColor: 'transparent',
-                  }}
-                >
-                  {cat.label}
-                </button>
-              )
-            })}
-          </div>
-        </div>
-
+        {/* WHO TOLD YOU — always shown */}
         <div>
           <label htmlFor="jot-source" style={labelStyle}>Who told you about it?</label>
           <input
-            id="jot-source" type="text" value={sourceName}
+            id="jot-source"
+            type="text"
+            value={sourceName}
             onChange={e => setSourceName(e.target.value)}
-            placeholder="Arjun, that newsletter, a friend..."
-            style={fieldStyle} autoComplete="off"
+            placeholder="Arjun, that newsletter, a friend…"
+            style={fieldStyle}
+            autoComplete="off"
+            onFocus={e => { e.target.style.borderColor = 'rgba(31,206,148,0.50)' }}
+            onBlur={e => { e.target.style.borderColor = 'rgba(240,230,200,0.11)' }}
           />
         </div>
 
-        <div>
-          <label htmlFor="jot-note" style={labelStyle}>
-            One thing to remember
-            <span style={{ opacity: 0.5, marginLeft: '6px', fontWeight: 400, fontSize: '10px', textTransform: 'none' }}>
-              optional
-            </span>
-          </label>
-          <textarea
-            id="jot-note" value={notes} onChange={e => setNotes(e.target.value)}
-            placeholder="Watch it knowing nothing..." rows={2} maxLength={500}
-            style={{ ...fieldStyle, resize: 'none', lineHeight: 1.55 }}
-          />
-        </div>
+        {/* Progressive disclosure toggle */}
+        {!expanded && (
+          <button
+            onClick={() => setExpanded(true)}
+            style={{
+              background:              'none',
+              border:                  'none',
+              cursor:                  'pointer',
+              padding:                 '4px 0',
+              display:                 'flex',
+              alignItems:              'center',
+              gap:                     '6px',
+              fontFamily:              'var(--f-body)',
+              fontSize:                '12px',
+              fontWeight:              400,
+              color:                   'rgba(240,230,200,0.38)',
+              WebkitTapHighlightColor: 'transparent',
+              alignSelf:               'flex-start',
+            }}
+          >
+            Add more detail
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+              <polyline points="9 18 15 12 9 6"/>
+            </svg>
+          </button>
+        )}
+
+        {/* Expanded fields */}
+        {expanded && (
+          <>
+            {/* WHAT KIND */}
+            <div>
+              <label style={labelStyle}>What kind?</label>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '6px' }}>
+                {CATEGORIES.map(cat => {
+                  const sel = category === cat.id
+                  return (
+                    <button
+                      key={cat.id}
+                      type="button"
+                      onClick={() => { setCategory(cat.id as Category); setPromptIdx(0) }}
+                      aria-pressed={sel}
+                      style={{
+                        padding:                 '11px 4px',
+                        borderRadius:            '9px',
+                        border:                  `1px solid ${sel ? cat.vividColor : 'rgba(240,230,200,0.09)'}`,
+                        background:              sel ? `${cat.vividColor}1a` : 'rgba(240,230,200,0.025)',
+                        fontFamily:              'var(--f-ui)',
+                        fontSize:                '9px',
+                        fontWeight:              700,
+                        letterSpacing:           '0.06em',
+                        textTransform:           'uppercase',
+                        color:                   sel ? cat.vividColor : 'rgba(240,230,200,0.52)',
+                        cursor:                  'pointer',
+                        transition:              'all 160ms ease',
+                        boxShadow:               sel ? `0 0 12px rgba(${cat.vividRgb},0.28)` : 'none',
+                        WebkitTapHighlightColor: 'transparent',
+                      }}
+                    >
+                      {cat.label}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+
+            {/* ONE THING TO REMEMBER */}
+            <div>
+              <label htmlFor="jot-note" style={labelStyle}>
+                One thing to remember
+                <span style={{ opacity: 0.5, marginLeft: '6px', fontWeight: 400, fontSize: '9px', textTransform: 'none' }}>
+                  optional
+                </span>
+              </label>
+              <textarea
+                id="jot-note"
+                value={notes}
+                onChange={e => setNotes(e.target.value)}
+                placeholder={notePlaceholder}
+                rows={2}
+                maxLength={500}
+                style={{
+                  ...fieldStyle,
+                  resize:     'none',
+                  lineHeight: 1.55,
+                  fontStyle:  notes.length === 0 ? 'italic' : 'normal',
+                }}
+                onFocus={e => { e.target.style.borderColor = category
+                  ? `rgba(${CATEGORIES.find(c => c.id === category)?.vividRgb},0.45)`
+                  : 'rgba(31,206,148,0.50)'
+                }}
+                onBlur={e => { e.target.style.borderColor = 'rgba(240,230,200,0.11)' }}
+              />
+            </div>
+          </>
+        )}
 
         {error && (
           <p role="alert" style={{ fontFamily: 'var(--f-body)', fontSize: '13px', color: '#c8151e', textAlign: 'center' }}>
@@ -445,17 +616,10 @@ function JotForm({ onSave, onBack, saving, error }: {
           </p>
         )}
 
-        <SaveButton
-          canSave={canSave} saving={saving}
-          onSave={() => onSave({
-            title: title.trim(), category: category!,
-            source_type: 'friend' as SourceType,
-            source_name: sourceName.trim() || 'Someone',
-            notes: notes.trim() || undefined,
-          })}
-        />
+        <SaveButton canSave={canSave} saving={saving} onSave={doSave} />
+
       </div>
-    </>
+    </ScreenShell>
   )
 }
 
@@ -481,16 +645,12 @@ function AudioCapture({ onExtracted, onBack, onError, error }: {
         const mr = new MediaRecorder(stream)
         mediaRef.current = mr
         mr.ondataavailable = e => { if (e.data.size > 0) chunksRef.current.push(e.data) }
-        mr.onstop = () => {
-          stream.getTracks().forEach(t => t.stop())
-          processAudio()
-        }
+        mr.onstop = () => { stream.getTracks().forEach(t => t.stop()); processAudio() }
         mr.start()
-        setRecording(true)
-        setSeconds(0)
+        setRecording(true); setSeconds(0)
         timerRef.current = setInterval(() => setSeconds(s => s + 1), 1000)
       })
-      .catch(() => onError('Microphone access denied — please allow it in your browser settings'))
+      .catch(() => onError('Microphone access denied — allow it in your browser settings'))
   }
 
   function stopRecording() {
@@ -522,35 +682,43 @@ function AudioCapture({ onExtracted, onBack, onError, error }: {
   const fmt = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
 
   return (
-    <>
-      <ScreenHeader
-        title="speak it"
-        subtitle="Say what was recommended and who told you"
-        onBack={onBack} backLabel="← options"
-      />
-
+    <ScreenShell
+      title="speak it"
+      subtitle="Say what was recommended and who told you"
+      onBack={onBack}
+      selectedCategory={null}
+    >
       <div style={{
-        padding: '0 16px', display: 'flex', flexDirection: 'column',
-        alignItems: 'center', justifyContent: 'center',
-        gap: '28px', flex: 1, minHeight: 'calc(100dvh - 220px)',
+        padding:        '0 16px',
+        display:        'flex',
+        flexDirection:  'column',
+        alignItems:     'center',
+        justifyContent: 'center',
+        gap:            '28px',
+        flex:           1,
+        minHeight:      'calc(100dvh - 240px)',
       }}>
         <button
           onClick={recording ? stopRecording : startRecording}
           disabled={processing}
           aria-label={recording ? 'Stop recording' : 'Start recording'}
           style={{
-            width: '96px', height: '96px', borderRadius: '50%',
-            background: recording
+            width:                   '96px',
+            height:                  '96px',
+            borderRadius:            '50%',
+            background:              recording
               ? 'radial-gradient(circle at 38% 32%, #8e0c12 0%, #5c0b10 60%, #300208 100%)'
               : 'radial-gradient(circle at 38% 32%, #0a2018 0%, #071510 100%)',
-            border: `2px solid ${recording ? '#c8151e' : 'rgba(31,206,148,0.40)'}`,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            cursor: processing ? 'not-allowed' : 'pointer',
-            transition: 'all 220ms ease',
-            boxShadow: recording
+            border:                  `2px solid ${recording ? '#c8151e' : 'rgba(31,206,148,0.40)'}`,
+            display:                 'flex',
+            alignItems:              'center',
+            justifyContent:          'center',
+            cursor:                  processing ? 'not-allowed' : 'pointer',
+            transition:              'all 220ms ease',
+            boxShadow:               recording
               ? '0 0 0 8px rgba(200,21,30,0.10), 0 8px 32px rgba(200,21,30,0.40)'
               : '0 0 0 0 transparent, 0 6px 24px rgba(31,206,148,0.25)',
-            animation: recording ? 'recordPulse 1.2s ease-in-out infinite' : 'none',
+            animation:               recording ? 'recordPulse 1.2s ease-in-out infinite' : 'none',
             WebkitTapHighlightColor: 'transparent',
           }}
         >
@@ -564,27 +732,19 @@ function AudioCapture({ onExtracted, onBack, onError, error }: {
           ) : recording ? (
             <div style={{ width: '20px', height: '20px', borderRadius: '3px', background: '#c8151e' }} />
           ) : (
-            <MicIcon />
+            <WarlMicIcon large />
           )}
         </button>
 
-        <p style={{
-          fontFamily: 'var(--f-body)',
-          fontSize: '13px', color: 'rgba(240,230,200,0.45)',
-          textAlign: 'center', lineHeight: 1.5,
-        }}>
-          {processing  ? 'Reading your voice...' :
-           recording   ? `Recording — tap to stop ${fmt(seconds)}` :
+        <p style={{ fontFamily: 'var(--f-body)', fontSize: '13px', color: 'rgba(240,230,200,0.45)', textAlign: 'center', lineHeight: 1.5 }}>
+          {processing ? 'Reading your voice…' :
+           recording  ? `Recording — tap to stop ${fmt(seconds)}` :
            'Tap to start. Speak naturally.'}
         </p>
 
         {recording && (
-          <p style={{
-            fontFamily: 'var(--f-display)',
-            fontStyle: 'italic', fontSize: '15px',
-            color: 'rgba(240,230,200,0.38)', textAlign: 'center',
-          }}>
-            "Rohit told me about this place in Bandra..."
+          <p style={{ fontFamily: 'var(--f-display)', fontStyle: 'italic', fontSize: '15px', color: 'rgba(240,230,200,0.38)', textAlign: 'center' }}>
+            &ldquo;Rohit told me about this place in Bandra…&rdquo;
           </p>
         )}
 
@@ -594,7 +754,6 @@ function AudioCapture({ onExtracted, onBack, onError, error }: {
           </p>
         )}
       </div>
-
       <style>{`
         @keyframes recordPulse {
           0%,100% { box-shadow: 0 0 0 8px rgba(200,21,30,0.10), 0 8px 32px rgba(200,21,30,0.40); }
@@ -602,7 +761,7 @@ function AudioCapture({ onExtracted, onBack, onError, error }: {
         }
         @keyframes spin { to { transform: rotate(360deg); } }
       `}</style>
-    </>
+    </ScreenShell>
   )
 }
 
@@ -619,10 +778,7 @@ function OcrCapture({ onExtracted, onBack, onError, error }: {
   const inputRef = useRef<HTMLInputElement>(null)
 
   async function handleFile(file: File) {
-    if (!file.type.startsWith('image/')) {
-      onError('Please upload an image file')
-      return
-    }
+    if (!file.type.startsWith('image/')) { onError('Please upload an image file'); return }
     setPreview(URL.createObjectURL(file))
     setProcessing(true)
     try {
@@ -643,30 +799,40 @@ function OcrCapture({ onExtracted, onBack, onError, error }: {
   }
 
   return (
-    <>
-      <ScreenHeader
-        title="share a screenshot"
-        subtitle="Upload and we'll read it for you"
-        onBack={onBack} backLabel="← options"
-      />
-
+    <ScreenShell
+      title="scan it"
+      subtitle="Upload a screenshot and we'll read it"
+      onBack={onBack}
+      selectedCategory={null}
+    >
       <div style={{
-        padding: '0 16px', display: 'flex', flexDirection: 'column',
-        alignItems: 'center', justifyContent: 'center',
-        gap: '20px', flex: 1, minHeight: 'calc(100dvh - 220px)',
+        padding:        '0 16px',
+        display:        'flex',
+        flexDirection:  'column',
+        alignItems:     'center',
+        justifyContent: 'center',
+        gap:            '20px',
+        flex:           1,
+        minHeight:      'calc(100dvh - 240px)',
       }}>
         <div
           onClick={() => !processing && inputRef.current?.click()}
           style={{
-            width: '100%', maxWidth: '320px',
-            border: '1px dashed rgba(240,230,200,0.20)',
-            borderRadius: '18px', padding: '40px 24px',
-            display: 'flex', flexDirection: 'column',
-            alignItems: 'center', justifyContent: 'center', gap: '14px',
-            cursor: processing ? 'not-allowed' : 'pointer',
-            background: preview ? 'transparent' : 'rgba(240,230,200,0.02)',
-            position: 'relative', overflow: 'hidden',
-            transition: 'border-color 160ms ease',
+            width:           '100%',
+            maxWidth:        '320px',
+            border:          '1px dashed rgba(240,230,200,0.20)',
+            borderRadius:    '18px',
+            padding:         '40px 24px',
+            display:         'flex',
+            flexDirection:   'column',
+            alignItems:      'center',
+            justifyContent:  'center',
+            gap:             '14px',
+            cursor:          processing ? 'not-allowed' : 'pointer',
+            background:      preview ? 'transparent' : 'rgba(240,230,200,0.02)',
+            position:        'relative',
+            overflow:        'hidden',
+            transition:      'border-color 160ms ease',
           }}
         >
           {preview ? (
@@ -676,14 +842,14 @@ function OcrCapture({ onExtracted, onBack, onError, error }: {
               opacity: processing ? 0.5 : 1,
             }} />
           ) : (
-            <CameraIcon />
+            <WarliCameraIcon large />
           )}
 
           {processing && (
             <div style={{
               position: 'absolute', inset: 0,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              background: 'rgba(6,16,10,0.7)', borderRadius: '18px',
+              background: 'rgba(14,14,14,0.7)', borderRadius: '18px',
             }}>
               <div style={{
                 width: '28px', height: '28px', borderRadius: '50%',
@@ -696,10 +862,7 @@ function OcrCapture({ onExtracted, onBack, onError, error }: {
 
           {!preview && (
             <div style={{ textAlign: 'center' }}>
-              <div style={{
-                fontFamily: 'var(--f-body)', fontSize: '14px',
-                color: 'rgba(240,230,200,0.65)', marginBottom: '4px',
-              }}>
+              <div style={{ fontFamily: 'var(--f-body)', fontSize: '14px', color: 'rgba(240,230,200,0.65)', marginBottom: '4px' }}>
                 Tap to upload a screenshot
               </div>
               <div style={{ fontFamily: 'var(--f-body)', fontSize: '11px', color: 'rgba(240,230,200,0.30)' }}>
@@ -710,7 +873,9 @@ function OcrCapture({ onExtracted, onBack, onError, error }: {
         </div>
 
         <input
-          ref={inputRef} type="file" accept="image/*"
+          ref={inputRef}
+          type="file"
+          accept="image/*"
           style={{ display: 'none' }}
           onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f) }}
         />
@@ -720,10 +885,9 @@ function OcrCapture({ onExtracted, onBack, onError, error }: {
             {error}
           </p>
         )}
-
         <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
       </div>
-    </>
+    </ScreenShell>
   )
 }
 
@@ -741,68 +905,92 @@ function ConfirmCard({ prefill, method, onSave, onBack, saving, error }: {
   const [category,   setCategory]   = useState<Category | null>(prefill.category)
   const [sourceName, setSourceName] = useState(prefill.source_name ?? '')
   const [notes,      setNotes]      = useState(prefill.notes ?? '')
+  const [promptIdx,  setPromptIdx]  = useState(0)
 
   const canSave = title.trim().length > 0 && category !== null
 
+  useEffect(() => {
+    if (notes.length > 0) return
+    const catCfg = category ? CATEGORIES.find(c => c.id === category) : null
+    const prompts = catCfg?.notePlaceholders ?? ['What made you save this?']
+    const interval = setInterval(() => {
+      setPromptIdx(i => (i + 1) % prompts.length)
+    }, 4000)
+    return () => clearInterval(interval)
+  }, [notes, category])
+
+  const catCfg      = category ? CATEGORIES.find(c => c.id === category) : null
+  const prompts     = catCfg?.notePlaceholders ?? ['What made you save this?']
+  const notePlaceholder = prompts[promptIdx % prompts.length]
+
   const fieldStyle: React.CSSProperties = {
-    width: '100%', background: 'rgba(240,230,200,0.04)',
-    border: '1px solid rgba(240,230,200,0.11)', borderRadius: '10px',
-    padding: '13px 14px',
-    fontFamily: 'var(--f-body)',
-    fontSize: '15px', color: 'rgba(240,230,200,0.95)',
-    outline: 'none', caretColor: '#1fce94',
+    width:        '100%',
+    background:   'rgba(240,230,200,0.04)',
+    border:       '1px solid rgba(240,230,200,0.11)',
+    borderRadius: '10px',
+    padding:      '13px 14px',
+    fontFamily:   'var(--f-body)',
+    fontSize:     '15px',
+    color:        'rgba(240,230,200,0.95)',
+    outline:      'none',
+    caretColor:   '#1fce94',
+    boxSizing:    'border-box',
+    transition:   'border-color 160ms ease',
   }
   const labelStyle: React.CSSProperties = {
-    fontFamily: 'var(--f-body)',
-    fontSize: '10px', fontWeight: 600, letterSpacing: '0.10em',
-    textTransform: 'uppercase', color: 'rgba(240,230,200,0.38)',
-    display: 'block', marginBottom: '7px',
+    fontFamily:    'var(--f-ui)',
+    fontSize:      '9px',
+    fontWeight:    700,
+    letterSpacing: '0.10em',
+    textTransform: 'uppercase',
+    color:         'rgba(240,230,200,0.38)',
+    display:       'block',
+    marginBottom:  '7px',
   }
 
-  const backLabel = method === 'audio' ? '← re-record' : '← re-upload'
+  const backLabel = method === 'speak' ? '← re-record' : '← re-upload'
 
   return (
-    <>
-      <div style={{ padding: '48px 22px 16px' }}>
-        <BackBtn label={backLabel} onClick={onBack} />
+    <ScreenShell
+      title="does this look right?"
+      subtitle="Edit anything before saving."
+      onBack={onBack}
+      selectedCategory={category}
+    >
+      <div style={{ padding: '24px 16px 32px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
 
-        <div style={{ marginTop: '10px', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <h1 style={{
-            fontFamily: 'var(--f-display)',
-            fontWeight: 400, fontStyle: 'italic',
-            fontSize: '26px', color: 'rgba(240,230,200,0.95)',
-            letterSpacing: '-0.01em', margin: 0,
+        {prefill.confidence === 'low' && (
+          <div style={{
+            fontFamily: 'var(--f-body)', fontSize: '11px', fontWeight: 500,
+            letterSpacing: '0.06em', textTransform: 'uppercase',
+            color: '#b87820', background: 'rgba(184,120,32,0.12)',
+            border: '0.5px solid rgba(184,120,32,0.25)',
+            padding: '6px 10px', borderRadius: '6px', alignSelf: 'flex-start',
           }}>
-            does this look right?
-          </h1>
-          {prefill.confidence === 'low' && (
-            <span style={{
-              fontFamily: 'var(--f-body)',
-              fontSize: '10px', fontWeight: 600,
-              letterSpacing: '0.08em', textTransform: 'uppercase',
-              color: '#b87820', background: 'rgba(184,120,32,0.12)',
-              border: '0.5px solid rgba(184,120,32,0.25)',
-              padding: '3px 8px', borderRadius: '6px',
-            }}>
-              low confidence
-            </span>
-          )}
-        </div>
-        <p style={{
-          fontFamily: 'var(--f-body)',
-          fontSize: '12px', color: 'rgba(240,230,200,0.35)',
-          letterSpacing: '0.02em',
-        }}>
-          Edit anything before saving.
-        </p>
-      </div>
+            Low confidence — please review
+          </div>
+        )}
 
-      <div style={{ padding: '0 16px 32px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+        {/* Back to options */}
+        <button onClick={onBack} style={{
+          ...NEON_PILL as React.CSSProperties,
+          fontSize: '11px',
+          height: '40px',
+        }}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+            stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+            <polyline points="15 18 9 12 15 6"/>
+          </svg>
+          {backLabel.replace('← ', '')}
+        </button>
 
         <div>
           <label style={labelStyle}>What is it?</label>
           <input type="text" value={title} onChange={e => setTitle(e.target.value)}
-            style={fieldStyle} autoComplete="off" />
+            style={fieldStyle} autoComplete="off"
+            onFocus={e => { e.target.style.borderColor = 'rgba(31,206,148,0.50)' }}
+            onBlur={e => { e.target.style.borderColor = 'rgba(240,230,200,0.11)' }}
+          />
         </div>
 
         <div>
@@ -812,18 +1000,22 @@ function ConfirmCard({ prefill, method, onSave, onBack, saving, error }: {
               const sel = category === cat.id
               return (
                 <button key={cat.id} type="button"
-                  onClick={() => setCategory(cat.id as Category)}
+                  onClick={() => { setCategory(cat.id as Category); setPromptIdx(0) }}
                   aria-pressed={sel}
                   style={{
-                    padding: '9px 4px', borderRadius: '8px',
-                    border: `1px solid ${sel ? cat.vividColor : 'rgba(240,230,200,0.09)'}`,
-                    background: sel ? `${cat.vividColor}1a` : 'rgba(240,230,200,0.025)',
-                    fontFamily: 'var(--f-ui)',
-                    fontSize: '8px', fontWeight: 700, letterSpacing: '0.06em',
-                    textTransform: 'uppercase',
-                    color: sel ? cat.vividColor : 'rgba(240,230,200,0.52)',
-                    cursor: 'pointer', transition: 'all 160ms ease',
-                    boxShadow: sel ? `inset 0 2px 0 ${cat.vividColor}` : 'none',
+                    padding:                 '11px 4px',
+                    borderRadius:            '9px',
+                    border:                  `1px solid ${sel ? cat.vividColor : 'rgba(240,230,200,0.09)'}`,
+                    background:              sel ? `${cat.vividColor}1a` : 'rgba(240,230,200,0.025)',
+                    fontFamily:              'var(--f-ui)',
+                    fontSize:                '9px',
+                    fontWeight:              700,
+                    letterSpacing:           '0.06em',
+                    textTransform:           'uppercase',
+                    color:                   sel ? cat.vividColor : 'rgba(240,230,200,0.52)',
+                    cursor:                  'pointer',
+                    transition:              'all 160ms ease',
+                    boxShadow:               sel ? `0 0 12px rgba(${cat.vividRgb},0.28)` : 'none',
                     WebkitTapHighlightColor: 'transparent',
                   }}
                 >
@@ -837,19 +1029,33 @@ function ConfirmCard({ prefill, method, onSave, onBack, saving, error }: {
         <div>
           <label style={labelStyle}>Who told you about it?</label>
           <input type="text" value={sourceName} onChange={e => setSourceName(e.target.value)}
-            placeholder="Arjun, that newsletter, a friend..." style={fieldStyle} autoComplete="off" />
+            placeholder="Arjun, that newsletter, a friend…" style={fieldStyle} autoComplete="off"
+            onFocus={e => { e.target.style.borderColor = 'rgba(31,206,148,0.50)' }}
+            onBlur={e => { e.target.style.borderColor = 'rgba(240,230,200,0.11)' }}
+          />
         </div>
 
         <div>
           <label style={labelStyle}>
-            Note
-            <span style={{ opacity: 0.5, marginLeft: '6px', fontWeight: 400, fontSize: '10px', textTransform: 'none' }}>
+            One thing to remember
+            <span style={{ opacity: 0.5, marginLeft: '6px', fontWeight: 400, fontSize: '9px', textTransform: 'none' }}>
               optional
             </span>
           </label>
           <textarea value={notes} onChange={e => setNotes(e.target.value)}
             rows={2} maxLength={500}
-            style={{ ...fieldStyle, resize: 'none', lineHeight: 1.55 }}
+            placeholder={notePlaceholder}
+            style={{
+              ...fieldStyle,
+              resize: 'none',
+              lineHeight: 1.55,
+              fontStyle: notes.length === 0 ? 'italic' : 'normal',
+            }}
+            onFocus={e => { e.target.style.borderColor = category
+              ? `rgba(${CATEGORIES.find(c => c.id === category)?.vividRgb},0.45)`
+              : 'rgba(31,206,148,0.50)'
+            }}
+            onBlur={e => { e.target.style.borderColor = 'rgba(240,230,200,0.11)' }}
           />
         </div>
 
@@ -862,14 +1068,15 @@ function ConfirmCard({ prefill, method, onSave, onBack, saving, error }: {
         <SaveButton
           canSave={canSave} saving={saving}
           onSave={() => onSave({
-            title: title.trim(), category: category!,
+            title:       title.trim(),
+            category:    category!,
             source_type: (prefill.source_type ?? 'friend') as SourceType,
             source_name: sourceName.trim() || 'Someone',
-            notes: notes.trim() || undefined,
+            notes:       notes.trim() || undefined,
           })}
         />
       </div>
-    </>
+    </ScreenShell>
   )
 }
 
@@ -882,57 +1089,77 @@ function SaveButton({ canSave, saving, onSave }: {
 }) {
   return (
     <button
-      type="button" onClick={onSave}
-      disabled={!canSave || saving}
+      type="button"
+      onClick={onSave}
+      disabled={saving}
       style={{
-        width: '100%', height: '52px', borderRadius: '12px', border: 'none',
-        background:    canSave && !saving ? '#1fce94' : 'rgba(240,230,200,0.07)',
-        color:         canSave && !saving ? '#080f0a' : 'rgba(240,230,200,0.28)',
-        fontFamily:    'var(--f-ui)',
-        fontSize:      '15px', fontWeight: 700,
-        letterSpacing: '0.08em', textTransform: 'uppercase',
-        cursor:        canSave && !saving ? 'pointer' : 'not-allowed',
-        transition:    'background 200ms ease, color 200ms ease, box-shadow 200ms ease',
+        width:                   '100%',
+        height:                  '52px',
+        borderRadius:            '14px',
+        border:                  'none',
+        // Always neon — alive from the start
+        background:              saving ? 'rgba(31,206,148,0.55)' : '#1fce94',
+        color:                   '#080f0a',
+        fontFamily:              'var(--f-ui)',
+        fontSize:                '15px',
+        fontWeight:              700,
+        letterSpacing:           '0.08em',
+        textTransform:           'uppercase',
+        cursor:                  saving ? 'not-allowed' : 'pointer',
+        transition:              'background 200ms ease, box-shadow 200ms ease',
         WebkitTapHighlightColor: 'transparent',
-        boxShadow:     canSave && !saving ? '0 4px 24px rgba(31,206,148,0.38)' : 'none',
+        boxShadow:               saving ? 'none' : '0 4px 24px rgba(31,206,148,0.38)',
       }}
       aria-busy={saving}
     >
-      {saving ? 'Saving...' : 'Save it'}
+      {saving ? 'Saving…' : 'Save it'}
     </button>
   )
 }
 
-// ── ICONS ─────────────────────────────────────────────────────────
+// ── WARLI ICONS ───────────────────────────────────────────────────
+// Built from circles, lines, triangles only.
+// Glowing in their action color — set by parent via filter drop-shadow.
 
-function MicIcon() {
+function WarlMicIcon({ large }: { large?: boolean }) {
+  const size = large ? 40 : 28
   return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none"
-      stroke="rgba(240,230,200,0.88)" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
-      <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
-      <line x1="12" y1="19" x2="12" y2="23"/>
-      <line x1="8"  y1="23" x2="16" y2="23"/>
+    <svg width={size} height={size} viewBox="0 0 40 40" fill="none">
+      {/* Warli mic: circle head + rectangle body + stand lines */}
+      <circle cx="20" cy="12" r="7" stroke="rgba(200,21,30,0.90)" strokeWidth="2.5"/>
+      <rect x="14" y="12" width="12" height="14" rx="1" stroke="rgba(200,21,30,0.90)" strokeWidth="2.5"/>
+      <path d="M10 22 Q10 32 20 32 Q30 32 30 22" stroke="rgba(200,21,30,0.90)" strokeWidth="2.5" fill="none" strokeLinecap="round"/>
+      <line x1="20" y1="32" x2="20" y2="38" stroke="rgba(200,21,30,0.90)" strokeWidth="2.5" strokeLinecap="round"/>
+      <line x1="14" y1="38" x2="26" y2="38" stroke="rgba(200,21,30,0.90)" strokeWidth="2.5" strokeLinecap="round"/>
     </svg>
   )
 }
 
-function CameraIcon() {
+function WarliCameraIcon({ large }: { large?: boolean }) {
+  const size = large ? 40 : 28
   return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none"
-      stroke="rgba(240,230,200,0.88)" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
-      <circle cx="12" cy="13" r="4"/>
+    <svg width={size} height={size} viewBox="0 0 40 40" fill="none">
+      {/* Warli camera: rect body + circle lens + triangle viewfinder */}
+      <rect x="4" y="12" width="32" height="22" rx="3" stroke="rgba(60,130,255,0.90)" strokeWidth="2.5"/>
+      <circle cx="20" cy="23" r="6" stroke="rgba(60,130,255,0.90)" strokeWidth="2.5"/>
+      <circle cx="20" cy="23" r="2" fill="rgba(60,130,255,0.90)"/>
+      <path d="M14 12 L17 6 L23 6 L26 12" stroke="rgba(60,130,255,0.90)" strokeWidth="2.5" strokeLinejoin="round" fill="none"/>
+      <circle cx="31" cy="17" r="2" fill="rgba(60,130,255,0.90)"/>
     </svg>
   )
 }
 
-function PenIcon() {
+function WarliPenIcon({ large }: { large?: boolean }) {
+  const size = large ? 40 : 28
   return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none"
-      stroke="rgba(240,230,200,0.88)" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M12 20h9"/>
-      <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
+    <svg width={size} height={size} viewBox="0 0 40 40" fill="none">
+      {/* Warli pen: diagonal line + triangle tip + lines for writing */}
+      <line x1="8" y1="32" x2="28" y2="8" stroke="rgba(16,195,182,0.90)" strokeWidth="2.5" strokeLinecap="round"/>
+      <path d="M28 8 L34 6 L32 12 Z" fill="rgba(16,195,182,0.90)"/>
+      <line x1="4" y1="36" x2="10" y2="30" stroke="rgba(16,195,182,0.90)" strokeWidth="2.5" strokeLinecap="round"/>
+      {/* Writing lines */}
+      <line x1="14" y1="30" x2="36" y2="30" stroke="rgba(16,195,182,0.40)" strokeWidth="1.5" strokeLinecap="round"/>
+      <line x1="18" y1="34" x2="36" y2="34" stroke="rgba(16,195,182,0.25)" strokeWidth="1.5" strokeLinecap="round"/>
     </svg>
   )
 }
