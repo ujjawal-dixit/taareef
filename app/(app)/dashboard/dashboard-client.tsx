@@ -1,40 +1,46 @@
 'use client'
 
 // app/(app)/dashboard/dashboard-client.tsx
-// 2×3 mosaic. All 6 categories always visible, filling the screen.
-// Tiles stretch to fill available height — no dead void below.
-// Left vivid wash → matte black. Folk icon ghost top-right.
-// Subcategory nudge pills (max 3) at bottom when empty.
+// Session 9 — full redesign per critique session decisions:
+// - Count shown on ALL tiles (including 0), positioned far right of header row
+// - Title/source removed from filled tiles — count is the only data signal
+// - All 6 tiles always show subcategory pills
+// - Filled tiles: glowing border in category vivid color
+// - Empty tiles: no border, dimmed opacity 0.60 + weaker vivid wash
+// - Ghost folk icon shifted down to avoid count collision
+// - Do icon: exactly 2 triangles (was 3)
+// - Label font 26px (was 22px)
+// - Tile height fills viewport proportionally
 
 import { useCallback } from 'react'
-import { useRouter } from 'next/navigation'
-import { AppShell } from '@/components/features/navigation/app-shell'
-import { useToast } from '@/components/ui/toast'
+import { useRouter }   from 'next/navigation'
+import { AppShell }    from '@/components/features/navigation/app-shell'
+import { useToast }    from '@/components/ui/toast'
 import { useCreateRecommendation } from '@/hooks/use-recommendations'
 import { CATEGORIES, getTileGradient } from '@/constants/categories'
 import type { CategoryConfig } from '@/constants/categories'
 import type { Recommendation, CreateRecommendationInput } from '@/lib/types'
 
 type TileData = {
-  category: CategoryConfig
-  count: number
-  latest: Recommendation | null
+  category:   CategoryConfig
+  count:      number
+  latest:     Recommendation | null
   hasReacted: boolean
 }
 
 type DashboardClientProps = {
-  tiles: TileData[]
+  tiles:      TileData[]
   totalSaved: number
-  userName: string
-  userEmail: string
-  userId: string
+  userName:   string
+  userEmail:  string
+  userId:     string
 }
 
 const GRAIN = "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.72' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='300' height='300' filter='url(%23g)' opacity='1'/%3E%3C/svg%3E\")"
 
 export function DashboardClient({ tiles, totalSaved }: DashboardClientProps) {
-  const router = useRouter()
-  const { toast } = useToast()
+  const router     = useRouter()
+  const { toast }  = useToast()
   const { create } = useCreateRecommendation()
 
   const handleSave = useCallback(async (input: CreateRecommendationInput) => {
@@ -50,36 +56,35 @@ export function DashboardClient({ tiles, totalSaved }: DashboardClientProps) {
 
   return (
     <AppShell onSaveRecommendation={handleSave}>
-      {/* Full-height layout — tiles fill the screen */}
       <div style={{
-        maxWidth: '430px',
-        margin: '0 auto',
-        minHeight: '100dvh',
-        display: 'flex',
+        maxWidth:      '430px',
+        margin:        '0 auto',
+        minHeight:     '100dvh',
+        display:       'flex',
         flexDirection: 'column',
-        padding: '0 0 88px',
+        padding:       '0 0 88px',
       }}>
 
         {/* Wordmark */}
         <div style={{ textAlign: 'center', padding: '44px 0 16px', flexShrink: 0 }}>
           <div style={{
             fontFamily: 'var(--f-display)',
-            fontStyle: 'italic',
+            fontStyle:  'italic',
             fontWeight: 300,
-            fontSize: '50px',
-            color: '#1fce94',
+            fontSize:   '50px',
+            color:      '#1fce94',
             lineHeight: 1,
             textShadow: '0 0 40px rgba(31,206,148,0.45), 0 0 100px rgba(31,206,148,0.18)',
           }}>
             taareef
           </div>
           <div style={{
-            fontFamily: 'var(--f-body)',
-            fontSize: '11px',
-            fontWeight: 300,
-            color: 'rgba(255,255,255,0.22)',
+            fontFamily:    'var(--f-body)',
+            fontSize:      '11px',
+            fontWeight:    300,
+            color:         'rgba(255,255,255,0.22)',
             letterSpacing: '0.08em',
-            marginTop: '6px',
+            marginTop:     '6px',
           }}>
             {totalSaved === 0
               ? 'your vault is waiting'
@@ -87,15 +92,15 @@ export function DashboardClient({ tiles, totalSaved }: DashboardClientProps) {
           </div>
         </div>
 
-        {/* 2×3 grid — flex-grow so tiles fill remaining height */}
+        {/* 2×3 grid — fills remaining height proportionally */}
         <div style={{
-          display: 'grid',
+          display:             'grid',
           gridTemplateColumns: '1fr 1fr',
-          gridTemplateRows: 'repeat(3, 1fr)',
-          gap: '10px',
-          padding: '0 14px',
-          flex: 1,
-          minHeight: 0,
+          gridTemplateRows:    'repeat(3, 1fr)',
+          gap:                 '10px',
+          padding:             '0 14px',
+          flex:                1,
+          minHeight:           0,
         }}>
           {CATEGORIES.map(cat => (
             <Tile
@@ -119,12 +124,35 @@ function Tile({
   filled,
   onClick,
 }: {
-  cat: CategoryConfig
+  cat:    CategoryConfig
   filled: TileData | null
   onClick: () => void
 }) {
-  const count = filled?.count ?? 0
-  const latest = filled?.latest ?? null
+  const count    = filled?.count ?? 0
+  const hasSaves = count > 0
+
+  // Filled tiles: full opacity, glowing vivid border
+  // Empty tiles: 60% opacity, weaker vivid wash, no border
+  const tileStyle: React.CSSProperties = {
+    position:    'relative',
+    borderRadius:'14px',
+    minHeight:   '148px',
+    overflow:    'hidden',
+    cursor:      'pointer',
+    background:  '#161616',
+    opacity:     hasSaves ? 1 : 0.62,
+    // Glowing border only on filled tiles — category vivid color, reference confirmed
+    border:      hasSaves
+      ? `1px solid rgba(${cat.vividRgb},0.70)`
+      : `1px solid rgba(${cat.vividRgb},0.14)`,
+    boxShadow:   hasSaves
+      ? `0 0 0 1px rgba(${cat.vividRgb},0.18), 0 0 18px rgba(${cat.vividRgb},0.28), 0 8px 24px -6px rgba(${cat.vividRgb},0.22)`
+      : `0 8px 24px -6px rgba(${cat.vividRgb},0.10)`,
+    transition:  'transform 130ms ease, opacity 130ms ease',
+    WebkitTapHighlightColor: 'transparent',
+    display:     'flex',
+    flexDirection:'column',
+  }
 
   return (
     <div
@@ -132,125 +160,115 @@ function Tile({
       role="button"
       tabIndex={0}
       onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onClick() }}
-      aria-label={`${cat.label}${count > 0 ? `, ${count} saved` : ''}`}
-      style={{
-        position: 'relative',
-        borderRadius: '14px',
-        minHeight: '148px',
-        overflow: 'hidden',
-        cursor: 'pointer',
-        background: '#161616',
-        border: `1px solid rgba(${cat.vividRgb},0.32)`,
-        boxShadow: `0 8px 24px -6px rgba(${cat.vividRgb},0.22)`,
-        transition: 'transform 130ms ease',
-        WebkitTapHighlightColor: 'transparent',
-        display: 'flex',
-        flexDirection: 'column',
-      }}
+      aria-label={`${cat.label}, ${count} saved`}
+      style={tileStyle}
       onMouseEnter={(e) => { e.currentTarget.style.transform = 'scale(1.015)' }}
       onMouseLeave={(e) => { e.currentTarget.style.transform = 'scale(1)' }}
     >
       {/* Color wash — vivid floods left, dissolves to black */}
+      {/* Filled tiles: vivid floods to 55%. Empty: floods to only 25% */}
       <div style={{
-        position: 'absolute', inset: 0,
-        background: getTileGradient(cat.id),
+        position:   'absolute',
+        inset:      0,
+        background: hasSaves
+          ? getTileGradient(cat.id)
+          : `linear-gradient(100deg, rgba(${cat.vividRgb},0.55) 0%, rgba(${cat.vividRgb},0.14) 38%, rgba(17,17,17,0.98) 100%)`,
         zIndex: 1,
       }} />
 
       {/* Grain texture */}
       <div style={{
-        position: 'absolute', inset: 0, zIndex: 4, pointerEvents: 'none',
+        position:        'absolute',
+        inset:           0,
+        zIndex:          4,
+        pointerEvents:   'none',
         backgroundImage: GRAIN,
-        backgroundSize: '180px 180px',
-        opacity: 0.052,
-        mixBlendMode: 'overlay',
+        backgroundSize:  '180px 180px',
+        opacity:         0.052,
+        mixBlendMode:    'overlay',
       }} />
 
-      {/* Ghost folk icon — top-right, behind text */}
+      {/* Ghost folk icon — shifted down to clear count badge space */}
       <div style={{
-        position: 'absolute', top: '8px', right: '6px',
-        zIndex: 2, opacity: 0.18, pointerEvents: 'none',
-        transform: 'rotate(-3deg)',
-        width: '86px', height: '86px',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        position:      'absolute',
+        top:           '32px',  // was 8px — shifted down to not collide with count
+        right:         '6px',
+        zIndex:        2,
+        opacity:       hasSaves ? 0.18 : 0.12,
+        pointerEvents: 'none',
+        transform:     'rotate(-3deg)',
+        width:         '86px',
+        height:        '86px',
+        display:       'flex',
+        alignItems:    'center',
+        justifyContent:'center',
       }}>
         <TileIcon id={cat.id} color={cat.vividColor} />
       </div>
 
-      {/* Count badge — only when has saves */}
-      {count > 0 && (
-        <div style={{
-          position: 'absolute', top: '11px', right: '11px', zIndex: 5,
-          background: 'rgba(0,0,0,0.30)',
-          backdropFilter: 'blur(8px)',
-          color: 'rgba(255,255,255,0.88)',
-          fontFamily: 'var(--f-ui)', fontWeight: 700, fontSize: '10px',
-          width: '20px', height: '20px', borderRadius: '50%',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          border: '0.5px solid rgba(255,255,255,0.16)',
-        }}>
-          {count > 99 ? '99+' : count}
-        </div>
-      )}
-
       {/* Content */}
       <div style={{
-        position: 'relative', zIndex: 3,
-        padding: '14px 13px 13px',
-        flex: 1,
-        display: 'flex', flexDirection: 'column', justifyContent: 'space-between',
+        position:      'relative',
+        zIndex:        3,
+        padding:       '12px 13px 13px',
+        flex:          1,
+        display:       'flex',
+        flexDirection: 'column',
+        justifyContent:'space-between',
       }}>
-        {/* Category name */}
+
+        {/* Top row: category label + count on opposite end */}
         <div style={{
-          fontFamily: 'var(--f-display)',
-          fontStyle: 'italic', fontWeight: 400,
-          fontSize: '22px', color: 'rgba(255,255,255,0.97)',
-          lineHeight: 1.1,
-          textShadow: `0 1px 12px rgba(0,0,0,0.40)`,
+          display:        'flex',
+          alignItems:     'baseline',
+          justifyContent: 'space-between',
         }}>
-          {cat.label}
+          <div style={{
+            fontFamily: 'var(--f-display)',
+            fontStyle:  'italic',
+            fontWeight: 400,
+            fontSize:   '26px',
+            color:      'rgba(255,255,255,0.97)',
+            lineHeight: 1.1,
+            textShadow: '0 1px 12px rgba(0,0,0,0.40)',
+          }}>
+            {cat.label}
+          </div>
+          {/* Count — always shown, even 0. Far right, opposite end from label */}
+          <div style={{
+            fontFamily:    'var(--f-ui)',
+            fontWeight:    700,
+            fontSize:      '13px',
+            color:         hasSaves ? `rgba(${cat.vividRgb},0.85)` : 'rgba(255,255,255,0.22)',
+            letterSpacing: '0.02em',
+            lineHeight:    1,
+          }}>
+            {count}
+          </div>
         </div>
 
-        {/* Bottom — latest item or subcategory nudges */}
-        <div>
-          {count === 0 ? (
-            // Subcategory nudge pills — max 3, never wrap
-            <div style={{ display: 'flex', gap: '4px', flexWrap: 'nowrap' }}>
-              {cat.nudges.slice(0, 3).map(n => (
-                <span key={n} style={{
-                  fontFamily: 'var(--f-ui)', fontSize: '8px', fontWeight: 700,
-                  letterSpacing: '1px', textTransform: 'uppercase',
-                  color: 'rgba(255,255,255,0.45)',
-                  background: 'rgba(0,0,0,0.20)',
-                  border: '0.5px solid rgba(255,255,255,0.12)',
-                  borderRadius: '4px', padding: '2px 6px', lineHeight: 1.5,
-                  whiteSpace: 'nowrap',
-                }}>
-                  {n}
-                </span>
-              ))}
-            </div>
-          ) : latest ? (
-            // Latest saved item
-            <>
-              <div style={{
-                fontFamily: 'var(--f-display)', fontStyle: 'italic', fontWeight: 400,
-                fontSize: '13px', color: 'rgba(255,255,255,0.88)',
-                whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-                marginBottom: '2px',
-                textShadow: '0 1px 6px rgba(0,0,0,0.40)',
-              }}>
-                {latest.title}
-              </div>
-              <div style={{
-                fontFamily: 'var(--f-body)', fontSize: '10px', fontWeight: 500,
-                color: '#d41020',
-              }}>
-                from {latest.source_name}
-              </div>
-            </>
-          ) : null}
+        {/* Bottom — subcategory pills always shown on all tiles */}
+        <div style={{ display: 'flex', gap: '4px', flexWrap: 'nowrap', marginTop: '8px' }}>
+          {cat.nudges.slice(0, 3).map(n => (
+            <span key={n} style={{
+              fontFamily:    'var(--f-ui)',
+              fontSize:      '10px',
+              fontWeight:    700,
+              letterSpacing: '0.8px',
+              textTransform: 'uppercase',
+              color:         hasSaves ? `rgba(${cat.vividRgb},0.75)` : 'rgba(255,255,255,0.35)',
+              background:    hasSaves ? `rgba(${cat.vividRgb},0.12)` : 'rgba(0,0,0,0.20)',
+              border:        `0.5px solid ${hasSaves ? `rgba(${cat.vividRgb},0.25)` : 'rgba(255,255,255,0.10)'}`,
+              borderRadius:  '5px',
+              padding:       '3px 7px',
+              lineHeight:    1.5,
+              whiteSpace:    'nowrap',
+            }}>
+              {n}
+            </span>
+          ))}
         </div>
+
       </div>
     </div>
   )
@@ -258,14 +276,15 @@ function Tile({
 
 // ── TILE FOLK ICONS ───────────────────────────────────────────────
 // Warli geometric language. Circles, lines, triangles only.
+// Do icon: exactly 2 triangles (front larger, back smaller behind it)
 
 function TileIcon({ id, color }: { id: string; color: string }) {
   const s = {
-    stroke: color,
-    strokeWidth: '5.5' as const,
-    strokeLinecap: 'round' as const,
-    strokeLinejoin: 'round' as const,
-    fill: 'none',
+    stroke:          color,
+    strokeWidth:     '5.5' as const,
+    strokeLinecap:   'round' as const,
+    strokeLinejoin:  'round' as const,
+    fill:            'none',
   }
 
   switch (id) {
@@ -306,12 +325,19 @@ function TileIcon({ id, color }: { id: string; color: string }) {
         </svg>
       )
     case 'do':
+      // Exactly 2 triangles: back (smaller, right) + front (larger, left)
+      // Ground line connects them. No third triangle.
       return (
         <svg viewBox="0 0 100 100" fill="none" width="86" height="86">
-          <path d="M38 88 L68 24 L98 88" stroke={color} strokeWidth="4.5" strokeLinejoin="round" fill="none"/>
-          <path d="M68 24 L58 44 L78 44 Z" fill={color}/>
-          <path d="M2 88 L36 10 L70 88 Z" stroke={color} strokeWidth="5.5" strokeLinejoin="round" fill="none"/>
-          <path d="M36 10 L24 34 L48 34 Z" fill={color}/>
+          {/* Back mountain — smaller, behind */}
+          <path d="M42 88 L70 22 L98 88" stroke={color} strokeWidth="4" strokeLinejoin="round" fill="none" opacity="0.70"/>
+          {/* Back mountain snow cap */}
+          <path d="M70 22 L62 40 L78 40 Z" fill={color} opacity="0.70"/>
+          {/* Front mountain — larger, in front */}
+          <path d="M2 88 L38 12 L74 88 Z" stroke={color} strokeWidth="5.5" strokeLinejoin="round" fill="none"/>
+          {/* Front mountain snow cap */}
+          <path d="M38 12 L28 32 L48 32 Z" fill={color}/>
+          {/* Ground line */}
           <line x1="2" y1="88" x2="98" y2="88" stroke={color} strokeWidth="4" strokeLinecap="round"/>
         </svg>
       )
