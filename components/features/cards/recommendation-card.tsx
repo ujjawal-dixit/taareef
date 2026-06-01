@@ -170,11 +170,12 @@ function getDateUrgency(dateStr: string | null): 'none' | 'info' | 'soon' | 'urg
 type Props = {
   recommendation: Recommendation
   variant?: 'full' | 'compact' | 'grid'
+  categoryConfig?: CategoryConfig  // optional — falls back to CATEGORY_MAP lookup
 }
 
-export function RecommendationCard({ recommendation, variant = 'full' }: Props) {
+export function RecommendationCard({ recommendation, variant = 'full', categoryConfig: propConfig }: Props) {
   const { id, title, category, source_name, image_url, reaction, notes, metadata } = recommendation
-  const config = CATEGORY_MAP[category as Category]
+  const config = propConfig ?? CATEGORY_MAP[category as Category]
   if (!config) return null
 
   const hasImage = hasValidImage(image_url)
@@ -303,7 +304,10 @@ export function RecommendationCard({ recommendation, variant = 'full' }: Props) 
 }
 
 // ── GRID CARD — Watch / Listen 2-col poster grid ──────────────────
-// Letterboxd-style: image dominant, minimal info below
+// Letterboxd-style: image fills a 2:3 ratio zone (film poster ratio).
+// Cards without confirmed posters show Criterion mini — gradient + rangoli.
+// Info zone below is compact — title, source only. Meta is for the detail screen.
+// Reaction dot: category vivid for loved, dimmer for good, quiet for okay.
 
 function GridCard({ rec, config, metaLine, hasImage }: {
   rec:      Recommendation
@@ -311,30 +315,53 @@ function GridCard({ rec, config, metaLine, hasImage }: {
   metaLine: string
   hasImage: boolean
 }) {
+  // Dynamic title sizing — short titles feel large, long ones compress
+  const titleLen  = rec.title.length
+  const titleSize = titleLen <= 12 ? '17px' : titleLen <= 22 ? '15px' : '13px'
+
+  // Reaction dot colors use category vivid for loved, stepping down for others
+  const reactionDot = rec.reaction === 'loved'
+    ? { bg: config.vividColor, glow: `0 0 6px rgba(${config.vividRgb},0.80)` }
+    : rec.reaction === 'good'
+    ? { bg: `rgba(${config.vividRgb},0.55)`, glow: 'none' }
+    : rec.reaction === 'okay'
+    ? { bg: 'rgba(255,255,255,0.22)', glow: 'none' }
+    : null
+
   return (
     <Link href={`/rec/${rec.id}`} style={{ textDecoration: 'none', display: 'block' }}>
       <div style={{
-        borderRadius: '10px',
+        borderRadius: '11px',
         overflow:     'hidden',
         position:     'relative',
         background:   config.deepDark,
-        border:       `1px solid rgba(${config.vividRgb},0.22)`,
-        boxShadow:    `0 8px 24px rgba(0,0,0,0.55)`,
-      }}>
+        // Reaction-aware border — loved cards glow in category color
+        border:       rec.reaction === 'loved'
+          ? `1px solid rgba(${config.vividRgb},0.45)`
+          : `1px solid rgba(${config.vividRgb},0.18)`,
+        boxShadow:    rec.reaction === 'loved'
+          ? `0 0 14px rgba(${config.vividRgb},0.18), 0 8px 24px rgba(0,0,0,0.55)`
+          : '0 8px 24px rgba(0,0,0,0.55)',
+        transition:   'transform 120ms ease',
+        WebkitTapHighlightColor: 'transparent',
+      }}
+      onMouseEnter={e => { (e.currentTarget as HTMLElement).style.transform = 'scale(1.02)' }}
+      onMouseLeave={e => { (e.currentTarget as HTMLElement).style.transform = 'scale(1)' }}
+      >
         {/* Grain */}
         <div style={{
-          position:        'absolute', inset: 0, borderRadius: '10px',
+          position:        'absolute', inset: 0, borderRadius: '11px',
           zIndex:          30, pointerEvents: 'none',
           backgroundImage: GRAIN, backgroundSize: '180px 180px',
           opacity:         0.048, mixBlendMode: 'overlay',
         }} />
 
-        {/* Image zone — 3:4 aspect ratio, cinematic */}
+        {/* Image zone — 2:3 ratio (standard film poster) */}
         <div style={{
-          width:    '100%',
-          paddingTop:'133%',  // 3:4 ratio
-          position: 'relative',
-          overflow: 'hidden',
+          width:      '100%',
+          paddingTop: '150%',   // 2:3 = 150%
+          position:   'relative',
+          overflow:   'hidden',
         }}>
           <div style={{ position: 'absolute', inset: 0 }}>
             {hasImage ? (
@@ -343,64 +370,92 @@ function GridCard({ rec, config, metaLine, hasImage }: {
                 alt={rec.title}
                 fill
                 style={{ objectFit: 'cover' }}
-                sizes="(max-width:480px) 50vw, 215px"
+                sizes="(max-width:480px) 50vw, 200px"
               />
             ) : (
+              // Criterion mini — same language as full card, scaled to grid slot
               <>
                 <div style={{ position: 'absolute', inset: 0, background: getCardGradient(rec.category as Category) }} />
                 <DotGrid rgb={config.vividRgb} />
                 <Rangoli rgb={config.vividRgb} small />
+                {/* Title rendered in image zone for Criterion mode */}
+                <div style={{
+                  position:   'absolute',
+                  bottom:     0,
+                  left:       0,
+                  right:      0,
+                  padding:    '28px 10px 10px',
+                  zIndex:     12,
+                  background: getCardVignette(rec.category as Category),
+                }}>
+                  <div style={{
+                    fontFamily:  'var(--f-display)',
+                    fontStyle:   'italic',
+                    fontWeight:  400,
+                    fontSize:    titleSize,
+                    color:       'rgba(255,255,255,0.95)',
+                    lineHeight:  1.2,
+                    display:     '-webkit-box',
+                    WebkitLineClamp: 3,
+                    WebkitBoxOrient: 'vertical',
+                    overflow:    'hidden',
+                  }}>
+                    {rec.title}
+                  </div>
+                </div>
               </>
             )}
-            {/* Bottom vignette */}
-            <div style={{
-              position:   'absolute', bottom: 0, left: 0, right: 0,
-              height:     '60%', zIndex: 10, pointerEvents: 'none',
-              background: getCardVignette(rec.category as Category),
-            }} />
-            {/* Reaction dot — top right if reacted */}
-            {rec.reaction && (
+
+            {/* Vignette on poster images */}
+            {hasImage && (
               <div style={{
-                position:     'absolute', top: '8px', right: '8px', zIndex: 15,
-                width:        '8px', height: '8px', borderRadius: '50%',
-                background:   rec.reaction === 'loved' ? '#f43f5e'
-                  : rec.reaction === 'good' ? '#10b981'
-                  : rec.reaction === 'okay' ? '#f59e0b'
-                  : 'rgba(255,255,255,0.30)',
-                boxShadow:    rec.reaction === 'loved' ? '0 0 6px rgba(244,63,94,0.70)'
-                  : rec.reaction === 'good' ? '0 0 6px rgba(16,185,129,0.70)' : 'none',
+                position:   'absolute', bottom: 0, left: 0, right: 0,
+                height:     '45%', zIndex: 10, pointerEvents: 'none',
+                background: getCardVignette(rec.category as Category),
+              }} />
+            )}
+
+            {/* Reaction dot — top right, category-vivid for loved */}
+            {reactionDot && (
+              <div style={{
+                position:  'absolute', top: '8px', right: '8px', zIndex: 15,
+                width:     '8px', height: '8px', borderRadius: '50%',
+                background:reactionDot.bg,
+                boxShadow: reactionDot.glow,
               }} />
             )}
           </div>
         </div>
 
-        {/* Info zone — compact, below image */}
-        <div style={{ padding: '10px 11px 12px', background: config.deepDark }}>
-          <div style={{
-            fontFamily:    'var(--f-display)', fontStyle: 'italic', fontWeight: 400,
-            fontSize:      '15px', color: 'rgba(255,255,255,0.95)',
-            lineHeight:    1.2, marginBottom: '3px',
-            display:       '-webkit-box',
-            WebkitLineClamp: 2,
-            WebkitBoxOrient:'vertical',
-            overflow:       'hidden',
-          }}>
-            {rec.title}
-          </div>
-          {metaLine && (
+        {/* Info zone — title + source. Minimal. Detail screen handles the rest. */}
+        <div style={{ padding: '9px 10px 11px', background: config.deepDark }}>
+          {/* Title — dynamic size, only shown when image exists (Criterion mode has it above) */}
+          {hasImage && (
             <div style={{
-              fontFamily: 'var(--f-body)', fontSize: '10px', fontWeight: 400,
-              color:      `rgba(${config.vividRgb},0.60)`,
-              marginBottom:'3px',
-              whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-            }}>
-              {metaLine}
+              fontFamily:      'var(--f-display)',
+              fontStyle:       'italic',
+              fontWeight:      400,
+              fontSize:        titleSize,
+              color:           'rgba(255,255,255,0.95)',
+              lineHeight:      1.2,
+              marginBottom:    '4px',
+              display:         '-webkit-box',
+              WebkitLineClamp: 2,
+              WebkitBoxOrient: 'vertical',
+              overflow:        'hidden',
+            } as React.CSSProperties}>
+              {rec.title}
             </div>
           )}
+          {/* Source — always shown */}
           <div style={{
-            fontFamily: 'var(--f-body)', fontSize: '10px', fontWeight: 500,
-            color:      '#d41020',
-            whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+            fontFamily:   'var(--f-body)',
+            fontSize:     '10px',
+            fontWeight:   500,
+            color:        '#d41020',
+            whiteSpace:   'nowrap',
+            overflow:     'hidden',
+            textOverflow: 'ellipsis',
           }}>
             from {rec.source_name}
           </div>
