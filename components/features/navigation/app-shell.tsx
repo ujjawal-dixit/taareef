@@ -6,7 +6,7 @@
 // on the choose-method state. The AppShell itself is unchanged in structure.
 // Max-width container ensures consistent centering on all screen sizes.
 
-import { useState, useCallback, type ReactNode } from 'react'
+import { useState, useCallback, useEffect, type ReactNode } from 'react'
 import { ToastProvider }  from '@/components/ui/toast'
 import { BottomNav }      from './bottom-nav'
 import { CaptureScreen }  from '@/components/features/capture/capture-screen'
@@ -15,13 +15,19 @@ import type { CreateRecommendationInput } from '@/lib/types'
 type Props = {
   children:             ReactNode
   onSaveRecommendation: (input: CreateRecommendationInput) => Promise<void>
+  // Lets the child expose a direct handle to open the capture sheet,
+  // so any button anywhere in the tree can trigger it without DOM queries.
+  onCaptureReady?:      (openFn: () => void) => void
 }
 
-export function AppShell({ children, onSaveRecommendation }: Props) {
+export function AppShell({ children, onSaveRecommendation, onCaptureReady }: Props) {
   const [isOpen, setIsOpen] = useState(false)
 
   const open  = useCallback(() => setIsOpen(true),  [])
   const close = useCallback(() => setIsOpen(false), [])
+
+  // Expose open() to consumers who pass onCaptureReady
+  useEffect(() => { onCaptureReady?.(open) }, [onCaptureReady, open])
 
   const handleSaved = useCallback(async (input: CreateRecommendationInput) => {
     await onSaveRecommendation(input)
