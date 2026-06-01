@@ -22,6 +22,7 @@
 
 import { useState, useRef, useCallback, useEffect } from 'react'
 import Link                               from 'next/link'
+import { useRouter }                      from 'next/navigation'
 import Image                              from 'next/image'
 import { CATEGORY_MAP, getCardGradient, getCardVignette, CATEGORIES } from '@/constants/categories'
 import { hasValidImage } from '@/lib/utils/fallback'
@@ -221,10 +222,13 @@ export function RecDetailClient({ recommendation: rec, categoryConfig: cfg }: Pr
   const [noteExpanded, setNoteExpanded] = useState(!rec.notes)
   const [saving,       setSaving]       = useState(false)
   const [showRemove,   setShowRemove]   = useState(false)
+  const [showDelete,   setShowDelete]   = useState(false)
+  const [deleting,     setDeleting]     = useState(false)
   const [error,        setError]        = useState<string | null>(null)
   const [promptIdx,    setPromptIdx]    = useState(0)
   const [sharing,      setSharing]      = useState(false)
   const cardRef = useRef<HTMLDivElement>(null)
+  const router   = useRouter()
 
   // Retroactive enrichment: if this card has no image and no pending candidates,
   // trigger enrichment now. Catches cards saved before the category fix.
@@ -290,6 +294,25 @@ export function RecDetailClient({ recommendation: rec, categoryConfig: cfg }: Pr
   async function handleRemove() {
     const r = await patch({ reaction: null, status: 'saved' })
     if (!r?.error) { setReaction(null); setShowRemove(false) }
+  }
+
+  async function handleDelete() {
+    setDeleting(true)
+    try {
+      const res  = await fetch(`/api/recommendations/${rec.id}`, { method: 'DELETE' })
+      const json = await res.json()
+      if (json.error) {
+        setError(json.error)
+        setDeleting(false)
+        return
+      }
+      // Navigate back to the category list after deletion
+      router.push(`/dashboard/${rec.category}`)
+      router.refresh()
+    } catch {
+      setError('Could not delete — try again?')
+      setDeleting(false)
+    }
   }
 
   async function handleShare() {
@@ -930,6 +953,41 @@ export function RecDetailClient({ recommendation: rec, categoryConfig: cfg }: Pr
         </div>
       </div>
 
+      {/* Delete card — quiet destructive action below all content */}
+      <div style={{ padding: '0 20px 8px' }}>
+        <button
+          onClick={() => setShowDelete(true)}
+          style={{
+            width:                   '100%',
+            height:                  '44px',
+            borderRadius:            '12px',
+            background:              'transparent',
+            border:                  '1px solid rgba(244,63,94,0.18)',
+            color:                   'rgba(244,63,94,0.55)',
+            fontFamily:              'var(--f-ui)',
+            fontSize:                '11px',
+            fontWeight:              700,
+            letterSpacing:           '1.5px',
+            textTransform:           'uppercase',
+            cursor:                  'pointer',
+            transition:              'all 160ms ease',
+            WebkitTapHighlightColor: 'transparent',
+          }}
+          onMouseEnter={e => {
+            (e.currentTarget as HTMLElement).style.background = 'rgba(244,63,94,0.06)'
+            ;(e.currentTarget as HTMLElement).style.borderColor = 'rgba(244,63,94,0.35)'
+            ;(e.currentTarget as HTMLElement).style.color = 'rgba(244,63,94,0.80)'
+          }}
+          onMouseLeave={e => {
+            (e.currentTarget as HTMLElement).style.background = 'transparent'
+            ;(e.currentTarget as HTMLElement).style.borderColor = 'rgba(244,63,94,0.18)'
+            ;(e.currentTarget as HTMLElement).style.color = 'rgba(244,63,94,0.55)'
+          }}
+        >
+          Delete card
+        </button>
+      </div>
+
       {/* Remove experience sheet */}
       {showRemove && (
         <div
@@ -998,6 +1056,96 @@ export function RecDetailClient({ recommendation: rec, categoryConfig: cfg }: Pr
                 background:    'transparent',
                 border:        'none',
                 color:         'rgba(255,255,255,0.35)',
+                fontFamily:    'var(--f-ui)',
+                fontSize:      '11px',
+                letterSpacing: '1px',
+                padding:       '10px',
+                cursor:        'pointer',
+                textTransform: 'uppercase',
+              }}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Delete confirmation sheet */}
+      {showDelete && (
+        <div
+          style={{
+            position:   'fixed', inset: 0,
+            background: 'rgba(0,0,0,0.90)',
+            display:    'flex', alignItems: 'flex-end',
+            zIndex:     100,
+          }}
+          onClick={() => !deleting && setShowDelete(false)}
+        >
+          <div
+            style={{
+              width:         '100%',
+              maxWidth:      '430px',
+              margin:        '0 auto',
+              background:    '#161616',
+              borderRadius:  '22px 22px 0 0',
+              padding:       '28px 24px 40px',
+              border:        '1px solid rgba(255,255,255,0.06)',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Drag handle */}
+            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '24px' }}>
+              <div style={{ width: '36px', height: '4px', borderRadius: '2px', background: 'rgba(255,255,255,0.14)' }} />
+            </div>
+            <div style={{
+              fontFamily:   'var(--f-display)',
+              fontStyle:    'italic',
+              fontSize:     '22px',
+              color:        'rgba(255,255,255,0.92)',
+              marginBottom: '8px',
+            }}>
+              Delete this card?
+            </div>
+            <div style={{
+              fontFamily:   'var(--f-body)',
+              fontSize:     '14px',
+              fontWeight:   300,
+              color:        'rgba(255,255,255,0.42)',
+              marginBottom: '28px',
+              lineHeight:   1.6,
+            }}>
+              {rec.title} will be permanently removed from your vault. This cannot be undone.
+            </div>
+            <button
+              onClick={handleDelete}
+              disabled={deleting}
+              style={{
+                width:         '100%',
+                background:    'rgba(244,63,94,0.12)',
+                border:        '1px solid rgba(244,63,94,0.35)',
+                color:         '#f43f5e',
+                fontFamily:    'var(--f-ui)',
+                fontWeight:    700,
+                fontSize:      '12px',
+                letterSpacing: '1.5px',
+                padding:       '15px',
+                borderRadius:  '13px',
+                cursor:        deleting ? 'not-allowed' : 'pointer',
+                marginBottom:  '10px',
+                textTransform: 'uppercase',
+                transition:    'all 160ms ease',
+              }}
+            >
+              {deleting ? 'Deleting…' : 'Yes, delete'}
+            </button>
+            <button
+              onClick={() => setShowDelete(false)}
+              disabled={deleting}
+              style={{
+                width:         '100%',
+                background:    'transparent',
+                border:        'none',
+                color:         'rgba(255,255,255,0.32)',
                 fontFamily:    'var(--f-ui)',
                 fontSize:      '11px',
                 letterSpacing: '1px',
