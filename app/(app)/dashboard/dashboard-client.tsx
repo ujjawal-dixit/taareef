@@ -117,7 +117,7 @@ export function DashboardClient({ tiles, totalSaved }: DashboardClientProps) {
             fontFamily:    'var(--f-body)',
             fontSize:      '11px',
             fontWeight:    300,
-            color:         'rgba(255,255,255,0.22)',
+            color:         'rgba(255,255,255,0.55)',
             letterSpacing: '0.08em',
             marginTop:     '6px',
             transition:    'opacity 600ms ease',
@@ -129,7 +129,7 @@ export function DashboardClient({ tiles, totalSaved }: DashboardClientProps) {
         <div style={{
           display:             'grid',
           gridTemplateColumns: '1fr 1fr',
-          gridTemplateRows:    'repeat(3, 180px)',
+          gridTemplateRows:    'repeat(3, 200px)',
           gap:                 '10px',
           padding:             '0 14px',
         }}>
