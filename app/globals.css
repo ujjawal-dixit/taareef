@@ -3,8 +3,8 @@
 @tailwind utilities;
 
 :root {
-  --bg0:    #080f0a;
-  --bg1:    #0d1910;
+  --bg0:    #111111;
+  --bg1:    #1a1a1a;
   --neon:   #1fce94;
   --signal: #c8151e;
   --t1:     rgba(240,230,200,0.95);
@@ -13,17 +13,16 @@
   --bdr:    rgba(240,230,200,0.09);
 
   /* Font roles — clear separation of responsibility */
-  --f-display: var(--font-cormorant), Georgia, serif;   /* wordmark, room headers */
-  --f-title:   var(--font-jakarta), system-ui, sans-serif;  /* card titles, category names */
-  --f-ui:      var(--font-rajdhani), system-ui, sans-serif; /* badges, buttons, nav, labels */
-  --f-body:    var(--font-dm-sans), system-ui, sans-serif;  /* source, metadata, notes */
+  --f-display: var(--font-cormorant), Georgia, serif;
+  --f-ui:      var(--font-rajdhani), system-ui, sans-serif;
+  --f-body:    var(--font-dm-sans), system-ui, sans-serif;
 }
 
 @layer base {
   html {
-    background: var(--bg0);
+    background:                  var(--bg0);
     -webkit-tap-highlight-color: transparent;
-    scroll-behavior: smooth;
+    scroll-behavior:             smooth;
   }
 
   body {
@@ -66,12 +65,12 @@
     color:      var(--t1);
   }
 
-  ::-webkit-scrollbar          { width: 2px; height: 2px; }
-  ::-webkit-scrollbar-track    { background: transparent; }
-  ::-webkit-scrollbar-thumb    { background: rgba(240,230,200,0.08); border-radius: 9999px; }
+  ::-webkit-scrollbar       { width: 2px; height: 2px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: rgba(240,230,200,0.08); border-radius: 9999px; }
 
   input::placeholder,
-  textarea::placeholder        { color: rgba(240,230,200,0.25); opacity: 1; }
+  textarea::placeholder { color: rgba(240,230,200,0.25); opacity: 1; }
 
   input:focus-visible,
   textarea:focus-visible {
@@ -81,7 +80,32 @@
   }
 }
 
-/* Global animations — referenced by JS animation strings */
+/* ── DESKTOP CENTERING ────────────────────────────────────────────
+   On desktop (>600px), the entire app centers at max 480px.
+   Everything is mobile-feel on any screen size.
+   The outer shell has a subtle dark frame so it doesn't float.
+──────────────────────────────────────────────────────────────── */
+@media (min-width: 600px) {
+  body {
+    /* Subtle background behind the app container on wide screens */
+    background: #080808;
+  }
+
+  /* App container — all page roots use max-width 430px and auto margin,
+     but we need the visual container on desktop to have a defined edge */
+  body > div,
+  #__next > div {
+    max-width:     480px;
+    margin-left:   auto;
+    margin-right:  auto;
+    /* Subtle edge — shows the app is contained, not broken */
+    box-shadow:    0 0 0 1px rgba(255,255,255,0.04), 0 0 80px rgba(0,0,0,0.60);
+    min-height:    100dvh;
+    position:      relative;
+  }
+}
+
+/* Global animations — referenced by inline animation strings */
 @keyframes cardEnter {
   from { opacity: 0; transform: translateY(12px); }
   to   { opacity: 1; transform: translateY(0); }
@@ -92,10 +116,10 @@
 }
 @keyframes shimmer {
   0%,100% { opacity: 0.70; }
-  50%      { opacity: 0.88; }
+  50%     { opacity: 0.88; }
 }
 @keyframes fabPulse {
-  0%,100% { box-shadow: 0 0 0 0 rgba(31,206,148,0),   0 6px 28px rgba(31,206,148,0.38); }
+  0%,100% { box-shadow: 0 0 0 0   rgba(31,206,148,0),    0 6px 28px rgba(31,206,148,0.38); }
   50%     { box-shadow: 0 0 0 8px rgba(31,206,148,0.07), 0 8px 36px rgba(31,206,148,0.58); }
 }
 @keyframes spin         { to { transform: rotate(360deg); } }
