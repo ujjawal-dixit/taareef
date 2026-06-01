@@ -1,39 +1,236 @@
 'use client'
 
 // app/(app)/dashboard/[category]/category-list-client.tsx
-// Session 9 redesign:
-// - Count on far right of header, opposite category name — shows even at 0
-// - Subcategory pills: 11px, 28px height, filled on selection
-// - Count updates when filter is active
-// - Empty state: warm copy + + button (no invitation card)
-// - Watch/Listen → poster grid (2 col)
-// - Read/Dine/Do/Visit → compact list rows
-// - Full-width neon pill back nav consistent
+// Session 11:
+// - Grid/list toggle per-category (persisted in localStorage)
+// - Grid: 2-col poster grid for Watch/Listen (default grid)
+// - List: compact rows for all categories
+// - Criterion mini for unconfirmed/no-image cards in grid
+// - Category-specific empty state copy (not a product pitch)
+// - Delete toast with 10-second soft-delete undo
 
-import { useState, useCallback } from 'react'
-import { useRouter }             from 'next/navigation'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import Link                      from 'next/link'
 import { AppShell }              from '@/components/features/navigation/app-shell'
 import { useToast }              from '@/components/ui/toast'
 import { useCreateRecommendation } from '@/hooks/use-recommendations'
 import { RecommendationCard }    from '@/components/features/cards/recommendation-card'
+import { useRouter }             from 'next/navigation'
 import type { Recommendation, CreateRecommendationInput } from '@/lib/types'
 import type { CategoryConfig }   from '@/constants/categories'
 
 type Props = {
   recommendations: Recommendation[]
   categoryConfig:  CategoryConfig
+  deletedId?:      string   // passed via search param after delete redirect
 }
 
-// Categories that show poster grid
-const GRID_CATEGORIES = new Set(['watch', 'listen'])
+// Categories that default to grid view
+const GRID_DEFAULTS = new Set(['watch', 'listen'])
 
-export function CategoryListClient({ recommendations: serverRecs, categoryConfig: cfg }: Props) {
-  const router     = useRouter()
+// Category-specific empty state copy — emotional, not instructional
+const EMPTY_COPY: Record<string, { headline: string; body: string }> = {
+  watch: {
+    headline: 'Films have a way of finding you',
+    body:     'at exactly the right moment.',
+  },
+  listen: {
+    headline: 'Someone always knows the song',
+    body:     'you need to hear right now.',
+  },
+  read: {
+    headline: 'The right book at the wrong time',
+    body:     'is still the wrong book.',
+  },
+  dine: {
+    headline: 'Someone always knows a place',
+    body:     "you've never heard of.",
+  },
+  do: {
+    headline: 'The best experiences',
+    body:     'are the ones someone pushed you toward.',
+  },
+  visit: {
+    headline: 'Some things close before you get there',
+    body:     'Save them before they do.',
+  },
+}
+
+// ── DELETE TOAST ──────────────────────────────────────────────────
+// Shows after redirect from card detail after deletion.
+// 10-second window to undo. On undo: PATCH status back to 'saved'.
+
+function DeleteToast({ title, recId, categoryId, onDismiss }: {
+  title:      string
+  recId:      string
+  categoryId: string
+  onDismiss:  () => void
+}) {
+  const [countdown, setCountdown]   = useState(10)
+  const [undoing,   setUndoing]     = useState(false)
+  const [undone,    setUndone]      = useState(false)
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const router      = useRouter()
+
+  useEffect(() => {
+    intervalRef.current = setInterval(() => {
+      setCountdown(c => {
+        if (c <= 1) {
+          clearInterval(intervalRef.current!)
+          onDismiss()
+          return 0
+        }
+        return c - 1
+      })
+    }, 1000)
+    return () => clearInterval(intervalRef.current!)
+  }, [onDismiss])
+
+  async function handleUndo() {
+    clearInterval(intervalRef.current!)
+    setUndoing(true)
+    try {
+      await fetch(`/api/recommendations/${recId}`, {
+        method:  'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ status: 'saved' }),
+      })
+      setUndone(true)
+      setTimeout(() => {
+        onDismiss()
+        router.refresh()
+      }, 1200)
+    } catch {
+      onDismiss()
+    }
+  }
+
+  return (
+    <div style={{
+      position:      'fixed',
+      bottom:        '88px',   // above bottom nav
+      left:          '50%',
+      transform:     'translateX(-50%)',
+      zIndex:        200,
+      maxWidth:      '360px',
+      width:         'calc(100% - 32px)',
+      background:    '#1e1e1e',
+      border:        '1px solid rgba(255,255,255,0.10)',
+      borderRadius:  '14px',
+      padding:       '12px 16px',
+      display:       'flex',
+      alignItems:    'center',
+      justifyContent:'space-between',
+      gap:           '12px',
+      boxShadow:     '0 8px 32px rgba(0,0,0,0.60)',
+      animation:     'toastIn 220ms cubic-bezier(0.16,1,0.3,1)',
+    }}>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{
+          fontFamily:  'var(--f-body)',
+          fontSize:    '13px',
+          fontWeight:  400,
+          color:       undone ? '#1fce94' : 'rgba(255,255,255,0.80)',
+          whiteSpace:  'nowrap',
+          overflow:    'hidden',
+          textOverflow:'ellipsis',
+          transition:  'color 300ms ease',
+        }}>
+          {undone
+            ? `${title} restored`
+            : `${title} removed`}
+        </div>
+        {!undone && (
+          <div style={{
+            fontFamily: 'var(--f-body)',
+            fontSize:   '11px',
+            fontWeight: 300,
+            color:      'rgba(255,255,255,0.30)',
+            marginTop:  '2px',
+          }}>
+            Permanently deleted in {countdown}s
+          </div>
+        )}
+      </div>
+      {!undone && (
+        <button
+          onClick={handleUndo}
+          disabled={undoing}
+          style={{
+            fontFamily:              'var(--f-ui)',
+            fontSize:                '11px',
+            fontWeight:              700,
+            letterSpacing:           '1px',
+            textTransform:           'uppercase',
+            color:                   '#1fce94',
+            background:              'rgba(31,206,148,0.10)',
+            border:                  '1px solid rgba(31,206,148,0.25)',
+            borderRadius:            '8px',
+            padding:                 '6px 14px',
+            cursor:                  undoing ? 'not-allowed' : 'pointer',
+            flexShrink:              0,
+            WebkitTapHighlightColor: 'transparent',
+            opacity:                 undoing ? 0.5 : 1,
+          }}
+        >
+          {undoing ? '…' : 'Undo'}
+        </button>
+      )}
+      <style>{`
+        @keyframes toastIn {
+          from { opacity: 0; transform: translateX(-50%) translateY(12px); }
+          to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+        }
+      `}</style>
+    </div>
+  )
+}
+
+// ── MAIN COMPONENT ────────────────────────────────────────────────
+
+export function CategoryListClient({ recommendations: serverRecs, categoryConfig: cfg, deletedId }: Props) {
   const { toast }  = useToast()
   const { create } = useCreateRecommendation()
-  const [recs,        setRecs]        = useState<Recommendation[]>(serverRecs)
+
+  const [recs,        setRecs]        = useState<Recommendation[]>(
+    // Filter out the deleted card immediately if redirected post-delete
+    serverRecs.filter(r => r.id !== deletedId)
+  )
   const [activeNudge, setActiveNudge] = useState<string>('All')
+
+  // Grid/list toggle — per-category, persisted in localStorage
+  const storageKey = `taareef-view-${cfg.id}`
+  const defaultGrid = GRID_DEFAULTS.has(cfg.id)
+
+  const [isGrid, setIsGrid] = useState<boolean>(() => {
+    // Server-safe: default to GRID_DEFAULTS, override with stored pref on client
+    return defaultGrid
+  })
+
+  // Restore preference from localStorage on mount
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(storageKey)
+      if (stored !== null) setIsGrid(stored === 'grid')
+    } catch {}
+  }, [storageKey])
+
+  function toggleView() {
+    setIsGrid(prev => {
+      const next = !prev
+      try { localStorage.setItem(storageKey, next ? 'grid' : 'list') } catch {}
+      return next
+    })
+  }
+
+  // Delete toast — shown when redirected from detail after deletion
+  const [showDeleteToast, setShowDeleteToast] = useState<{
+    title: string; recId: string
+  } | null>(() => {
+    if (!deletedId) return null
+    const deleted = serverRecs.find(r => r.id === deletedId)
+    return deleted ? { title: deleted.title, recId: deletedId } : null
+  })
 
   const handleSave = useCallback(async (input: CreateRecommendationInput) => {
     const tempId = `temp-${Date.now()}`
@@ -58,9 +255,7 @@ export function CategoryListClient({ recommendations: serverRecs, categoryConfig
     )
   }, [create, toast, cfg.id])
 
-  const nudges = ['All', ...cfg.nudges]
-
-  // Filter by active nudge (subcategory)
+  const nudges   = ['All', ...cfg.nudges]
   const filtered = activeNudge === 'All'
     ? recs
     : recs.filter(r => {
@@ -69,13 +264,18 @@ export function CategoryListClient({ recommendations: serverRecs, categoryConfig
         return sub.toLowerCase() === activeNudge.toLowerCase()
       })
 
-  const showGrid = GRID_CATEGORIES.has(cfg.id)
+  const emptyCopy = EMPTY_COPY[cfg.id] ?? {
+    headline: 'Nothing saved here yet',
+    body:     'Start with something someone told you about.',
+  }
+
+  const canToggle = true  // All categories support both views
 
   return (
     <AppShell onSaveRecommendation={handleSave}>
       <div style={{ maxWidth: '430px', margin: '0 auto', paddingBottom: '100px' }}>
 
-        {/* Back nav — full-width neon pill */}
+        {/* Back nav */}
         <div style={{ padding: '52px 16px 0' }}>
           <Link
             href="/dashboard"
@@ -108,11 +308,11 @@ export function CategoryListClient({ recommendations: serverRecs, categoryConfig
           </Link>
         </div>
 
-        {/* Category header — name left, count right */}
+        {/* Header — category name, count, toggle */}
         <div style={{ padding: '16px 20px 0' }}>
           <div style={{
             display:        'flex',
-            alignItems:     'baseline',
+            alignItems:     'center',
             justifyContent: 'space-between',
           }}>
             <h1 style={{
@@ -126,18 +326,47 @@ export function CategoryListClient({ recommendations: serverRecs, categoryConfig
             }}>
               {cfg.label}
             </h1>
-            {/* Count far right — always shown including 0 */}
-            <span style={{
-              fontFamily: 'var(--f-ui)',
-              fontSize:   '13px',
-              fontWeight: 700,
-              color:      recs.length > 0
-                ? `rgba(${cfg.vividRgb},0.75)`
-                : 'rgba(255,255,255,0.22)',
-            }}>
-              {activeNudge === 'All' ? recs.length : filtered.length}
-            </span>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              {/* Count */}
+              <span style={{
+                fontFamily: 'var(--f-ui)',
+                fontSize:   '13px',
+                fontWeight: 700,
+                color:      recs.length > 0
+                  ? `rgba(${cfg.vividRgb},0.75)`
+                  : 'rgba(255,255,255,0.22)',
+              }}>
+                {activeNudge === 'All' ? recs.length : filtered.length}
+              </span>
+
+              {/* Grid/list toggle — only when there are saves */}
+              {recs.length > 0 && canToggle && (
+                <button
+                  onClick={toggleView}
+                  aria-label={isGrid ? 'Switch to list view' : 'Switch to grid view'}
+                  style={{
+                    background:              'none',
+                    border:                  'none',
+                    cursor:                  'pointer',
+                    padding:                 '4px',
+                    display:                 'flex',
+                    alignItems:              'center',
+                    justifyContent:          'center',
+                    color:                   `rgba(${cfg.vividRgb},0.65)`,
+                    WebkitTapHighlightColor: 'transparent',
+                    transition:              'color 160ms ease',
+                    borderRadius:            '6px',
+                  }}
+                  onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = `rgba(${cfg.vividRgb},1)` }}
+                  onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = `rgba(${cfg.vividRgb},0.65)` }}
+                >
+                  {isGrid ? <ListIcon /> : <GridIcon />}
+                </button>
+              )}
+            </div>
           </div>
+
           <div style={{
             height:     '0.5px',
             marginTop:  '10px',
@@ -145,8 +374,17 @@ export function CategoryListClient({ recommendations: serverRecs, categoryConfig
           }} />
         </div>
 
-        {/* Subcategory filter pills — always shown */}
-        <div style={{ display: 'flex', gap: '6px', padding: '14px 20px 0', flexWrap: 'nowrap', overflowX: 'auto' }}>
+        {/* Subcategory pills */}
+        <div style={{
+          display:    'flex',
+          gap:        '6px',
+          padding:    '14px 20px 0',
+          flexWrap:   'nowrap',
+          overflowX:  'auto',
+          // Hide scrollbar but keep scrollable
+          msOverflowStyle: 'none',
+          scrollbarWidth:  'none',
+        } as React.CSSProperties}>
           {nudges.map(n => {
             const on = activeNudge === n
             return (
@@ -183,37 +421,45 @@ export function CategoryListClient({ recommendations: serverRecs, categoryConfig
           })}
         </div>
 
-        {/* Empty state */}
+        {/* Empty state — category-specific, emotional */}
         {recs.length === 0 && (
           <div style={{
-            padding:       '64px 32px',
-            display:       'flex',
-            flexDirection: 'column',
-            alignItems:    'center',
-            gap:           '20px',
+            padding:        '72px 32px',
+            display:        'flex',
+            flexDirection:  'column',
+            alignItems:     'center',
+            gap:            '8px',
+            textAlign:      'center',
           }}>
-            <p style={{
-              fontFamily: 'var(--f-body)',
-              fontSize:   '14px',
-              fontWeight: 400,
-              color:      'rgba(255,255,255,0.38)',
-              textAlign:  'center',
-              lineHeight: 1.6,
-              margin:     0,
+            <div style={{
+              fontFamily:  'var(--f-display)',
+              fontStyle:   'italic',
+              fontWeight:  400,
+              fontSize:    '22px',
+              color:       'rgba(255,255,255,0.55)',
+              lineHeight:  1.3,
             }}>
-              Recommendations are scattered everywhere.
-              <br />
-              Save them all in one place.
-            </p>
+              {emptyCopy.headline}
+            </div>
+            <div style={{
+              fontFamily:  'var(--f-body)',
+              fontSize:    '14px',
+              fontWeight:  300,
+              color:       'rgba(255,255,255,0.28)',
+              lineHeight:  1.6,
+            }}>
+              {emptyCopy.body}
+            </div>
           </div>
         )}
 
-        {/* Content — grid for Watch/Listen, rows for others */}
-        {filtered.length > 0 && showGrid ? (
+        {/* Content */}
+        {filtered.length > 0 && isGrid && (
           <div style={{
             display:             'grid',
             gridTemplateColumns: '1fr 1fr',
-            gap:                 '10px',
+            // Align all grid cells — uniform gap, uniform padding
+            gap:                 '12px',
             padding:             '16px 14px 0',
           }}>
             {filtered.map(rec => (
@@ -221,21 +467,26 @@ export function CategoryListClient({ recommendations: serverRecs, categoryConfig
                 key={rec.id}
                 recommendation={rec}
                 variant="grid"
+                categoryConfig={cfg}
               />
             ))}
           </div>
-        ) : filtered.length > 0 ? (
+        )}
+
+        {filtered.length > 0 && !isGrid && (
           <div style={{ padding: '12px 16px 0' }}>
             {filtered.map(rec => (
               <RecommendationCard
                 key={rec.id}
                 recommendation={rec}
                 variant="compact"
+                categoryConfig={cfg}
               />
             ))}
           </div>
-        ) : recs.length > 0 && filtered.length === 0 ? (
-          // Filtered to 0 — no results for subcategory
+        )}
+
+        {recs.length > 0 && filtered.length === 0 && (
           <div style={{
             padding:   '40px 32px',
             textAlign: 'center',
@@ -245,9 +496,46 @@ export function CategoryListClient({ recommendations: serverRecs, categoryConfig
           }}>
             Nothing tagged as {activeNudge.toLowerCase()} yet.
           </div>
-        ) : null}
+        )}
 
       </div>
+
+      {/* Delete toast */}
+      {showDeleteToast && (
+        <DeleteToast
+          title={showDeleteToast.title}
+          recId={showDeleteToast.recId}
+          categoryId={cfg.id}
+          onDismiss={() => setShowDeleteToast(null)}
+        />
+      )}
+
     </AppShell>
+  )
+}
+
+// ── TOGGLE ICONS ──────────────────────────────────────────────────
+
+function GridIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+      <rect x="1" y="1" width="7" height="7" rx="1.5" stroke="currentColor" strokeWidth="1.5"/>
+      <rect x="10" y="1" width="7" height="7" rx="1.5" stroke="currentColor" strokeWidth="1.5"/>
+      <rect x="1" y="10" width="7" height="7" rx="1.5" stroke="currentColor" strokeWidth="1.5"/>
+      <rect x="10" y="10" width="7" height="7" rx="1.5" stroke="currentColor" strokeWidth="1.5"/>
+    </svg>
+  )
+}
+
+function ListIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+      <rect x="1" y="2" width="6" height="6" rx="1.5" stroke="currentColor" strokeWidth="1.5"/>
+      <line x1="10" y1="4" x2="17" y2="4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+      <line x1="10" y1="7" x2="14" y2="7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+      <rect x="1" y="10" width="6" height="6" rx="1.5" stroke="currentColor" strokeWidth="1.5"/>
+      <line x1="10" y1="12" x2="17" y2="12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+      <line x1="10" y1="15" x2="14" y2="15" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+    </svg>
   )
 }
