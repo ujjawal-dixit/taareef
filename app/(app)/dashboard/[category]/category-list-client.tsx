@@ -28,31 +28,31 @@ type Props = {
 // Categories that default to grid view
 const GRID_DEFAULTS = new Set(['watch', 'listen'])
 
-// Category-specific empty state copy — emotional, not instructional
+// Category-specific empty state copy — Taareef's own voice
 const EMPTY_COPY: Record<string, { headline: string; body: string }> = {
   watch: {
-    headline: 'Films have a way of finding you',
-    body:     'at exactly the right moment.',
+    headline: 'Every film someone loves',
+    body:     "was made for the moment they'd share it with you.",
   },
   listen: {
-    headline: 'Someone always knows the song',
-    body:     'you need to hear right now.',
+    headline: "Music doesn't find you by accident.",
+    body:     'Someone carried it to you.',
   },
   read: {
-    headline: 'The right book at the wrong time',
-    body:     'is still the wrong book.',
+    headline: 'A book recommended is a door',
+    body:     'someone held open.',
   },
   dine: {
-    headline: 'Someone always knows a place',
-    body:     "you've never heard of.",
+    headline: "The best meal you'll ever have",
+    body:     "starts with someone saying — trust me.",
   },
   do: {
-    headline: 'The best experiences',
-    body:     'are the ones someone pushed you toward.',
+    headline: 'The things worth doing',
+    body:     'always need someone to go first.',
   },
   visit: {
-    headline: 'Some things close before you get there',
-    body:     'Save them before they do.',
+    headline: 'Some things only exist for a while.',
+    body:     "Someone made sure you'd know.",
   },
 }
 
@@ -374,8 +374,8 @@ export function CategoryListClient({ recommendations: serverRecs, categoryConfig
           }} />
         </div>
 
-        {/* Subcategory pills */}
-        <div style={{
+        {/* Subcategory pills — only when saves exist */}
+        {recs.length > 0 && <div style={{
           display:    'flex',
           gap:        '6px',
           padding:    '14px 20px 0',
@@ -419,36 +419,93 @@ export function CategoryListClient({ recommendations: serverRecs, categoryConfig
               </button>
             )
           })}
-        </div>
+        </div>}
 
-        {/* Empty state — category-specific, emotional */}
+        {/* Empty state — Taareef's voice + save invitation */}
         {recs.length === 0 && (
           <div style={{
-            padding:        '72px 32px',
-            display:        'flex',
-            flexDirection:  'column',
-            alignItems:     'center',
-            gap:            '8px',
-            textAlign:      'center',
+            padding:       '64px 32px 0',
+            display:       'flex',
+            flexDirection: 'column',
+            alignItems:    'center',
+            textAlign:     'center',
           }}>
-            <div style={{
-              fontFamily:  'var(--f-display)',
-              fontStyle:   'italic',
-              fontWeight:  400,
-              fontSize:    '22px',
-              color:       'rgba(255,255,255,0.55)',
-              lineHeight:  1.3,
-            }}>
-              {emptyCopy.headline}
+            <div style={{ marginBottom: '32px' }}>
+              <div style={{
+                fontFamily:  'var(--f-display)',
+                fontStyle:   'italic',
+                fontWeight:  400,
+                fontSize:    '21px',
+                color:       `rgba(${cfg.vividRgb},0.72)`,
+                lineHeight:  1.45,
+                marginBottom:'10px',
+              }}>
+                {emptyCopy.headline}
+              </div>
+              <div style={{
+                fontFamily: 'var(--f-body)',
+                fontSize:   '14px',
+                fontWeight: 300,
+                color:      'rgba(255,255,255,0.32)',
+                lineHeight: 1.65,
+              }}>
+                {emptyCopy.body}
+              </div>
             </div>
+
             <div style={{
-              fontFamily:  'var(--f-body)',
-              fontSize:    '14px',
-              fontWeight:  300,
-              color:       'rgba(255,255,255,0.28)',
-              lineHeight:  1.6,
+              width:      '24px',
+              height:     '0.5px',
+              background: `rgba(${cfg.vividRgb},0.28)`,
+              marginBottom:'28px',
+            }} />
+
+            <button
+              onClick={() => {
+                const fab = document.querySelector('[data-fab]') as HTMLButtonElement | null
+                fab?.click()
+              }}
+              style={{
+                width:                   '56px',
+                height:                  '56px',
+                borderRadius:            '50%',
+                background:              `rgba(${cfg.vividRgb},0.10)`,
+                border:                  `1px solid rgba(${cfg.vividRgb},0.32)`,
+                display:                 'flex',
+                alignItems:              'center',
+                justifyContent:          'center',
+                cursor:                  'pointer',
+                transition:              'all 200ms ease',
+                WebkitTapHighlightColor: 'transparent',
+                boxShadow:               `0 0 20px rgba(${cfg.vividRgb},0.12)`,
+              }}
+              onMouseEnter={e => {
+                const el = e.currentTarget as HTMLElement
+                el.style.background = `rgba(${cfg.vividRgb},0.20)`
+                el.style.boxShadow = `0 0 32px rgba(${cfg.vividRgb},0.28)`
+              }}
+              onMouseLeave={e => {
+                const el = e.currentTarget as HTMLElement
+                el.style.background = `rgba(${cfg.vividRgb},0.10)`
+                el.style.boxShadow = `0 0 20px rgba(${cfg.vividRgb},0.12)`
+              }}
+              aria-label={`Save something to ${cfg.label}`}
+            >
+              <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                <line x1="10" y1="2" x2="10" y2="18" stroke={cfg.vividColor} strokeWidth="1.8" strokeLinecap="round"/>
+                <line x1="2" y1="10" x2="18" y2="10" stroke={cfg.vividColor} strokeWidth="1.8" strokeLinecap="round"/>
+              </svg>
+            </button>
+            <div style={{
+              fontFamily:    'var(--f-ui)',
+              fontSize:      '9px',
+              fontWeight:    700,
+              letterSpacing: '1.5px',
+              textTransform: 'uppercase',
+              color:         `rgba(${cfg.vividRgb},0.38)`,
+              marginTop:     '10px',
             }}>
-              {emptyCopy.body}
+              Save the first one
             </div>
           </div>
         )}
