@@ -176,7 +176,11 @@ export function CaptureScreen({ isOpen, onClose, onSaved }: Props) {
             borderRadius:  '22px 22px 0 0',
             border:        '1px solid rgba(255,255,255,0.07)',
             borderBottom:  'none',
-            paddingBottom: 'env(safe-area-inset-bottom, 24px)',
+            paddingBottom: 'env(safe-area-inset-bottom, 32px)',
+            minHeight:     '55vh',
+            display:       'flex',
+            flexDirection: 'column',
+            justifyContent:'center',
           }}>
             {/* Drag handle */}
             <div style={{ display: 'flex', justifyContent: 'center', padding: '14px 0 8px' }}>
@@ -1048,18 +1052,18 @@ function MethodOption({ icon, label, color, glow, onClick }: {
     <button
       onClick={onClick}
       style={{
-        display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '14px',
+        display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '18px',
         background: 'none', border: 'none', cursor: 'pointer',
-        padding: '12px 20px', borderRadius: '16px', flex: 1,
+        padding: '20px 16px', borderRadius: '16px', flex: 1,
         WebkitTapHighlightColor: 'transparent', transition: 'background 140ms ease',
       }}
       onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.04)' }}
       onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'none' }}
     >
-      <div style={{ width: '64px', height: '64px', display: 'flex', alignItems: 'center', justifyContent: 'center', filter: `drop-shadow(0 0 12px ${glow})` }}>
+      <div style={{ width: '80px', height: '80px', display: 'flex', alignItems: 'center', justifyContent: 'center', filter: `drop-shadow(0 0 18px ${glow})` }}>
         {icon}
       </div>
-      <div style={{ fontFamily: 'var(--f-ui)', fontWeight: 700, fontSize: '11px', letterSpacing: '2px', textTransform: 'uppercase', color }}>
+      <div style={{ fontFamily: 'var(--f-ui)', fontWeight: 700, fontSize: '12px', letterSpacing: '2.5px', textTransform: 'uppercase', color }}>
         {label}
       </div>
     </button>
@@ -1087,40 +1091,60 @@ function ChevronLeft() {
 // ── WARLI ICONS ───────────────────────────────────────────────────
 
 function WarliMicIcon({ large }: { large?: boolean }) {
-  const s = large ? 40 : 28
+  const s = large ? 52 : 36
+  const c = "rgba(200,21,30,0.92)"
+  const sw = large ? "3" : "2.5"
   return (
-    <svg width={s} height={s} viewBox="0 0 40 40" fill="none">
-      <circle cx="20" cy="12" r="7" stroke="rgba(200,21,30,0.90)" strokeWidth="2.5"/>
-      <rect x="14" y="12" width="12" height="14" rx="1" stroke="rgba(200,21,30,0.90)" strokeWidth="2.5"/>
-      <path d="M10 22 Q10 32 20 32 Q30 32 30 22" stroke="rgba(200,21,30,0.90)" strokeWidth="2.5" fill="none" strokeLinecap="round"/>
-      <line x1="20" y1="32" x2="20" y2="38" stroke="rgba(200,21,30,0.90)" strokeWidth="2.5" strokeLinecap="round"/>
-      <line x1="14" y1="38" x2="26" y2="38" stroke="rgba(200,21,30,0.90)" strokeWidth="2.5" strokeLinecap="round"/>
+    <svg width={s} height={s} viewBox="0 0 52 52" fill="none">
+      {/* Capsule body */}
+      <rect x="16" y="4" width="20" height="28" rx="10" stroke={c} strokeWidth={sw} fill="none"/>
+      {/* Centre dot — Warli soul mark */}
+      <circle cx="26" cy="18" r="3" fill={c} opacity="0.70"/>
+      {/* Stand arc */}
+      <path d="M10 28 Q10 44 26 44 Q42 44 42 28" stroke={c} strokeWidth={sw} fill="none" strokeLinecap="round"/>
+      {/* Stem */}
+      <line x1="26" y1="44" x2="26" y2="50" stroke={c} strokeWidth={sw} strokeLinecap="round"/>
+      {/* Base */}
+      <line x1="18" y1="50" x2="34" y2="50" stroke={c} strokeWidth={sw} strokeLinecap="round"/>
     </svg>
   )
 }
 
 function WarliCameraIcon({ large }: { large?: boolean }) {
-  const s = large ? 40 : 28
+  const s = large ? 52 : 36
+  const c = "rgba(60,130,255,0.92)"
+  const sw = large ? "3" : "2.5"
   return (
-    <svg width={s} height={s} viewBox="0 0 40 40" fill="none">
-      <rect x="4" y="12" width="32" height="22" rx="3" stroke="rgba(60,130,255,0.90)" strokeWidth="2.5"/>
-      <circle cx="20" cy="23" r="6" stroke="rgba(60,130,255,0.90)" strokeWidth="2.5"/>
-      <circle cx="20" cy="23" r="2" fill="rgba(60,130,255,0.90)"/>
-      <path d="M14 12 L17 6 L23 6 L26 12" stroke="rgba(60,130,255,0.90)" strokeWidth="2.5" strokeLinejoin="round" fill="none"/>
-      <circle cx="31" cy="17" r="2" fill="rgba(60,130,255,0.90)"/>
+    <svg width={s} height={s} viewBox="0 0 52 52" fill="none">
+      {/* Camera body */}
+      <rect x="4" y="14" width="44" height="30" rx="5" stroke={c} strokeWidth={sw} fill="none"/>
+      {/* Lens outer */}
+      <circle cx="26" cy="29" r="9" stroke={c} strokeWidth={sw} fill="none"/>
+      {/* Lens inner — Warli dot */}
+      <circle cx="26" cy="29" r="3.5" fill={c}/>
+      {/* Viewfinder bump */}
+      <path d="M18 14 L21 7 L31 7 L34 14" stroke={c} strokeWidth={sw} strokeLinejoin="round" fill="none"/>
+      {/* Flash dot */}
+      <circle cx="40" cy="21" r="2.5" fill={c}/>
     </svg>
   )
 }
 
 function WarliPenIcon({ large }: { large?: boolean }) {
-  const s = large ? 40 : 28
+  const s = large ? 52 : 36
+  const c = "rgba(16,195,182,0.92)"
+  const sw = large ? "3" : "2.5"
   return (
-    <svg width={s} height={s} viewBox="0 0 40 40" fill="none">
-      <line x1="8" y1="32" x2="28" y2="8" stroke="rgba(16,195,182,0.90)" strokeWidth="2.5" strokeLinecap="round"/>
-      <path d="M28 8 L34 6 L32 12 Z" fill="rgba(16,195,182,0.90)"/>
-      <line x1="4" y1="36" x2="10" y2="30" stroke="rgba(16,195,182,0.90)" strokeWidth="2.5" strokeLinecap="round"/>
-      <line x1="14" y1="30" x2="36" y2="30" stroke="rgba(16,195,182,0.40)" strokeWidth="1.5" strokeLinecap="round"/>
-      <line x1="18" y1="34" x2="36" y2="34" stroke="rgba(16,195,182,0.25)" strokeWidth="1.5" strokeLinecap="round"/>
+    <svg width={s} height={s} viewBox="0 0 52 52" fill="none">
+      {/* Pen shaft */}
+      <line x1="10" y1="42" x2="36" y2="10" stroke={c} strokeWidth={sw} strokeLinecap="round"/>
+      {/* Nib triangle */}
+      <path d="M36 10 L44 7 L41 15 Z" fill={c}/>
+      {/* Tip dot */}
+      <line x1="6" y1="46" x2="12" y2="40" stroke={c} strokeWidth={sw} strokeLinecap="round"/>
+      {/* Writing lines — suggest paper */}
+      <line x1="16" y1="40" x2="46" y2="40" stroke={c} strokeWidth="1.8" strokeLinecap="round" opacity="0.45"/>
+      <line x1="20" y1="46" x2="46" y2="46" stroke={c} strokeWidth="1.8" strokeLinecap="round" opacity="0.28"/>
     </svg>
   )
 }
