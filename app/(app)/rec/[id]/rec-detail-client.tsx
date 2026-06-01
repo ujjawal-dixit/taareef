@@ -20,13 +20,14 @@
 // - Experienced status: structured label, not floating text
 // - Rotating micro-prompts on note field
 
-import { useState, useRef, useCallback } from 'react'
+import { useState, useRef, useCallback, useEffect } from 'react'
 import Link                               from 'next/link'
 import Image                              from 'next/image'
 import { CATEGORY_MAP, getCardGradient, getCardVignette, CATEGORIES } from '@/constants/categories'
 import { hasValidImage } from '@/lib/utils/fallback'
 import type { CategoryConfig } from '@/constants/categories'
 import type { Recommendation, Reaction, Category } from '@/lib/types'
+import { triggerEnrichment } from '@/lib/utils/enrich'
 
 type Props = {
   recommendation: Recommendation
@@ -224,6 +225,18 @@ export function RecDetailClient({ recommendation: rec, categoryConfig: cfg }: Pr
   const [promptIdx,    setPromptIdx]    = useState(0)
   const [sharing,      setSharing]      = useState(false)
   const cardRef = useRef<HTMLDivElement>(null)
+
+  // Retroactive enrichment: if this card has no image and no pending candidates,
+  // trigger enrichment now. Catches cards saved before the category fix.
+  useEffect(() => {
+    const meta      = rec.metadata as Record<string, unknown>
+    const hasCands  = Array.isArray(meta?.tmdb_candidates) && (meta.tmdb_candidates as unknown[]).length > 0
+    const enrichable = rec.category === 'watch' || rec.category === 'listen'
+    if (enrichable && !rec.image_url && !hasCands) {
+      triggerEnrichment(rec.id).catch(() => {})
+    }
+  }, [rec.id, rec.image_url, rec.category, rec.metadata])
+
 
   const hasImage = hasValidImage(rec.image_url)
   const isExp    = rec.status !== 'saved'
