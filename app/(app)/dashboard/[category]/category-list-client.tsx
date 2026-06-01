@@ -192,6 +192,9 @@ export function CategoryListClient({ recommendations: serverRecs, categoryConfig
   const { toast }  = useToast()
   const { create } = useCreateRecommendation()
 
+  // Direct handle to AppShell's open() — no DOM queries needed
+  const openCaptureRef = useRef<(() => void) | null>(null)
+
   const [recs,        setRecs]        = useState<Recommendation[]>(
     // Filter out the deleted card immediately if redirected post-delete
     serverRecs.filter(r => r.id !== deletedId)
@@ -272,7 +275,7 @@ export function CategoryListClient({ recommendations: serverRecs, categoryConfig
   const canToggle = true  // All categories support both views
 
   return (
-    <AppShell onSaveRecommendation={handleSave}>
+    <AppShell onSaveRecommendation={handleSave} onCaptureReady={(fn) => { openCaptureRef.current = fn }}>
       <div style={{ maxWidth: '430px', margin: '0 auto', paddingBottom: '100px' }}>
 
         {/* Back nav */}
@@ -462,8 +465,7 @@ export function CategoryListClient({ recommendations: serverRecs, categoryConfig
 
             <button
               onClick={() => {
-                const fab = document.querySelector('[data-fab]') as HTMLButtonElement | null
-                fab?.click()
+                openCaptureRef.current?.()
               }}
               style={{
                 width:                   '56px',
