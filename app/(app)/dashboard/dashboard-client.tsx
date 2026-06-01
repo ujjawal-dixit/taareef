@@ -101,7 +101,7 @@ export function DashboardClient({ tiles, totalSaved }: DashboardClientProps) {
     <AppShell onSaveRecommendation={handleSave}>
       <div style={{ maxWidth: '430px', margin: '0 auto', padding: '0 0 88px' }}>
 
-        <div style={{ textAlign: 'center', padding: '44px 0 16px' }}>
+        <div style={{ textAlign: 'center', padding: '28px 0 12px' }}>
           <div style={{
             fontFamily: 'var(--f-display)',
             fontStyle:  'italic',
@@ -129,7 +129,7 @@ export function DashboardClient({ tiles, totalSaved }: DashboardClientProps) {
         <div style={{
           display:             'grid',
           gridTemplateColumns: '1fr 1fr',
-          gridTemplateRows:    'repeat(3, 160px)',
+          gridTemplateRows:    'repeat(3, 180px)',
           gap:                 '10px',
           padding:             '0 14px',
         }}>
