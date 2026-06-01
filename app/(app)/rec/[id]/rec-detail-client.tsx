@@ -218,6 +218,7 @@ function Rangoli({ rgb }: { rgb: string }) {
 
 export function RecDetailClient({ recommendation: rec, categoryConfig: cfg }: Props) {
   const [reaction,     setReaction]     = useState<Reaction | null>(rec.reaction)
+  const noteDraftKey = `taareef-note-draft-${rec.id}`
   const [note,         setNote]         = useState(rec.notes ?? '')
   const [noteExpanded, setNoteExpanded] = useState(!rec.notes)
   const [saving,       setSaving]       = useState(false)
@@ -241,6 +242,26 @@ export function RecDetailClient({ recommendation: rec, categoryConfig: cfg }: Pr
     }
   }, [rec.id, rec.image_url, rec.category, rec.metadata])
 
+  // Restore note draft from localStorage on mount
+  useEffect(() => {
+    if (rec.notes) return
+    try {
+      const draft = localStorage.getItem(noteDraftKey)
+      if (draft && draft.trim()) setNote(draft)
+    } catch {}
+  }, [noteDraftKey, rec.notes])
+
+  // Persist note draft as user types
+  useEffect(() => {
+    if (rec.notes && note === rec.notes) return
+    try {
+      if (note.trim()) {
+        localStorage.setItem(noteDraftKey, note)
+      } else {
+        localStorage.removeItem(noteDraftKey)
+      }
+    } catch {}
+  }, [note, noteDraftKey, rec.notes])
 
   const hasImage = hasValidImage(rec.image_url)
   const isExp    = rec.status !== 'saved'
@@ -299,16 +320,28 @@ export function RecDetailClient({ recommendation: rec, categoryConfig: cfg }: Pr
   async function handleDelete() {
     setDeleting(true)
     try {
-      const res  = await fetch(`/api/recommendations/${rec.id}`, { method: 'DELETE' })
+      // Soft delete — status set to 'deleted', wiped by cron after 7 days
+      const res  = await fetch(`/api/recommendations/${rec.id}`, {
+        method:  'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({
+          status:   'deleted',
+          metadata: {
+            ...((rec.metadata as Record<string,unknown>) ?? {}),
+            deleted_at: new Date().toISOString(),
+          },
+        }),
+      })
       const json = await res.json()
       if (json.error) {
         setError(json.error)
         setDeleting(false)
         return
       }
-      // Navigate back to the category list after deletion
-      router.push(`/dashboard/${rec.category}`)
-      router.refresh()
+      // Clear note draft from localStorage on deletion
+      try { localStorage.removeItem(`taareef-note-draft-${rec.id}`) } catch {}
+      // Redirect to category list with deleted param for toast
+      router.push(`/dashboard/${rec.category}?deleted=${rec.id}`)
     } catch {
       setError('Could not delete — try again?')
       setDeleting(false)
@@ -840,7 +873,12 @@ export function RecDetailClient({ recommendation: rec, categoryConfig: cfg }: Pr
             <textarea
               value={note}
               onChange={(e) => setNote(e.target.value)}
-              onBlur={() => { if (note !== rec.notes) patch({ notes: note }) }}
+              onBlur={() => {
+                if (note !== rec.notes) {
+                  patch({ notes: note })
+                  try { localStorage.removeItem(noteDraftKey) } catch {}
+                }
+              }}
               placeholder={notePlaceholder}
               maxLength={500}
               rows={3}
