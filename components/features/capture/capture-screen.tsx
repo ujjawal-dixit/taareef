@@ -177,7 +177,7 @@ export function CaptureScreen({ isOpen, onClose, onSaved }: Props) {
             border:        '1px solid rgba(255,255,255,0.07)',
             borderBottom:  'none',
             paddingBottom: 'env(safe-area-inset-bottom, 32px)',
-            minHeight:     '55vh',
+            minHeight:     '65vh',
             display:       'flex',
             flexDirection: 'column',
             justifyContent:'center',
@@ -186,11 +186,17 @@ export function CaptureScreen({ isOpen, onClose, onSaved }: Props) {
             <div style={{ display: 'flex', justifyContent: 'center', padding: '14px 0 8px' }}>
               <div style={{ width: '36px', height: '4px', borderRadius: '2px', background: 'rgba(255,255,255,0.18)' }} />
             </div>
-            {/* Three options */}
-            <div style={{ display: 'flex', justifyContent: 'space-around', padding: '20px 24px 32px', gap: '8px' }}>
-              <MethodOption icon={<WarliMicIcon />}    label="speak" color="rgba(200,21,30,0.90)"  glow="rgba(200,21,30,0.30)"  onClick={() => setMethod('speak')} />
-              <MethodOption icon={<WarliCameraIcon />} label="scan"  color="rgba(60,130,255,0.90)" glow="rgba(60,130,255,0.30)" onClick={() => setMethod('scan')}  />
-              <MethodOption icon={<WarliPenIcon />}    label="type"  color="rgba(16,195,182,0.90)" glow="rgba(16,195,182,0.30)" onClick={() => setMethod('type')}  />
+            {/* Three options — inverted triangle: speak top-left, scan top-right, type bottom-center */}
+            <div style={{ padding: '16px 20px 28px', flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: '0' }}>
+              {/* Top row: speak + scan */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                <MethodOption icon={<WarliMicIcon />}    label="speak" color="rgba(200,21,30,0.90)"  glow="rgba(200,21,30,0.30)"  onClick={() => setMethod('speak')} />
+                <MethodOption icon={<WarliCameraIcon />} label="scan"  color="rgba(60,130,255,0.90)" glow="rgba(60,130,255,0.30)" onClick={() => setMethod('scan')}  />
+              </div>
+              {/* Bottom row: type centered */}
+              <div style={{ display: 'flex', justifyContent: 'center' }}>
+                <MethodOption icon={<WarliPenIcon />} label="type" color="rgba(16,195,182,0.90)" glow="rgba(16,195,182,0.30)" onClick={() => setMethod('type')} />
+              </div>
             </div>
           </div>
         </div>
@@ -486,27 +492,96 @@ function ScanInput({ onUnderstood, onError, error }: {
 }
 
 // ── TYPE INPUT ────────────────────────────────────────────────────
-// Simple two-field form that feeds into understand
+// Structured form: title, category, subcategory, source, note.
+// On continue: if all fields are clear → skip LLM → go straight to confirm.
+// If any field is vague or missing → send to understand → clarification if needed.
 
 function TypeInput({ onUnderstood, onError, error }: {
   onUnderstood: (r: UnderstandResult) => void
   onError:      (e: string) => void
   error:        string | null
 }) {
-  const [text,       setText]       = useState('')
+  const [title,      setTitle]      = useState('')
+  const [category,   setCategory]   = useState<Category | null>(null)
+  const [subtype,    setSubtype]    = useState<string | null>(null)
+  const [sourceName, setSourceName] = useState('')
+  const [note,       setNote]       = useState('')
   const [processing, setProcessing] = useState(false)
-  const inputRef = useRef<HTMLInputElement>(null)
+  const [promptIdx,  setPromptIdx]  = useState(0)
+  const titleRef = useRef<HTMLInputElement>(null)
 
-  useEffect(() => { setTimeout(() => inputRef.current?.focus(), 160) }, [])
+  useEffect(() => { setTimeout(() => titleRef.current?.focus(), 160) }, [])
 
-  async function handleUnderstand() {
-    if (!text.trim()) return
+  const activeCat = category ? CATEGORIES.find(c => c.id === category) : null
+  const subtypes  = activeCat ? activeCat.nudges : []
+
+  // Rotate note prompt every 4s
+  useEffect(() => {
+    if (note.length > 0) return
+    const prompts = activeCat?.notePlaceholders ?? ['What made you save this?']
+    const interval = setInterval(() => setPromptIdx(i => (i + 1) % prompts.length), 4000)
+    return () => clearInterval(interval)
+  }, [note, activeCat])
+
+  const notePlaceholder = (activeCat?.notePlaceholders ?? ['What made you save this?'])[promptIdx % (activeCat?.notePlaceholders?.length ?? 1)]
+
+  // Determine if input is clear enough to skip LLM
+  function isInputClear(): boolean {
+    return title.trim().length > 0 && category !== null && sourceName.trim().length > 0
+  }
+
+  async function handleContinue() {
+    if (!title.trim()) { onError('What are you saving?'); return }
     setProcessing(true)
+
+    if (isInputClear()) {
+      // Structured and complete — skip LLM, build result directly
+      const result: UnderstandResult = {
+        title:       title.trim(),
+        category:    category,
+        subtype:     subtype,
+        source_name: sourceName.trim(),
+        source_type: null,
+        note:        note.trim() || null,
+        confidence: {
+          title:       'high',
+          category:    'high',
+          subtype:     subtype ? 'high' : null,
+          source_name: 'high',
+          source_type: null,
+        },
+        transcription_quality: 'clear',
+        multiple_items:        null,
+        input_language:        'english',
+        supplementary: {
+          what_to_order: null,
+          dates:         null,
+          director:      null,
+          author:        null,
+          location_hint: null,
+        },
+        clarification: { needed: false, field: null, question: null, type: null, options: null },
+        raw_input: `${title} ${sourceName}`.trim(),
+      }
+      setProcessing(false)
+      onUnderstood(result)
+      return
+    }
+
+    // Vague input — send to understand
+    const inputStr = [
+      title.trim(),
+      category ? `category: ${category}` : '',
+      subtype  ? `type: ${subtype}` : '',
+      sourceName.trim() ? `from: ${sourceName.trim()}` : '',
+      note.trim() ? `note: ${note.trim()}` : '',
+    ].filter(Boolean).join(', ')
+
     try {
       const res  = await fetch('/api/capture/understand', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ input: text.trim(), input_type: 'typed' }),
+        body:    JSON.stringify({ input: inputStr, input_type: 'typed' }),
       })
       const data = await res.json()
       if (!res.ok || !data.data) {
@@ -521,53 +596,165 @@ function TypeInput({ onUnderstood, onError, error }: {
     }
   }
 
+  const vividRgb = activeCat?.vividRgb ?? '31,206,148'
+  const vividColor = activeCat?.vividColor ?? '#1fce94'
+
   return (
-    <div style={{ padding: '32px 20px 0', display: 'flex', flexDirection: 'column', gap: '24px' }}>
+    <div style={{ padding: '32px 20px 0', display: 'flex', flexDirection: 'column', gap: '20px' }}>
       <div>
         <h1 style={{ fontFamily: 'var(--f-display)', fontStyle: 'italic', fontWeight: 400, fontSize: '30px', color: 'rgba(255,255,255,0.95)', margin: 0 }}>
           type it.
         </h1>
         <p style={{ fontFamily: 'var(--f-body)', fontSize: '13px', color: 'rgba(255,255,255,0.35)', margin: '6px 0 0' }}>
-          What was recommended, and who told you?
+          Structured saves. Natural input. Both work.
         </p>
       </div>
 
+      {/* WHAT */}
       <div>
-        <label style={LABEL_STYLE}>Tell us about it</label>
+        <label style={LABEL_STYLE}>What is it?</label>
         <input
-          ref={inputRef}
+          ref={titleRef}
           type="text"
-          value={text}
-          onChange={e => setText(e.target.value)}
-          onKeyDown={e => { if (e.key === 'Enter' && text.trim()) handleUnderstand() }}
-          placeholder="Rohit said watch Fight Club, or just type the name…"
+          value={title}
+          onChange={e => setTitle(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter' && title.trim()) handleContinue() }}
+          placeholder="Film, book, restaurant, album…"
           style={FIELD_STYLE}
           autoComplete="off"
           autoCorrect="off"
           spellCheck={false}
-          onFocus={e => { e.target.style.borderColor = 'rgba(31,206,148,0.45)' }}
+          onFocus={e => { e.target.style.borderColor = `rgba(${vividRgb},0.45)` }}
           onBlur={e => { e.target.style.borderColor = 'rgba(255,255,255,0.08)' }}
         />
-        <p style={{ fontFamily: 'var(--f-body)', fontSize: '11px', color: 'rgba(255,255,255,0.20)', marginTop: '6px' }}>
-          Natural language works best. Include who told you if you know.
-        </p>
+      </div>
+
+      {/* CATEGORY */}
+      <div>
+        <label style={LABEL_STYLE}>What kind?</label>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '6px' }}>
+          {CATEGORIES.map(cat => {
+            const sel = category === cat.id
+            return (
+              <button
+                key={cat.id}
+                type="button"
+                onClick={() => { setCategory(cat.id as Category); setSubtype(null) }}
+                style={{
+                  padding:                 '10px 4px',
+                  borderRadius:            '9px',
+                  border:                  `1px solid ${sel ? cat.vividColor : 'rgba(255,255,255,0.07)'}`,
+                  background:              sel ? `rgba(${cat.vividRgb},0.14)` : 'rgba(255,255,255,0.02)',
+                  fontFamily:              'var(--f-ui)',
+                  fontSize:                '9px',
+                  fontWeight:              700,
+                  letterSpacing:           '0.06em',
+                  textTransform:           'uppercase',
+                  color:                   sel ? cat.vividColor : 'rgba(255,255,255,0.38)',
+                  cursor:                  'pointer',
+                  transition:              'all 140ms ease',
+                  boxShadow:               sel ? `0 0 10px rgba(${cat.vividRgb},0.20)` : 'none',
+                  WebkitTapHighlightColor: 'transparent',
+                }}
+              >
+                {cat.label}
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* SUBCATEGORY — appears after category selected */}
+      {activeCat && subtypes.length > 0 && (
+        <div>
+          <label style={LABEL_STYLE}>What type?</label>
+          <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+            {subtypes.map(st => {
+              const sel = subtype === st
+              return (
+                <button
+                  key={st}
+                  type="button"
+                  onClick={() => setSubtype(sel ? null : st)}
+                  style={{
+                    padding:                 '6px 14px',
+                    borderRadius:            '20px',
+                    border:                  `1px solid rgba(${vividRgb},${sel ? '0.65' : '0.22'})`,
+                    background:              sel ? `rgba(${vividRgb},0.18)` : `rgba(${vividRgb},0.06)`,
+                    fontFamily:              'var(--f-ui)',
+                    fontSize:                '10px',
+                    fontWeight:              700,
+                    letterSpacing:           '1px',
+                    textTransform:           'uppercase',
+                    color:                   sel ? vividColor : `rgba(${vividRgb},0.72)`,
+                    cursor:                  'pointer',
+                    transition:              'all 140ms ease',
+                    WebkitTapHighlightColor: 'transparent',
+                    boxShadow:               sel ? `0 0 10px rgba(${vividRgb},0.22)` : 'none',
+                  }}
+                >
+                  {st}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* SOURCE */}
+      <div>
+        <label style={LABEL_STYLE}>Who told you?</label>
+        <input
+          type="text"
+          value={sourceName}
+          onChange={e => setSourceName(e.target.value)}
+          placeholder="Arjun, @boxoffice, a newsletter…"
+          style={FIELD_STYLE}
+          autoComplete="off"
+          onFocus={e => { e.target.style.borderColor = `rgba(${vividRgb},0.45)` }}
+          onBlur={e => { e.target.style.borderColor = 'rgba(255,255,255,0.08)' }}
+        />
+      </div>
+
+      {/* NOTE */}
+      <div>
+        <label style={LABEL_STYLE}>
+          One thing to remember
+          <span style={{ marginLeft: '6px', fontWeight: 400, fontSize: '9px', textTransform: 'none', opacity: 0.45 }}>optional</span>
+        </label>
+        <textarea
+          value={note}
+          onChange={e => setNote(e.target.value)}
+          placeholder={notePlaceholder}
+          maxLength={500}
+          rows={2}
+          style={{
+            ...FIELD_STYLE,
+            resize:    'none',
+            lineHeight:1.6,
+            fontStyle: note.length === 0 ? 'italic' : 'normal',
+          }}
+          onFocus={e => { e.target.style.borderColor = `rgba(${vividRgb},0.45)` }}
+          onBlur={e => { e.target.style.borderColor = 'rgba(255,255,255,0.08)' }}
+        />
       </div>
 
       {error && <ErrorLine message={error} />}
 
       <button
-        onClick={handleUnderstand}
-        disabled={!text.trim() || processing}
+        onClick={handleContinue}
+        disabled={!title.trim() || processing}
         style={{
           width:         '100%', height: '52px', borderRadius: '14px', border: 'none',
-          background:    text.trim() && !processing ? '#1fce94' : 'rgba(31,206,148,0.30)',
-          color:         text.trim() && !processing ? '#080f0a' : 'rgba(31,206,148,0.50)',
+          background:    title.trim() && !processing ? '#1fce94' : 'rgba(31,206,148,0.28)',
+          color:         title.trim() && !processing ? '#080f0a' : 'rgba(31,206,148,0.45)',
           fontFamily:    'var(--f-ui)', fontSize: '13px', fontWeight: 700,
           letterSpacing: '0.08em', textTransform: 'uppercase',
-          cursor:        text.trim() && !processing ? 'pointer' : 'not-allowed',
+          cursor:        title.trim() && !processing ? 'pointer' : 'not-allowed',
           transition:    'all 180ms ease',
-          boxShadow:     text.trim() && !processing ? '0 4px 24px rgba(31,206,148,0.35)' : 'none',
+          boxShadow:     title.trim() && !processing ? '0 4px 24px rgba(31,206,148,0.35)' : 'none',
           WebkitTapHighlightColor: 'transparent',
+          marginBottom:  '24px',
         }}
       >
         {processing ? 'Understanding…' : 'Continue'}
@@ -1060,7 +1247,7 @@ function MethodOption({ icon, label, color, glow, onClick }: {
       onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.04)' }}
       onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'none' }}
     >
-      <div style={{ width: '80px', height: '80px', display: 'flex', alignItems: 'center', justifyContent: 'center', filter: `drop-shadow(0 0 18px ${glow})` }}>
+      <div style={{ width: '96px', height: '96px', display: 'flex', alignItems: 'center', justifyContent: 'center', filter: `drop-shadow(0 0 22px ${glow})` }}>
         {icon}
       </div>
       <div style={{ fontFamily: 'var(--f-ui)', fontWeight: 700, fontSize: '12px', letterSpacing: '2.5px', textTransform: 'uppercase', color }}>
@@ -1091,7 +1278,7 @@ function ChevronLeft() {
 // ── WARLI ICONS ───────────────────────────────────────────────────
 
 function WarliMicIcon({ large }: { large?: boolean }) {
-  const s = large ? 52 : 36
+  const s = large ? 68 : 44
   const c = "rgba(200,21,30,0.92)"
   const sw = large ? "3" : "2.5"
   return (
@@ -1111,7 +1298,7 @@ function WarliMicIcon({ large }: { large?: boolean }) {
 }
 
 function WarliCameraIcon({ large }: { large?: boolean }) {
-  const s = large ? 52 : 36
+  const s = large ? 68 : 44
   const c = "rgba(60,130,255,0.92)"
   const sw = large ? "3" : "2.5"
   return (
@@ -1131,7 +1318,7 @@ function WarliCameraIcon({ large }: { large?: boolean }) {
 }
 
 function WarliPenIcon({ large }: { large?: boolean }) {
-  const s = large ? 52 : 36
+  const s = large ? 68 : 44
   const c = "rgba(16,195,182,0.92)"
   const sw = large ? "3" : "2.5"
   return (
