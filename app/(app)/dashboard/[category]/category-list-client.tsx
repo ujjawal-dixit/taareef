@@ -220,7 +220,7 @@ export function CategoryListClient({ recommendations: serverRecs, categoryConfig
               <RecommendationCard
                 key={rec.id}
                 recommendation={rec}
-                variant="compact"
+                variant="grid"
               />
             ))}
           </div>
