@@ -1,16 +1,12 @@
 'use client'
 
 // app/(app)/dashboard/dashboard-client.tsx
-// Session 9 — full redesign per critique session decisions:
-// - Count shown on ALL tiles (including 0), positioned far right of header row
-// - Title/source removed from filled tiles — count is the only data signal
-// - All 6 tiles always show subcategory pills
-// - Filled tiles: glowing border in category vivid color
-// - Empty tiles: no border, dimmed opacity 0.60 + weaker vivid wash
-// - Ghost folk icon shifted down to avoid count collision
-// - Do icon: exactly 2 triangles (was 3)
-// - Label font 26px (was 22px)
-// - Tile height fills viewport proportionally
+// Session 10 refinements:
+// - Tile height: fixed 160px rows, NO minHeight on tile (resize bug fix)
+// - Icons: absolutely centered, 100px, no rotation, no offset
+// - Icon opacity: 0.20 empty / 0.30 filled
+// - Empty tiles: IDENTICAL to filled except border — same gradient, same pills, same opacity
+// - Border is the ONLY signal distinguishing empty from filled
 
 import { useCallback } from 'react'
 import { useRouter }   from 'next/navigation'
@@ -56,17 +52,9 @@ export function DashboardClient({ tiles, totalSaved }: DashboardClientProps) {
 
   return (
     <AppShell onSaveRecommendation={handleSave}>
-      <div style={{
-        maxWidth:      '430px',
-        margin:        '0 auto',
-        minHeight:     '100dvh',
-        display:       'flex',
-        flexDirection: 'column',
-        padding:       '0 0 88px',
-      }}>
+      <div style={{ maxWidth: '430px', margin: '0 auto', padding: '0 0 88px' }}>
 
-        {/* Wordmark */}
-        <div style={{ textAlign: 'center', padding: '44px 0 16px', flexShrink: 0 }}>
+        <div style={{ textAlign: 'center', padding: '44px 0 16px' }}>
           <div style={{
             fontFamily: 'var(--f-display)',
             fontStyle:  'italic',
@@ -92,15 +80,12 @@ export function DashboardClient({ tiles, totalSaved }: DashboardClientProps) {
           </div>
         </div>
 
-        {/* 2×3 grid — fills remaining height proportionally */}
         <div style={{
           display:             'grid',
           gridTemplateColumns: '1fr 1fr',
-          gridTemplateRows:    'repeat(3, 1fr)',
+          gridTemplateRows:    'repeat(3, 160px)',
           gap:                 '10px',
           padding:             '0 14px',
-          flex:                1,
-          minHeight:           0,
         }}>
           {CATEGORIES.map(cat => (
             <Tile
@@ -117,42 +102,17 @@ export function DashboardClient({ tiles, totalSaved }: DashboardClientProps) {
   )
 }
 
-// ── TILE ──────────────────────────────────────────────────────────
-
 function Tile({
   cat,
   filled,
   onClick,
 }: {
-  cat:    CategoryConfig
-  filled: TileData | null
+  cat:     CategoryConfig
+  filled:  TileData | null
   onClick: () => void
 }) {
   const count    = filled?.count ?? 0
   const hasSaves = count > 0
-
-  // Filled tiles: full opacity, glowing vivid border
-  // Empty tiles: 60% opacity, weaker vivid wash, no border
-  const tileStyle: React.CSSProperties = {
-    position:    'relative',
-    borderRadius:'14px',
-    minHeight:   '148px',
-    overflow:    'hidden',
-    cursor:      'pointer',
-    background:  '#161616',
-    opacity:     hasSaves ? 1 : 0.62,
-    // Glowing border only on filled tiles — category vivid color, reference confirmed
-    border:      hasSaves
-      ? `1px solid rgba(${cat.vividRgb},0.70)`
-      : `1px solid rgba(${cat.vividRgb},0.14)`,
-    boxShadow:   hasSaves
-      ? `0 0 0 1px rgba(${cat.vividRgb},0.18), 0 0 18px rgba(${cat.vividRgb},0.28), 0 8px 24px -6px rgba(${cat.vividRgb},0.22)`
-      : `0 8px 24px -6px rgba(${cat.vividRgb},0.10)`,
-    transition:  'transform 130ms ease, opacity 130ms ease',
-    WebkitTapHighlightColor: 'transparent',
-    display:     'flex',
-    flexDirection:'column',
-  }
 
   return (
     <div
@@ -161,22 +121,33 @@ function Tile({
       tabIndex={0}
       onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onClick() }}
       aria-label={`${cat.label}, ${count} saved`}
-      style={tileStyle}
+      style={{
+        position:                'relative',
+        borderRadius:            '14px',
+        overflow:                'hidden',
+        cursor:                  'pointer',
+        background:              '#161616',
+        border: hasSaves
+          ? `1px solid rgba(${cat.vividRgb},0.72)`
+          : `1px solid rgba(${cat.vividRgb},0.22)`,
+        boxShadow: hasSaves
+          ? `0 0 0 1px rgba(${cat.vividRgb},0.18), 0 0 20px rgba(${cat.vividRgb},0.30), 0 8px 28px -6px rgba(${cat.vividRgb},0.24)`
+          : 'none',
+        transition:              'transform 130ms ease',
+        WebkitTapHighlightColor: 'transparent',
+        display:                 'flex',
+        flexDirection:           'column',
+      }}
       onMouseEnter={(e) => { e.currentTarget.style.transform = 'scale(1.015)' }}
       onMouseLeave={(e) => { e.currentTarget.style.transform = 'scale(1)' }}
     >
-      {/* Color wash — vivid floods left, dissolves to black */}
-      {/* Filled tiles: vivid floods to 55%. Empty: floods to only 25% */}
       <div style={{
         position:   'absolute',
         inset:      0,
-        background: hasSaves
-          ? getTileGradient(cat.id)
-          : `linear-gradient(100deg, rgba(${cat.vividRgb},0.55) 0%, rgba(${cat.vividRgb},0.14) 38%, rgba(17,17,17,0.98) 100%)`,
-        zIndex: 1,
+        background: getTileGradient(cat.id),
+        zIndex:     1,
       }} />
 
-      {/* Grain texture */}
       <div style={{
         position:        'absolute',
         inset:           0,
@@ -188,58 +159,56 @@ function Tile({
         mixBlendMode:    'overlay',
       }} />
 
-      {/* Ghost folk icon — shifted down to clear count badge space */}
       <div style={{
-        position:      'absolute',
-        top:           '32px',  // was 8px — shifted down to not collide with count
-        right:         '6px',
-        zIndex:        2,
-        opacity:       hasSaves ? 0.18 : 0.12,
-        pointerEvents: 'none',
-        transform:     'rotate(-3deg)',
-        width:         '86px',
-        height:        '86px',
-        display:       'flex',
-        alignItems:    'center',
-        justifyContent:'center',
+        position:       'absolute',
+        top:            '50%',
+        left:           '50%',
+        transform:      'translate(-50%, -50%)',
+        zIndex:         2,
+        opacity:        hasSaves ? 0.30 : 0.20,
+        pointerEvents:  'none',
+        width:          '100px',
+        height:         '100px',
+        display:        'flex',
+        alignItems:     'center',
+        justifyContent: 'center',
       }}>
         <TileIcon id={cat.id} color={cat.vividColor} />
       </div>
 
-      {/* Content */}
       <div style={{
-        position:      'relative',
-        zIndex:        3,
-        padding:       '12px 13px 13px',
-        flex:          1,
-        display:       'flex',
-        flexDirection: 'column',
-        justifyContent:'space-between',
+        position:       'relative',
+        zIndex:         3,
+        padding:        '12px 13px 13px',
+        flex:           1,
+        display:        'flex',
+        flexDirection:  'column',
+        justifyContent: 'space-between',
       }}>
 
-        {/* Top row: category label + count on opposite end */}
         <div style={{
           display:        'flex',
           alignItems:     'baseline',
           justifyContent: 'space-between',
         }}>
           <div style={{
-            fontFamily: 'var(--f-display)',
-            fontStyle:  'italic',
-            fontWeight: 400,
-            fontSize:   '26px',
-            color:      'rgba(255,255,255,0.97)',
-            lineHeight: 1.1,
-            textShadow: '0 1px 12px rgba(0,0,0,0.40)',
+            fontFamily:  'var(--f-display)',
+            fontStyle:   'italic',
+            fontWeight:  400,
+            fontSize:    '26px',
+            color:       'rgba(255,255,255,0.97)',
+            lineHeight:  1.1,
+            textShadow:  '0 1px 16px rgba(0,0,0,0.55)',
           }}>
             {cat.label}
           </div>
-          {/* Count — always shown, even 0. Far right, opposite end from label */}
           <div style={{
             fontFamily:    'var(--f-ui)',
             fontWeight:    700,
             fontSize:      '13px',
-            color:         hasSaves ? `rgba(${cat.vividRgb},0.85)` : 'rgba(255,255,255,0.22)',
+            color:         hasSaves
+              ? `rgba(${cat.vividRgb},0.85)`
+              : 'rgba(255,255,255,0.30)',
             letterSpacing: '0.02em',
             lineHeight:    1,
           }}>
@@ -247,8 +216,7 @@ function Tile({
           </div>
         </div>
 
-        {/* Bottom — subcategory pills always shown on all tiles */}
-        <div style={{ display: 'flex', gap: '4px', flexWrap: 'nowrap', marginTop: '8px' }}>
+        <div style={{ display: 'flex', gap: '4px', flexWrap: 'nowrap' }}>
           {cat.nudges.slice(0, 3).map(n => (
             <span key={n} style={{
               fontFamily:    'var(--f-ui)',
@@ -256,9 +224,9 @@ function Tile({
               fontWeight:    700,
               letterSpacing: '0.8px',
               textTransform: 'uppercase',
-              color:         hasSaves ? `rgba(${cat.vividRgb},0.75)` : 'rgba(255,255,255,0.35)',
-              background:    hasSaves ? `rgba(${cat.vividRgb},0.12)` : 'rgba(0,0,0,0.20)',
-              border:        `0.5px solid ${hasSaves ? `rgba(${cat.vividRgb},0.25)` : 'rgba(255,255,255,0.10)'}`,
+              color:         `rgba(${cat.vividRgb},0.75)`,
+              background:    `rgba(${cat.vividRgb},0.12)`,
+              border:        `0.5px solid rgba(${cat.vividRgb},0.28)`,
               borderRadius:  '5px',
               padding:       '3px 7px',
               lineHeight:    1.5,
@@ -274,23 +242,19 @@ function Tile({
   )
 }
 
-// ── TILE FOLK ICONS ───────────────────────────────────────────────
-// Warli geometric language. Circles, lines, triangles only.
-// Do icon: exactly 2 triangles (front larger, back smaller behind it)
-
 function TileIcon({ id, color }: { id: string; color: string }) {
   const s = {
-    stroke:          color,
-    strokeWidth:     '5.5' as const,
-    strokeLinecap:   'round' as const,
-    strokeLinejoin:  'round' as const,
-    fill:            'none',
+    stroke:        color,
+    strokeWidth:   '5.5' as const,
+    strokeLinecap: 'round' as const,
+    strokeLinejoin:'round' as const,
+    fill:          'none',
   }
 
   switch (id) {
     case 'watch':
       return (
-        <svg viewBox="0 0 100 100" fill="none" width="86" height="86">
+        <svg viewBox="0 0 100 100" fill="none" width="100" height="100">
           <rect x="8" y="10" width="84" height="52" rx="4" {...s}/>
           <path d="M32 88 L50 62 L68 88 Z" {...s}/>
           <line x1="50" y1="62" x2="50" y2="88" stroke={color} strokeWidth="4" strokeLinecap="round"/>
@@ -298,7 +262,7 @@ function TileIcon({ id, color }: { id: string; color: string }) {
       )
     case 'listen':
       return (
-        <svg viewBox="0 0 100 100" fill="none" width="86" height="86">
+        <svg viewBox="0 0 100 100" fill="none" width="100" height="100">
           <circle cx="42" cy="72" r="22" {...s}/>
           <circle cx="42" cy="72" r="8" stroke={color} strokeWidth="3" fill="none"/>
           <line x1="56" y1="55" x2="78" y2="8" stroke={color} strokeWidth="5" strokeLinecap="round"/>
@@ -308,7 +272,7 @@ function TileIcon({ id, color }: { id: string; color: string }) {
       )
     case 'read':
       return (
-        <svg viewBox="0 0 100 100" fill="none" width="86" height="86">
+        <svg viewBox="0 0 100 100" fill="none" width="100" height="100">
           <rect x="18" y="14" width="64" height="74" rx="3" {...s}/>
           <line x1="30" y1="14" x2="30" y2="88" stroke={color} strokeWidth="4.5" strokeLinecap="round"/>
           <path d="M56 14 L56 4 L64 10 L72 4 L72 14" stroke={color} strokeWidth="4" strokeLinejoin="round" fill="none"/>
@@ -316,7 +280,7 @@ function TileIcon({ id, color }: { id: string; color: string }) {
       )
     case 'dine':
       return (
-        <svg viewBox="0 0 100 100" fill="none" width="86" height="86">
+        <svg viewBox="0 0 100 100" fill="none" width="100" height="100">
           <path d="M22 14 Q18 48 38 62 Q44 66 50 66 Q56 66 62 62 Q82 48 78 14" stroke={color} strokeWidth="5.5" fill="none" strokeLinecap="round"/>
           <line x1="22" y1="14" x2="78" y2="14" stroke={color} strokeWidth="5" strokeLinecap="round"/>
           <line x1="50" y1="66" x2="50" y2="86" stroke={color} strokeWidth="4.5" strokeLinecap="round"/>
@@ -325,25 +289,18 @@ function TileIcon({ id, color }: { id: string; color: string }) {
         </svg>
       )
     case 'do':
-      // Exactly 2 triangles: back (smaller, right) + front (larger, left)
-      // Ground line connects them. No third triangle.
       return (
-        <svg viewBox="0 0 100 100" fill="none" width="86" height="86">
-          {/* Back mountain — smaller, behind */}
-          <path d="M42 88 L70 22 L98 88" stroke={color} strokeWidth="4" strokeLinejoin="round" fill="none" opacity="0.70"/>
-          {/* Back mountain snow cap */}
-          <path d="M70 22 L62 40 L78 40 Z" fill={color} opacity="0.70"/>
-          {/* Front mountain — larger, in front */}
+        <svg viewBox="0 0 100 100" fill="none" width="100" height="100">
+          <path d="M42 88 L70 22 L98 88" stroke={color} strokeWidth="4" strokeLinejoin="round" fill="none" opacity="0.65"/>
+          <path d="M70 22 L62 40 L78 40 Z" fill={color} opacity="0.65"/>
           <path d="M2 88 L38 12 L74 88 Z" stroke={color} strokeWidth="5.5" strokeLinejoin="round" fill="none"/>
-          {/* Front mountain snow cap */}
           <path d="M38 12 L28 32 L48 32 Z" fill={color}/>
-          {/* Ground line */}
           <line x1="2" y1="88" x2="98" y2="88" stroke={color} strokeWidth="4" strokeLinecap="round"/>
         </svg>
       )
     case 'visit':
       return (
-        <svg viewBox="0 0 100 100" fill="none" width="86" height="86">
+        <svg viewBox="0 0 100 100" fill="none" width="100" height="100">
           <line x1="22" y1="92" x2="22" y2="52" stroke={color} strokeWidth="5.5" strokeLinecap="round"/>
           <line x1="78" y1="92" x2="78" y2="52" stroke={color} strokeWidth="5.5" strokeLinecap="round"/>
           <path d="M22 52 C22 30 34 10 50 8 C66 10 78 30 78 52" stroke={color} strokeWidth="5.5" fill="none" strokeLinecap="round"/>
