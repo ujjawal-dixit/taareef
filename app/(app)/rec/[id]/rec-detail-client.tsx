@@ -246,6 +246,15 @@ export function RecDetailClient({ recommendation: rec, categoryConfig: cfg }: Pr
   )
   const [loadingPlatforms, setLoadingPlatforms] = useState(false)
 
+  // Book-specific candidate state
+  const [bookCands,         setBookCands]         = useState<Record<string,unknown>[]>(
+    Array.isArray((rec.metadata as Record<string,unknown>)?.books_candidates)
+      ? (rec.metadata as Record<string,unknown>).books_candidates as Record<string,unknown>[]
+      : []
+  )
+  const [dismissedBookCands, setDismissedBookCands] = useState(false)
+  const [confirmingBookId,   setConfirmingBookId]   = useState<string | null>(null)
+
   // Retroactive enrichment — fires if Watch/Listen card has no image and no candidates.
   // After firing, polls once after 2.5s to pick up candidates that just arrived.
   useEffect(() => {
@@ -289,6 +298,34 @@ export function RecDetailClient({ recommendation: rec, categoryConfig: cfg }: Pr
       .finally(() => setLoadingPlatforms(false))
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rec.id, rec.category, rec.status])
+
+  // Retroactive book enrichment — fires if Read card has no image and no candidates
+  useEffect(() => {
+    if (rec.category !== 'read') return
+    if (liveImageUrl || bookCands.length > 0 || dismissedBookCands) return
+    const meta = (rec.metadata as Record<string,unknown>) ?? {}
+    if (meta.books_no_results) return
+
+    // Fire enrichment then poll once for result
+    fetch(`/api/enrich/book/${rec.id}`, { method: 'POST' })
+      .then(() => new Promise(r => setTimeout(r, 2000)))
+      .then(() => fetch(`/api/recommendations/${rec.id}`))
+      .then(r => r.json())
+      .then(({ data }) => {
+        if (!data) return
+        const freshMeta = (data.metadata as Record<string,unknown>) ?? {}
+        // Auto-confirmed — update live image
+        if (data.image_url) {
+          setLiveImageUrl(data.image_url)
+          setLiveMeta(freshMeta)
+        } else if (Array.isArray(freshMeta.books_candidates) && (freshMeta.books_candidates as unknown[]).length > 0) {
+          setBookCands(freshMeta.books_candidates as Record<string,unknown>[])
+          setLiveMeta(freshMeta)
+        }
+      })
+      .catch(() => {})
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rec.id, rec.category])
 
   // Restore note draft from localStorage on mount
   useEffect(() => {
@@ -421,7 +458,47 @@ export function RecDetailClient({ recommendation: rec, categoryConfig: cfg }: Pr
     }
   }
 
-  // Dismiss all candidates — keeps Criterion mode permanently
+  // Confirm a Google Books candidate
+  async function handleConfirmBook(candidate: Record<string,unknown>) {
+    setConfirmingBookId(candidate.google_id as string)
+    try {
+      const res  = await fetch(`/api/enrich/book/${rec.id}`, {
+        method:  'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify(candidate),
+      })
+      const json = await res.json()
+      if (json.data?.confirmed) {
+        setLiveImageUrl(candidate.cover_url as string ?? null)
+        setBookCands([])
+        setLiveMeta(prev => ({
+          ...prev,
+          books_candidates: null,
+          author:           candidate.author,
+          published_year:   candidate.published_year,
+          pages:            candidate.pages,
+          genre:            candidate.genre,
+        }))
+      }
+    } catch {
+      setError('Could not confirm cover — try again?')
+    } finally {
+      setConfirmingBookId(null)
+    }
+  }
+
+  // Dismiss book candidates — Criterion mode stays
+  function handleDismissBookCands() {
+    setDismissedBookCands(true)
+    setBookCands([])
+    fetch(`/api/recommendations/${rec.id}`, {
+      method:  'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ metadata: { ...liveMeta, books_candidates: null } }),
+    }).catch(() => {})
+  }
+
+  // Dismiss all TMDB candidates — keeps Criterion mode permanently
   function handleDismissCandidates() {
     setDismissedCands(true)
     setLiveMeta(prev => ({ ...prev, tmdb_candidates: null }))
@@ -826,6 +903,113 @@ export function RecDetailClient({ recommendation: rec, categoryConfig: cfg }: Pr
             </div>
           )
         })()}
+
+        {/* ── BOOK CANDIDATE STRIP ───────────────────────────────────
+            Shows when Google Books returned cover options for a Read card.
+            Same interaction pattern as TMDB strip — tap to confirm. */}
+        {rec.category === 'read' && bookCands.length > 0 && !dismissedBookCands && !liveImageUrl && (
+          <div style={{ marginBottom: '20px' }}>
+            <div style={{
+              fontFamily:    'var(--f-ui)',
+              fontSize:      '9px',
+              fontWeight:    700,
+              letterSpacing: '2px',
+              textTransform: 'uppercase',
+              color:         `rgba(${cfg.vividRgb},0.60)`,
+              marginBottom:  '10px',
+            }}>
+              Is this the right book?
+            </div>
+            <div style={{ display: 'flex', gap: '8px', overflowX: 'auto', paddingBottom: '4px' }}>
+              {bookCands.map((c, idx) => {
+                const isConfirming = confirmingBookId === (c.google_id as string)
+                return (
+                  <button
+                    key={idx}
+                    onClick={() => handleConfirmBook(c)}
+                    disabled={confirmingBookId !== null}
+                    style={{
+                      flexShrink:              0,
+                      width:                   '88px',
+                      borderRadius:            '8px',
+                      overflow:                'hidden',
+                      border:                  `1px solid rgba(${cfg.vividRgb},0.30)`,
+                      background:              cfg.deepDark,
+                      cursor:                  confirmingBookId !== null ? 'not-allowed' : 'pointer',
+                      position:                'relative',
+                      transition:              'border-color 160ms ease, transform 120ms ease',
+                      WebkitTapHighlightColor: 'transparent',
+                      padding:                 0,
+                    }}
+                    onMouseEnter={e => {
+                      (e.currentTarget as HTMLElement).style.borderColor = `rgba(${cfg.vividRgb},0.70)`
+                      ;(e.currentTarget as HTMLElement).style.transform = 'scale(1.04)'
+                    }}
+                    onMouseLeave={e => {
+                      (e.currentTarget as HTMLElement).style.borderColor = `rgba(${cfg.vividRgb},0.30)`
+                      ;(e.currentTarget as HTMLElement).style.transform = 'scale(1)'
+                    }}
+                  >
+                    <div style={{ width: '100%', paddingTop: '150%', position: 'relative', overflow: 'hidden' }}>
+                      {c.cover_url ? (
+                        <img
+                          src={c.cover_url as string}
+                          alt={c.title as string}
+                          style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }}
+                        />
+                      ) : (
+                        <div style={{
+                          position: 'absolute', inset: 0,
+                          background: `rgba(${cfg.vividRgb},0.20)`,
+                          display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '6px',
+                        }}>
+                          <span style={{ fontFamily: 'var(--f-display)', fontStyle: 'italic', fontSize: '9px', color: cfg.vividColor, textAlign: 'center', lineHeight: 1.3 }}>
+                            {c.title as string}
+                          </span>
+                        </div>
+                      )}
+                      {isConfirming && (
+                        <div style={{
+                          position: 'absolute', inset: 0,
+                          background: 'rgba(0,0,0,0.70)',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        }}>
+                          <div style={{ width: '18px', height: '18px', borderRadius: '50%', border: '2px solid rgba(255,255,255,0.20)', borderTopColor: cfg.vividColor, animation: 'spin 0.7s linear infinite' }} />
+                        </div>
+                      )}
+                    </div>
+                    <div style={{ padding: '6px 6px 7px', background: cfg.deepDark }}>
+                      <div style={{
+                        fontFamily: 'var(--f-body)', fontSize: '9px', fontWeight: 500,
+                        color: 'rgba(255,255,255,0.80)', lineHeight: 1.3,
+                        display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
+                      } as React.CSSProperties}>
+                        {c.title as string}
+                      </div>
+                      <div style={{ fontFamily: 'var(--f-body)', fontSize: '8px', fontWeight: 300, color: `rgba(${cfg.vividRgb},0.55)`, marginTop: '2px' }}>
+                        {c.author as string} {c.published_year ? `· ${c.published_year}` : ''}
+                      </div>
+                    </div>
+                  </button>
+                )
+              })}
+            </div>
+            <button
+              onClick={handleDismissBookCands}
+              style={{
+                marginTop:               '8px',
+                background:              'none', border: 'none', cursor: 'pointer',
+                fontFamily:              'var(--f-body)', fontSize: '11px', fontWeight: 300,
+                color:                   'rgba(255,255,255,0.28)', padding: '4px 0',
+                WebkitTapHighlightColor: 'transparent',
+                textDecoration:          'underline', textUnderlineOffset: '3px',
+                textDecorationColor:     'rgba(255,255,255,0.14)',
+              }}
+            >
+              None of these
+            </button>
+          </div>
+        )}
 
         {/* Share card + Edit details — full-width pills */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '20px' }}>
