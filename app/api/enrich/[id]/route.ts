@@ -50,63 +50,104 @@ export async function POST(_req: Request, { params }: Params) {
         return NextResponse.json({ data: { enriched: false, reason: 'no_api_key' }, error: null })
       }
 
-      // Default to movie search for watch category; series will be caught by title matching
-      const mediaType = 'movie'
-      const searchUrl = `https://api.themoviedb.org/3/search/${mediaType}?query=${encodeURIComponent(rec.title)}&api_key=${tmdbKey}&language=en-US`
+      // Use subtype hint from metadata if available — otherwise search both endpoints
+      const existingMeta = (rec.metadata as Record<string,unknown>) ?? {}
+      const subtypeHint  = typeof existingMeta.subtype === 'string' ? existingMeta.subtype : null
+      const searchBoth   = !subtypeHint || subtypeHint === 'series' || subtypeHint === 'documentary'
+      const searchMovie  = !subtypeHint || subtypeHint === 'film' || subtypeHint === 'documentary'
+      const searchTV     = !subtypeHint || subtypeHint === 'series'
 
-      console.log(`[Enrich] Searching TMDB for: "${rec.title}" (watch → ${mediaType})`)
+      const title = encodeURIComponent(rec.title)
 
-      const searchRes  = await fetch(searchUrl)
-      const searchData = await searchRes.json()
+      console.log(`[Enrich] Searching TMDB for: "${rec.title}" subtype=${subtypeHint ?? 'unknown'}`)
 
-      if (!searchRes.ok || !searchData.results?.length) {
+      // Search movie and/or tv in parallel — merge and rank by popularity
+      const [movieRes, tvRes] = await Promise.all([
+        searchMovie
+          ? fetch(`https://api.themoviedb.org/3/search/movie?query=${title}&api_key=${tmdbKey}&language=en-US`)
+              .then(r => r.json()).catch(() => ({ results: [] }))
+          : Promise.resolve({ results: [] }),
+        searchTV || searchBoth
+          ? fetch(`https://api.themoviedb.org/3/search/tv?query=${title}&api_key=${tmdbKey}&language=en-US`)
+              .then(r => r.json()).catch(() => ({ results: [] }))
+          : Promise.resolve({ results: [] }),
+      ])
+
+      // Tag results with media type so we fetch the right detail endpoint
+      type TMDBHit = Record<string,unknown> & { _media_type: 'movie' | 'tv' }
+      const movieHits: TMDBHit[] = ((movieRes.results ?? []) as Record<string,unknown>[])
+        .map(h => ({ ...h, _media_type: 'movie' as const }))
+      const tvHits: TMDBHit[] = ((tvRes.results ?? []) as Record<string,unknown>[])
+        .map(h => ({ ...h, _media_type: 'tv' as const }))
+
+      // Merge and rank by popularity — take top 3 across both endpoints
+      const allHits = [...movieHits, ...tvHits]
+        .sort((a, b) => ((b.popularity as number) ?? 0) - ((a.popularity as number) ?? 0))
+        .slice(0, 3)
+
+      if (!allHits.length) {
         console.log(`[Enrich] No TMDB results for: "${rec.title}"`)
-        // Store genre hue fallback — category colour + "unknown" genre
         await supabase.from('recommendations')
-          .update({ metadata: { ...((rec.metadata as Record<string,unknown>) ?? {}), tmdb_no_results: true } })
+          .update({ metadata: { ...existingMeta, tmdb_no_results: true } })
           .eq('id', id).eq('user_id', user.id)
         return NextResponse.json({ data: { enriched: false, reason: 'no_results' }, error: null })
       }
 
-      // Take top 3 candidates — let the user confirm the right one
+      // Fetch details for each candidate in parallel
       const candidates = await Promise.all(
-        searchData.results.slice(0, 3).map(async (hit: Record<string,unknown>) => {
-          // Fetch genre for each candidate
+        allHits.map(async (hit) => {
+          const mediaType = hit._media_type
           let genre: string | null = null
           let genreHue: string | null = null
           let runtime: number | null = null
+          let director: string | null = null
+          let seasons: number | null = null
+          let series_status: string | null = null
           try {
-            const detailRes  = await fetch(`https://api.themoviedb.org/3/${mediaType}/${hit.id}?api_key=${tmdbKey}`)
-            const detailData = await detailRes.json()
-            genre     = (detailData.genres as Array<{name:string}>)?.[0]?.name ?? null
-            runtime   = detailData.runtime ?? null
-            genreHue  = genre ? (GENRE_HUES[genre] ?? null) : null
+            const detailRes  = await fetch(
+              `https://api.themoviedb.org/3/${mediaType}/${hit.id}?api_key=${tmdbKey}&append_to_response=credits`
+            )
+            const d = await detailRes.json()
+            genre    = (d.genres as Array<{name:string}>)?.[0]?.name ?? null
+            genreHue = genre ? (GENRE_HUES[genre] ?? null) : null
+            if (mediaType === 'movie') {
+              runtime  = d.runtime ?? null
+              director = (d.credits?.crew as Array<{job:string;name:string}>)
+                ?.find(c => c.job === 'Director')?.name ?? null
+            } else {
+              seasons       = d.number_of_seasons ?? null
+              series_status = d.status ?? null
+              runtime       = d.episode_run_time?.[0] ?? null
+            }
           } catch {}
 
           return {
-            tmdb_id:      hit.id,
-            title:        hit.title ?? hit.name,
-            poster_url:   hit.poster_path
+            tmdb_id:       hit.id,
+            media_type:    mediaType,
+            title:         (hit.title ?? hit.name) as string,
+            subtype:       mediaType === 'tv' ? 'series' : 'film',
+            poster_url:    hit.poster_path
               ? `https://image.tmdb.org/t/p/w500${hit.poster_path}`
               : null,
-            release_year: hit.release_date
+            release_year:  hit.release_date
               ? parseInt((hit.release_date as string).slice(0, 4))
               : hit.first_air_date
               ? parseInt((hit.first_air_date as string).slice(0, 4))
               : null,
-            overview:     hit.overview ?? null,
-            vote_average: hit.vote_average ?? null,
+            overview:      (hit.overview as string) ?? null,
+            vote_average:  (hit.vote_average as number) ?? null,
             genre,
-            genre_hue:    genreHue,
+            genre_hue:     genreHue,
             runtime,
+            director,
+            seasons,
+            series_status,
           }
         })
       )
 
-      console.log(`[Enrich] Found ${candidates.length} candidates for "${rec.title}"`)
+      console.log(`[Enrich] ${candidates.length} candidates for "${rec.title}"`)
 
-      // Store candidates — do NOT set image_url yet (user must confirm)
-      const existingMeta = (rec.metadata as Record<string,unknown>) ?? {}
       await supabase.from('recommendations')
         .update({ metadata: { ...existingMeta, tmdb_candidates: candidates } })
         .eq('id', id)
