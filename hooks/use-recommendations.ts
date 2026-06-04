@@ -48,13 +48,14 @@ export function useCreateRecommendation() {
 
       const saved = result.data
 
-      // Trigger background enrichment for categories that benefit from it.
-      // Film/TV get TMDB posters. Music gets Spotify artwork.
-      // Fire-and-forget — never blocks the UI.
-      // Categories that get background enrichment — watch→TMDB, listen→Spotify
-      const ENRICHABLE = ['watch', 'listen'] as const
-      if (ENRICHABLE.includes(saved.category as typeof ENRICHABLE[number])) {
+      // Trigger background enrichment — fire-and-forget, never blocks UI.
+      // watch → TMDB (film + TV)
+      // listen → Spotify
+      // read → Google Books
+      if (saved.category === 'watch' || saved.category === 'listen') {
         triggerEnrichment(saved.id)
+      } else if (saved.category === 'read') {
+        fetch(`/api/enrich/book/${saved.id}`, { method: 'POST' }).catch(() => {})
       }
 
       setIsLoading(false)
