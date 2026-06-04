@@ -231,16 +231,64 @@ export function RecDetailClient({ recommendation: rec, categoryConfig: cfg }: Pr
   const cardRef = useRef<HTMLDivElement>(null)
   const router   = useRouter()
 
-  // Retroactive enrichment: if this card has no image and no pending candidates,
-  // trigger enrichment now. Catches cards saved before the category fix.
+  // Live metadata state — updated when candidates arrive or poster confirmed
+  const [liveMeta,       setLiveMeta]       = useState<Record<string,unknown>>(
+    (rec.metadata as Record<string,unknown>) ?? {}
+  )
+  const [liveImageUrl,   setLiveImageUrl]   = useState<string | null>(rec.image_url)
+  const [confirmingId,   setConfirmingId]   = useState<number | null>(null)
+  const [dismissedCands, setDismissedCands] = useState(false)
+  const [platforms,      setPlatforms]      = useState<string[]>(
+    // Use cached platforms from metadata if available
+    Array.isArray((rec.metadata as Record<string,unknown>)?.streaming_platforms)
+      ? (rec.metadata as Record<string,unknown>).streaming_platforms as string[]
+      : []
+  )
+  const [loadingPlatforms, setLoadingPlatforms] = useState(false)
+
+  // Retroactive enrichment — fires if Watch/Listen card has no image and no candidates.
+  // After firing, polls once after 2.5s to pick up candidates that just arrived.
   useEffect(() => {
-    const meta      = rec.metadata as Record<string, unknown>
-    const hasCands  = Array.isArray(meta?.tmdb_candidates) && (meta.tmdb_candidates as unknown[]).length > 0
+    const hasCands   = Array.isArray(liveMeta.tmdb_candidates) && (liveMeta.tmdb_candidates as unknown[]).length > 0
     const enrichable = rec.category === 'watch' || rec.category === 'listen'
-    if (enrichable && !rec.image_url && !hasCands) {
-      triggerEnrichment(rec.id).catch(() => {})
-    }
-  }, [rec.id, rec.image_url, rec.category, rec.metadata])
+    if (!enrichable || liveImageUrl || hasCands || dismissedCands) return
+
+    // Fire enrichment then poll once after 2.5s for candidates
+    triggerEnrichment(rec.id)
+      .then(() => new Promise(r => setTimeout(r, 2500)))
+      .then(() => fetch(`/api/recommendations/${rec.id}`))
+      .then(r => r.json())
+      .then(({ data }) => {
+        if (!data) return
+        const freshMeta = (data.metadata as Record<string,unknown>) ?? {}
+        if (Array.isArray(freshMeta.tmdb_candidates) && (freshMeta.tmdb_candidates as unknown[]).length > 0) {
+          setLiveMeta(freshMeta)
+        }
+      })
+      .catch(() => {})
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rec.id, rec.category])
+
+  // Fetch Watchmode streaming platforms for experienced Watch cards
+  useEffect(() => {
+    const cachedPlatforms = liveMeta.streaming_platforms
+    if (
+      rec.category !== 'watch' ||
+      rec.status === 'saved' ||
+      platforms.length > 0 ||
+      Array.isArray(cachedPlatforms)
+    ) return
+
+    setLoadingPlatforms(true)
+    fetch(`/api/watchmode?recId=${rec.id}&title=${encodeURIComponent(rec.title)}`)
+      .then(r => r.json())
+      .then(({ data }) => {
+        if (data?.platforms?.length) setPlatforms(data.platforms)
+      })
+      .catch(() => {})
+      .finally(() => setLoadingPlatforms(false))
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rec.id, rec.category, rec.status])
 
   // Restore note draft from localStorage on mount
   useEffect(() => {
@@ -263,7 +311,7 @@ export function RecDetailClient({ recommendation: rec, categoryConfig: cfg }: Pr
     } catch {}
   }, [note, noteDraftKey, rec.notes])
 
-  const hasImage = hasValidImage(rec.image_url)
+  const hasImage = hasValidImage(liveImageUrl)
   const isExp    = rec.status !== 'saved'
   const meta     = rec.metadata as Record<string, unknown>
   const metaLine = buildMeta(rec.category as Category, meta)
@@ -337,6 +385,52 @@ export function RecDetailClient({ recommendation: rec, categoryConfig: cfg }: Pr
       setError('Could not delete — try again?')
       setDeleting(false)
     }
+  }
+
+  // Confirm a TMDB candidate — sets poster, clears candidates
+  async function handleConfirmCandidate(candidate: Record<string,unknown>) {
+    setConfirmingId(candidate.tmdb_id as number)
+    try {
+      const res  = await fetch(`/api/enrich/${rec.id}`, {
+        method:  'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({
+          tmdb_id:      candidate.tmdb_id,
+          poster_url:   candidate.poster_url,
+          genre:        candidate.genre,
+          genre_hue:    candidate.genre_hue,
+          overview:     candidate.overview,
+          release_year: candidate.release_year,
+          runtime:      candidate.runtime,
+          vote_average: candidate.vote_average,
+          director:     candidate.director,
+          seasons:      candidate.seasons,
+          series_status:candidate.series_status,
+          subtype:      candidate.subtype,
+        }),
+      })
+      const json = await res.json()
+      if (json.data?.confirmed) {
+        setLiveImageUrl(candidate.poster_url as string)
+        setLiveMeta(prev => ({ ...prev, tmdb_candidates: null, ...candidate }))
+      }
+    } catch {
+      setError('Could not confirm poster — try again?')
+    } finally {
+      setConfirmingId(null)
+    }
+  }
+
+  // Dismiss all candidates — keeps Criterion mode permanently
+  function handleDismissCandidates() {
+    setDismissedCands(true)
+    setLiveMeta(prev => ({ ...prev, tmdb_candidates: null }))
+    // Clear from database silently
+    fetch(`/api/recommendations/${rec.id}`, {
+      method:  'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ metadata: { ...liveMeta, tmdb_candidates: null } }),
+    }).catch(() => {})
   }
 
   async function handleShare() {
@@ -472,7 +566,7 @@ export function RecDetailClient({ recommendation: rec, categoryConfig: cfg }: Pr
           <div style={{ width: '100%', height: '200px', position: 'relative', overflow: 'hidden' }}>
             {hasImage ? (
               <Image
-                src={rec.image_url!}
+                src={liveImageUrl!}
                 alt={rec.title}
                 fill
                 style={{ objectFit: 'cover' }}
@@ -593,6 +687,146 @@ export function RecDetailClient({ recommendation: rec, categoryConfig: cfg }: Pr
         borderTop:     'none',
       }}>
 
+        {/* ── CANDIDATE STRIP ──────────────────────────────────────
+            Shows when TMDB enrichment has returned poster options.
+            The card was a sketch — now the user picks the poster
+            and it comes alive. The strip slides in naturally. */}
+        {(() => {
+          const cands = Array.isArray(liveMeta.tmdb_candidates) && !dismissedCands
+            ? liveMeta.tmdb_candidates as Record<string,unknown>[]
+            : []
+          if (!cands.length && !liveImageUrl && rec.category === 'watch') {
+            // Enrichment fired but candidates not yet back — show breathing rangoli
+            return (
+              <div style={{
+                textAlign:   'center',
+                padding:     '8px 0 20px',
+                fontFamily:  'var(--f-body)',
+                fontSize:    '11px',
+                fontWeight:  300,
+                color:       `rgba(${cfg.vividRgb},0.45)`,
+                letterSpacing:'0.04em',
+                animation:   'pulseOpacity 2.4s ease-in-out infinite',
+              }}>
+                finding the right poster…
+              </div>
+            )
+          }
+          if (!cands.length) return null
+          return (
+            <div style={{ marginBottom: '20px' }}>
+              <div style={{
+                fontFamily:    'var(--f-ui)',
+                fontSize:      '9px',
+                fontWeight:    700,
+                letterSpacing: '2px',
+                textTransform: 'uppercase',
+                color:         `rgba(${cfg.vividRgb},0.60)`,
+                marginBottom:  '10px',
+              }}>
+                Is this the right one?
+              </div>
+              <div style={{ display: 'flex', gap: '8px', overflowX: 'auto', paddingBottom: '4px' }}>
+                {cands.map((c, idx) => {
+                  const isConfirming = confirmingId === (c.tmdb_id as number)
+                  return (
+                    <button
+                      key={idx}
+                      onClick={() => handleConfirmCandidate(c)}
+                      disabled={confirmingId !== null}
+                      style={{
+                        flexShrink:              0,
+                        width:                   '88px',
+                        borderRadius:            '8px',
+                        overflow:                'hidden',
+                        border:                  `1px solid rgba(${cfg.vividRgb},0.30)`,
+                        background:              cfg.deepDark,
+                        cursor:                  confirmingId !== null ? 'not-allowed' : 'pointer',
+                        position:                'relative',
+                        transition:              'border-color 160ms ease, transform 120ms ease',
+                        WebkitTapHighlightColor: 'transparent',
+                        padding:                 0,
+                      }}
+                      onMouseEnter={e => {
+                        (e.currentTarget as HTMLElement).style.borderColor = `rgba(${cfg.vividRgb},0.70)`
+                        ;(e.currentTarget as HTMLElement).style.transform = 'scale(1.04)'
+                      }}
+                      onMouseLeave={e => {
+                        (e.currentTarget as HTMLElement).style.borderColor = `rgba(${cfg.vividRgb},0.30)`
+                        ;(e.currentTarget as HTMLElement).style.transform = 'scale(1)'
+                      }}
+                    >
+                      {/* Poster image */}
+                      <div style={{ width: '100%', paddingTop: '150%', position: 'relative', overflow: 'hidden' }}>
+                        {c.poster_url ? (
+                          <img
+                            src={c.poster_url as string}
+                            alt={c.title as string}
+                            style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }}
+                          />
+                        ) : (
+                          <div style={{
+                            position: 'absolute', inset: 0,
+                            background: `rgba(${cfg.vividRgb},0.20)`,
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          }}>
+                            <span style={{ fontFamily: 'var(--f-display)', fontStyle: 'italic', fontSize: '10px', color: cfg.vividColor, padding: '4px', textAlign: 'center' }}>
+                              {c.title as string}
+                            </span>
+                          </div>
+                        )}
+                        {isConfirming && (
+                          <div style={{
+                            position: 'absolute', inset: 0,
+                            background: 'rgba(0,0,0,0.70)',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          }}>
+                            <div style={{ width: '18px', height: '18px', borderRadius: '50%', border: '2px solid rgba(255,255,255,0.20)', borderTopColor: cfg.vividColor, animation: 'spin 0.7s linear infinite' }} />
+                          </div>
+                        )}
+                      </div>
+                      {/* Title + year */}
+                      <div style={{ padding: '6px 6px 7px', background: cfg.deepDark }}>
+                        <div style={{
+                          fontFamily: 'var(--f-body)', fontSize: '9px', fontWeight: 500,
+                          color: 'rgba(255,255,255,0.80)', lineHeight: 1.3,
+                          display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
+                        } as React.CSSProperties}>
+                          {c.title as string}
+                        </div>
+                        <div style={{ fontFamily: 'var(--f-body)', fontSize: '8px', fontWeight: 300, color: `rgba(${cfg.vividRgb},0.55)`, marginTop: '2px' }}>
+                          {c.subtype === 'series' ? 'Series' : 'Film'} {c.release_year ? `· ${c.release_year}` : ''}
+                        </div>
+                      </div>
+                    </button>
+                  )
+                })}
+              </div>
+              {/* None of these */}
+              <button
+                onClick={handleDismissCandidates}
+                style={{
+                  marginTop:               '8px',
+                  background:              'none',
+                  border:                  'none',
+                  cursor:                  'pointer',
+                  fontFamily:              'var(--f-body)',
+                  fontSize:                '11px',
+                  fontWeight:              300,
+                  color:                   'rgba(255,255,255,0.28)',
+                  padding:                 '4px 0',
+                  WebkitTapHighlightColor: 'transparent',
+                  textDecoration:          'underline',
+                  textUnderlineOffset:     '3px',
+                  textDecorationColor:     'rgba(255,255,255,0.14)',
+                }}
+              >
+                None of these
+              </button>
+            </div>
+          )
+        })()}
+
         {/* Share card + Edit details — full-width pills */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '20px' }}>
           <button
@@ -692,6 +926,42 @@ export function RecDetailClient({ recommendation: rec, categoryConfig: cfg }: Pr
               )}
             </div>
             <div style={{ height: '0.5px', background: `rgba(${cfg.vividRgb},0.12)`, marginTop: '14px', marginBottom: '20px' }} />
+          </div>
+        )}
+
+        {/* Streaming platforms — Watch cards only, after experiencing */}
+        {rec.category === 'watch' && isExp && (
+          <div style={{ marginBottom: '20px' }}>
+            <span style={sectionLabel}>Stream on</span>
+            {loadingPlatforms ? (
+              <div style={{ fontFamily: 'var(--f-body)', fontSize: '12px', color: `rgba(${cfg.vividRgb},0.40)`, fontStyle: 'italic' }}>
+                Checking availability…
+              </div>
+            ) : platforms.length > 0 ? (
+              <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                {platforms.map(p => (
+                  <span key={p} style={{
+                    fontFamily:    'var(--f-ui)',
+                    fontSize:      '10px',
+                    fontWeight:    700,
+                    letterSpacing: '0.8px',
+                    textTransform: 'uppercase',
+                    color:         `rgba(${cfg.vividRgb},0.85)`,
+                    background:    `rgba(${cfg.vividRgb},0.10)`,
+                    border:        `1px solid rgba(${cfg.vividRgb},0.28)`,
+                    borderRadius:  '6px',
+                    padding:       '4px 10px',
+                  }}>
+                    {p}
+                  </span>
+                ))}
+              </div>
+            ) : (
+              <div style={{ fontFamily: 'var(--f-body)', fontSize: '12px', color: 'rgba(255,255,255,0.22)', fontWeight: 300 }}>
+                Not available on major platforms
+              </div>
+            )}
+            <div style={{ height: '0.5px', background: `rgba(${cfg.vividRgb},0.12)`, marginTop: '16px' }} />
           </div>
         )}
 
