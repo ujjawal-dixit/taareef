@@ -19,7 +19,7 @@ export type CategoryConfig = {
   emptyHeadline: string
   emptyBody:     string
   emptyCta:      string
-  nudges:        string[] // subcategory pills shown on tile and filter, max 3
+  nudges:        string[] // subcategory labels — filter pills + capture chips; must match saved subtype values (case-insensitive)
   statusOptions: string[]
   notePlaceholders: string[] // rotating micro-prompts for note field
 }
@@ -36,7 +36,7 @@ export const CATEGORIES: CategoryConfig[] = [
     emptyHeadline:'Films worth watching',
     emptyBody:    'Every film someone swears by — saved here, ready for the next free evening.',
     emptyCta:     'Save a film or show',
-    nudges:       ['Film', 'Series', 'Doc'],
+    nudges:       ['Film', 'Series', 'Documentary'],
     statusOptions:['saved', 'experienced', 'dismissed'],
     notePlaceholders: [
       'Watch it knowing nothing…',
@@ -57,7 +57,7 @@ export const CATEGORIES: CategoryConfig[] = [
     emptyHeadline:'Music worth remembering',
     emptyBody:    'That album someone played in the car. The artist from the podcast. Save them here.',
     emptyCta:     'Save something to listen to',
-    nudges:       ['Album', 'Song', 'Podcast'],
+    nudges:       ['Album', 'Podcast', 'Audiobook', 'Artist'],
     statusOptions:['saved', 'experienced', 'dismissed'],
     notePlaceholders: [
       'What does this sound like?',
@@ -78,7 +78,7 @@ export const CATEGORIES: CategoryConfig[] = [
     emptyHeadline:'Books worth reading',
     emptyBody:    'Every book that sounds exactly right — saved here until you are ready.',
     emptyCta:     'Save a book',
-    nudges:       ['Book', 'Manga', 'Article'],
+    nudges:       ['Fiction', 'Non-fiction', 'Poetry'],
     statusOptions:['saved', 'reading', 'finished', 'abandoned', 'dismissed'],
     notePlaceholders: [
       'Why does this feel like the right time?',
@@ -99,7 +99,7 @@ export const CATEGORIES: CategoryConfig[] = [
     emptyHeadline:'The next great meal is waiting',
     emptyBody:    'When someone says you have to try this place, save it here in seconds.',
     emptyCta:     'Save a place',
-    nudges:       ['Restaurant', 'Bar', 'Café'],
+    nudges:       ['Restaurant', 'Café', 'Bar', 'Street food'],
     statusOptions:['saved', 'experienced', 'dismissed'],
     notePlaceholders: [
       'Any occasion in mind?',
@@ -118,9 +118,9 @@ export const CATEGORIES: CategoryConfig[] = [
     vividRgb:     '16,195,182',
     deepDark:     '#010e0d',
     emptyHeadline:'Things worth doing',
-    emptyBody:    'The hike, the class, the experience someone keeps telling you about.',
+    emptyBody:    'The hike, the trail, the workshop someone keeps telling you about.',
     emptyCta:     'Save an activity',
-    nudges:       ['Hike', 'Adventure', 'Ride'],
+    nudges:       ['Hike', 'Trail', 'Adventure', 'Workshop', 'Live show'],
     statusOptions:['saved', 'done', 'dismissed'],
     notePlaceholders: [
       'What level of effort does this take?',
@@ -139,9 +139,9 @@ export const CATEGORIES: CategoryConfig[] = [
     vividRgb:     '25,145,225',
     deepDark:     '#010810',
     emptyHeadline:'Things worth witnessing',
-    emptyBody:    'The exhibition, the concert, the performance someone says you would love.',
+    emptyBody:    'The museum, the gallery, the viewpoint someone says you would love.',
     emptyCta:     'Save something to visit',
-    nudges:       ['Exhibition', 'Concert', 'Play'],
+    nudges:       ['Museum', 'Gallery', 'Heritage', 'Viewpoint', 'Market'],
     statusOptions:['saved', 'experienced', 'dismissed'],
     notePlaceholders: [
       'Does this have a closing date?',
