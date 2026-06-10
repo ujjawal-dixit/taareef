@@ -158,16 +158,23 @@ export function RecommendationCard({ recommendation, variant = 'full', categoryC
     return <GridCard rec={recommendation} config={config} metaLine={metaLine} hasImage={hasImage} />
   }
 
-  // ── FULL CARD — matches taareef-card-assembled.html (locked) ─────
-  // Matte object: contact shadow → lit rim → face → seam'd well → notch
-  // handshake → considered record → tip in quotes → vow + subcategory.
-  // No category badge. Brand+source live in the notch, never a footer.
+  // ── FULL CARD — matches taareef-decision-cards.html (locked) ─────
+  // Fixed object height; the WELL flexes and the INFO takes only its content
+  // height. Built around the decision: record line (year · genre · length),
+  // then cast, then tip. Notch carries taareef — from X with a real dash bar.
+  // OTT logo lives in the poster bottom-left. No badge, no footer handshake.
   const rgb       = config.vividRgb
   const subtype   = typeof meta.subtype === 'string' ? meta.subtype : null
   const subcatLbl = subtype ? subtype.charAt(0).toUpperCase() + subtype.slice(1) : null
   const platform  = Array.isArray(meta.streaming_platforms) && meta.streaming_platforms.length > 0
     && typeof meta.streaming_platforms[0] === 'string'
     ? meta.streaming_platforms[0] as string
+    : null
+
+  // The decision line and the secondary "cast" recognizer (category-aware).
+  const castLine  = typeof meta.cast === 'string' ? meta.cast
+    : Array.isArray(meta.cast) ? meta.cast.filter((x): x is string => typeof x === 'string').slice(0, 2).join(', ')
+    : typeof meta.creators === 'string' ? meta.creators
     : null
 
   // Experienced state: the vow transforms (to watch → watched); loved adds glow + dot.
@@ -178,53 +185,52 @@ export function RecommendationCard({ recommendation, variant = 'full', categoryC
   const vowText    = isExperienced ? config.verbPast : `to ${config.verb.replace(/^I\s+/, '')}`
 
   // Title size curve — comes down from monumental so it leads without starving the record.
-  const titleSize  = title.length > 34 ? 20 : title.length > 22 ? 23 : 27
-
-  const faceGradient = `linear-gradient(158deg, ${config.deepDark} 0%, #0a0a0a 72%)`
+  const titleSize  = title.length > 34 ? 19 : title.length > 22 ? 22 : 25
 
   return (
     <Link href={`/rec/${id}`} style={{ textDecoration: 'none', display: 'block' }}>
-      {/* OBJECT — contact shadow grounds it as a kept thing, not a floating screen element */}
+      {/* OBJECT — fixed height; contact shadow grounds it as a kept thing */}
       <div style={{
         position: 'relative',
+        width:    '100%',
+        height:   '432px',
         filter:   'drop-shadow(0 2px 3px rgba(0,0,0,0.65)) drop-shadow(0 11px 20px rgba(0,0,0,0.55))',
       }}>
-        {/* RIM — the lit physical edge: top lip catches light, bottom falls to shadow */}
+        {/* RIM — the lit physical edge */}
         <div style={{
           position:     'relative',
+          height:       '100%',
           borderRadius: '14px',
-          background:   'linear-gradient(to bottom,#2a2a28 0%,#161614 4px,#161614 calc(100% - 6px),#050504 100%)',
+          background:   'linear-gradient(to bottom,#2a2a28,#161614 4px,#161614 calc(100% - 6px),#050504)',
           paddingBottom:'5px',
-          boxShadow:    'inset 0 1px 0 rgba(255,255,255,0.08), inset 1px 0 0 rgba(255,255,255,0.03), inset -1px 0 0 rgba(0,0,0,0.4)',
+          boxShadow:    'inset 0 1px 0 rgba(255,255,255,0.08), inset -1px 0 0 rgba(0,0,0,0.4)',
         }}>
-          {/* FACE — the card body */}
+          {/* FACE — flex column so well flexes, info hugs content */}
           <div style={{
-            position:     'relative',
-            borderRadius: '12px',
-            padding:      '7px',
-            overflow:     'hidden',
-            background:   faceGradient,
-            boxShadow:    isLoved
-              ? `inset 0 0 60px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.04), 0 0 0 1px rgba(${rgb},0.30)`
-              : 'inset 0 0 60px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.04)',
+            position:      'relative',
+            height:        '100%',
+            borderRadius:  '12px',
+            padding:       '7px',
+            overflow:      'hidden',
+            display:       'flex',
+            flexDirection: 'column',
+            background:    'linear-gradient(158deg,#0e1421,#0a0a0a 72%)',
+            boxShadow:     isLoved ? `0 0 0 1px rgba(${rgb},0.30)` : undefined,
           }}>
-            {/* grain + sheen */}
+            {/* grain */}
             <div style={{
               position: 'absolute', inset: 0, zIndex: 40, pointerEvents: 'none', borderRadius: '12px',
               backgroundImage: GRAIN, backgroundSize: '150px', opacity: 0.07, mixBlendMode: 'overlay',
             }} />
-            <div style={{
-              position: 'absolute', inset: 0, zIndex: 39, pointerEvents: 'none', borderRadius: '12px',
-              background: 'linear-gradient(135deg,rgba(255,255,255,0.035) 0%,transparent 30%,transparent 70%,rgba(0,0,0,0.12) 100%)',
-            }} />
 
-            {/* WELL — framed window with the double-line seam (box-shadow stack) */}
+            {/* WELL — flexes to fill; double-line seam */}
             <div style={{
               position: 'relative', borderRadius: '7px', overflow: 'hidden',
-              boxShadow: `0 0 0 2px #0a0a0a, 0 0 0 3px rgba(${rgb},0.30), 0 0 0 4px rgba(${rgb},0.12)`,
+              flex: '1 1 auto', minHeight: 0,
+              boxShadow: `0 0 0 2px #0a0a0a, 0 0 0 3px rgba(${rgb},0.3)`,
             }}>
-              {/* poster (image) OR criterion (motif) — both 198px */}
-              <div style={{ height: '198px', position: 'relative', overflow: 'hidden' }}>
+              {/* poster (image) OR criterion (motif) */}
+              <div style={{ position: 'absolute', inset: 0, overflow: 'hidden' }}>
                 {hasImage ? (
                   <>
                     <Image
@@ -235,7 +241,7 @@ export function RecommendationCard({ recommendation, variant = 'full', categoryC
                       sizes="(max-width:480px) 100vw,480px"
                     />
                     {/* 14% category wash — "poster is a guest in our house" */}
-                    <div style={{ position: 'absolute', inset: 0, mixBlendMode: 'overlay', background: `rgba(${rgb},0.14)` }} />
+                    <div style={{ position: 'absolute', inset: 0, mixBlendMode: 'overlay', background: `rgba(${rgb},0.14)`, zIndex: 4 }} />
                   </>
                 ) : (
                   <div style={{
@@ -246,73 +252,90 @@ export function RecommendationCard({ recommendation, variant = 'full', categoryC
                   </div>
                 )}
 
-                {/* the "marriage" — poster dissolves into the category-tinted dark, not neutral black */}
+                {/* the "marriage" — poster dissolves into the category-tinted dark */}
                 <div style={{
-                  position: 'absolute', bottom: 0, left: 0, right: 0, height: '44%', zIndex: 3,
-                  background: `linear-gradient(to top, ${config.deepDark}, transparent)`,
+                  position: 'absolute', bottom: 0, left: 0, right: 0, height: '32%', zIndex: 5,
+                  background: `linear-gradient(to top, #0e1421, transparent)`,
                 }} />
 
                 {/* OTT logo — bottom-left of the poster, on a dark scrim (locked placement) */}
                 {hasImage && platform && (
-                  <div style={{ position: 'absolute', left: '10px', bottom: '10px', zIndex: 12 }}>
+                  <div style={{ position: 'absolute', left: '9px', bottom: '9px', zIndex: 8 }}>
                     <PlatformLogo platform={platform} />
                   </div>
                 )}
+              </div>
 
-                {/* NOTCH — the handshake, one line, top-right */}
-                <div style={{
-                  position: 'absolute', top: 0, right: 0, zIndex: 20, whiteSpace: 'nowrap',
-                  background: '#000', borderRadius: '0 7px 0 14px', padding: '6px 11px 8px 14px',
-                }}>
-                  <span style={{
-                    fontFamily: 'var(--f-display)', fontStyle: 'italic', fontWeight: 400, fontSize: '13px',
-                    color: '#1fce94', textShadow: '0 0 8px rgba(31,206,148,0.4)',
-                  }}>taareef</span>
-                  <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: '12px' }}> — </span>
-                  <span style={{
-                    fontFamily: 'var(--f-ui)', fontSize: '8px', fontWeight: 700,
-                    letterSpacing: '1px', textTransform: 'uppercase', color: config.vividColor,
-                  }}>from {source_name}</span>
-                </div>
+              {/* NOTCH — taareef — from X, one line, real dash bar, fixed 28px */}
+              <div style={{
+                position: 'absolute', top: 0, right: 0, zIndex: 20,
+                background: '#000', borderRadius: '0 7px 0 12px', padding: '0 11px',
+                height: '28px', display: 'flex', alignItems: 'center',
+              }}>
+                <span style={{
+                  fontFamily: 'var(--f-display)', fontStyle: 'italic', fontWeight: 400, fontSize: '13px',
+                  lineHeight: 1, color: '#1fce94', position: 'relative', top: '0.5px',
+                }}>taareef</span>
+                <span style={{
+                  display: 'inline-block', width: '9px', height: '1px',
+                  background: 'rgba(255,255,255,0.45)', margin: '0 6px', position: 'relative', top: '-1px',
+                }} />
+                <span style={{
+                  fontFamily: 'var(--f-ui)', fontSize: '8px', fontWeight: 700,
+                  letterSpacing: '1px', textTransform: 'uppercase', lineHeight: 1, color: config.vividColor,
+                }}>from {source_name}</span>
               </div>
             </div>
 
-            {/* INFO — the considered record */}
-            <div style={{ padding: '13px 12px 12px', position: 'relative', zIndex: 5 }}>
+            {/* INFO — flex:0, takes only content height */}
+            <div style={{ flex: '0 0 auto', padding: '12px 12px 11px', position: 'relative', zIndex: 5 }}>
               <div style={{
                 fontFamily: 'var(--f-display)', fontStyle: 'italic', fontWeight: 500,
-                fontSize: `${titleSize}px`, color: 'var(--ink)', lineHeight: 1.08, marginBottom: '9px',
+                fontSize: `${titleSize}px`, color: 'var(--ink)', lineHeight: 1.05, marginBottom: '6px',
               }}>
                 {title}
               </div>
 
+              {/* decision line — the spine */}
               {metaLine && (
                 <div style={{
-                  fontFamily: 'var(--f-body)', fontSize: '11.5px', fontWeight: 400,
-                  color: 'var(--ink-soft)', lineHeight: 1.5,
+                  fontFamily: 'var(--f-body)', fontSize: '11px', fontWeight: 400,
+                  color: 'var(--ink-soft)', lineHeight: 1.55,
                 }}>
                   {metaLine}
                 </div>
               )}
 
-              {notes && (
+              {/* secondary recognizer — cast / creators */}
+              {castLine && (
                 <div style={{
-                  fontFamily: 'var(--f-display)', fontStyle: 'italic', fontWeight: 400,
-                  fontSize: '14.5px', lineHeight: 1.42, color: 'rgba(244,243,238,0.9)',
-                  paddingLeft: '11px', marginTop: '12px',
-                  borderLeft: `2px solid rgba(${rgb},0.5)`,
+                  fontFamily: 'var(--f-body)', fontSize: '11px', fontWeight: 400,
+                  color: 'var(--ink-faint)', lineHeight: 1.5, marginTop: '1px',
                 }}>
-                  &ldquo;{notes.length > 120 ? notes.slice(0, 120) + '…' : notes}&rdquo;
+                  {castLine}
                 </div>
               )}
 
-              {/* FOOTER — vow bottom-left (transforms when experienced), subcategory bottom-right */}
+              {/* tip — 2-line clamp */}
+              {notes && (
+                <div style={{
+                  fontFamily: 'var(--f-display)', fontStyle: 'italic', fontSize: '12.5px',
+                  lineHeight: 1.35, color: 'rgba(244,243,238,0.82)',
+                  paddingLeft: '10px', marginTop: '10px',
+                  borderLeft: `2px solid rgba(${rgb},0.5)`,
+                  display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
+                }}>
+                  &ldquo;{notes}&rdquo;
+                </div>
+              )}
+
+              {/* FOOTER — vow bottom-left (transforms when experienced) + subcategory bottom-right */}
               <div style={{
                 display: 'flex', alignItems: 'baseline', justifyContent: 'space-between',
                 marginTop: '12px', paddingTop: '10px', borderTop: '0.5px solid rgba(255,255,255,0.08)',
               }}>
                 <span style={{
-                  fontFamily: 'var(--f-display)', fontStyle: 'italic', fontWeight: 400, fontSize: '15px',
+                  fontFamily: 'var(--f-display)', fontStyle: 'italic', fontSize: '15px',
                   color: `rgba(${rgb},${isExperienced ? 0.9 : 0.82})`,
                 }}>
                   {vowText}
