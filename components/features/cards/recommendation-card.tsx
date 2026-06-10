@@ -16,6 +16,7 @@ import Link   from 'next/link'
 import Image  from 'next/image'
 import { CATEGORY_MAP, getCardGradient, getCardVignette, type CategoryConfig } from '@/constants/categories'
 import { hasValidImage } from '@/lib/utils/fallback'
+import { CategoryMotif } from '@/components/features/cards/category-motif'
 import type { Recommendation, Category } from '@/lib/types'
 
 const GRAIN = "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='400'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.68' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='400' height='400' filter='url(%23g)' opacity='1'/%3E%3C/svg%3E\")"
@@ -28,42 +29,6 @@ function DotGrid({ rgb }: { rgb: string }) {
       backgroundSize:  '13px 13px',
       opacity:         0.10,
     }} />
-  )
-}
-
-function Rangoli({ rgb, small }: { rgb: string; small?: boolean }) {
-  const c    = `rgba(${rgb},1)`
-  const size = small ? 100 : 152
-  const cx   = small ? 50 : 76
-  const radii = small ? [44,35,26,18,10,4] : [72,58,44,30,17,6]
-
-  return (
-    <svg
-      style={{
-        position:  'absolute', top: '50%', left: '50%',
-        transform: 'translate(-50%,-54%)', zIndex: 5, pointerEvents: 'none',
-        width: `${size}px`, height: `${size}px`,
-      }}
-      viewBox={`0 0 ${size} ${size}`}
-      fill="none"
-    >
-      <circle cx={cx} cy={cx} r={radii[0]} stroke={c} strokeWidth="1.5" opacity="0.22"/>
-      <circle cx={cx} cy={cx} r={radii[1]} stroke={c} strokeWidth="1.5" opacity="0.26"/>
-      <circle cx={cx} cy={cx} r={radii[2]} stroke={c} strokeWidth="1.8" opacity="0.30"/>
-      <circle cx={cx} cy={cx} r={radii[3]} stroke={c} strokeWidth="1.8" opacity="0.32"/>
-      <circle cx={cx} cy={cx} r={radii[4]} stroke={c} strokeWidth="1.5" opacity="0.38"/>
-      <circle cx={cx} cy={cx} r={radii[5]} fill={c}   opacity="0.45"/>
-      {/* Cardinal spokes */}
-      <line x1={cx} y1={3}        x2={cx}          y2={cx-radii[1]+4} stroke={c} strokeWidth="1.5" strokeLinecap="round" opacity="0.28"/>
-      <line x1={cx} y1={size-3}   x2={cx}          y2={cx+radii[1]-4} stroke={c} strokeWidth="1.5" strokeLinecap="round" opacity="0.28"/>
-      <line x1={3}  y1={cx}       x2={cx-radii[1]+4} y2={cx}          stroke={c} strokeWidth="1.5" strokeLinecap="round" opacity="0.28"/>
-      <line x1={size-3} y1={cx}   x2={cx+radii[1]-4} y2={cx}          stroke={c} strokeWidth="1.5" strokeLinecap="round" opacity="0.28"/>
-      {/* Petal dots at ring 3 cardinal points */}
-      <circle cx={cx}      cy={cx-radii[2]} r="2.5" fill={c} opacity="0.35"/>
-      <circle cx={cx}      cy={cx+radii[2]} r="2.5" fill={c} opacity="0.35"/>
-      <circle cx={cx-radii[2]} cy={cx}      r="2.5" fill={c} opacity="0.35"/>
-      <circle cx={cx+radii[2]} cy={cx}      r="2.5" fill={c} opacity="0.35"/>
-    </svg>
   )
 }
 
@@ -98,17 +63,19 @@ function buildMetaLine(category: Category, meta: Record<string, unknown>): strin
       const subtype = typeof meta.subtype === 'string' ? meta.subtype : null
       const artist  = typeof meta.artist === 'string' ? meta.artist : null
       const host    = typeof meta.host === 'string' ? meta.host : null
+      const narrator = typeof meta.narrator === 'string' ? meta.narrator : null
+      const author  = typeof meta.author === 'string' ? meta.author : null
       const genre   = typeof meta.genre === 'string' ? meta.genre : null
       const year    = meta.release_year ?? meta.year
-      const album   = typeof meta.album === 'string' ? meta.album : null
       if (subtype === 'podcast') {
         if (host) parts.push(host)
-      } else if (subtype === 'song') {
-        if (artist) parts.push(artist)
-        if (album)  parts.push(album)
+      } else if (subtype === 'audiobook') {
+        if (author)   parts.push(author)
+        if (narrator) parts.push(`read by ${narrator}`)
       } else if (subtype === 'artist') {
         if (genre) parts.push(genre)
       } else {
+        // album (default)
         if (artist) parts.push(artist)
         if (year)   parts.push(String(year))
       }
@@ -223,7 +190,11 @@ export function RecommendationCard({ recommendation, variant = 'full', categoryC
             <>
               <div style={{ position: 'absolute', inset: 0, background: getCardGradient(category as Category) }} />
               <DotGrid rgb={config.vividRgb} />
-              <Rangoli rgb={config.vividRgb} />
+              <CategoryMotif
+                category={category as Category}
+                rgb={config.vividRgb}
+                subtype={typeof meta.subtype === 'string' ? meta.subtype : null}
+              />
             </>
           )}
           <div style={{
@@ -377,7 +348,14 @@ function GridCard({ rec, config, metaLine, hasImage }: {
               <>
                 <div style={{ position: 'absolute', inset: 0, background: getCardGradient(rec.category as Category) }} />
                 <DotGrid rgb={config.vividRgb} />
-                <Rangoli rgb={config.vividRgb} small />
+                <CategoryMotif
+                  category={rec.category as Category}
+                  rgb={config.vividRgb}
+                  subtype={typeof (rec.metadata as Record<string, unknown>).subtype === 'string'
+                    ? ((rec.metadata as Record<string, unknown>).subtype as string)
+                    : null}
+                  size={132}
+                />
                 {/* Title rendered in image zone for Criterion mode */}
                 <div style={{
                   position:   'absolute',
