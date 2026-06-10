@@ -5,12 +5,12 @@
 // ── CATEGORY ─────────────────────────────────────────────────────
 // 6 experience-based categories. Locked.
 export type Category =
-  | 'watch'   // Film · Series · Documentary
-  | 'listen'  // Album · Song · Podcast · Artist
-  | 'read'    // Book
-  | 'dine'    // Restaurant · Bar · Café · Street food
-  | 'do'      // Hike · Adventure · Ride
-  | 'visit'   // Exhibition · Concert · Theatre · Gallery
+  | 'watch'   // Film · Series · Documentary           — Warli
+  | 'listen'  // Album · Podcast · Audiobook · Artist   — Gond
+  | 'read'    // Fiction · Non-fiction · Poetry         — Madhubani
+  | 'dine'    // Restaurant · Café · Bar · Street food  — Block-print
+  | 'do'      // Hike · Trail · Adventure · Workshop · Live show — Saora
+  | 'visit'   // Museum · Gallery · Heritage · Viewpoint · Market — Kalamkari
 
 export const VALID_CATEGORIES: Category[] = [
   'watch', 'listen', 'read', 'dine', 'do', 'visit',
