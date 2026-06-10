@@ -51,9 +51,9 @@ export const NUDGE_QUESTIONS: NudgeQuestion[] = [
     id: 'nq-music-save-type',
     question: 'When someone shares music, it\'s usually...',
     options: [
-      { label: 'A specific song', value: 'song' },
       { label: 'An album to sit with', value: 'album' },
       { label: 'An artist to explore', value: 'artist' },
+      { label: 'A podcast to follow', value: 'podcast' },
     ],
     updatesPreference: 'music_default_subcategory',
   },
