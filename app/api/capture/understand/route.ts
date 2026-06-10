@@ -60,13 +60,16 @@ const VALID_SOURCE_TYPES = new Set([
   'youtube', 'article', 'newsletter', 'podcast', 'self',
 ])
 
+// Canonical subcategory vocabulary (Session 10 — folk-motif system).
+// Aliases are accepted so legacy captures and natural LLM phrasings still pass;
+// the motif registry maps every key here to a true medallion.
 const VALID_SUBTYPES: Record<string, string[]> = {
   watch:  ['film', 'series', 'documentary'],
-  listen: ['album', 'song', 'podcast'],
-  read:   ['book', 'manga', 'article'],
-  dine:   ['restaurant', 'bar', 'cafe'],
-  do:     ['hike', 'adventure', 'class', 'experience'],
-  visit:  ['exhibition', 'concert', 'play', 'event'],
+  listen: ['album', 'podcast', 'audiobook', 'artist'],
+  read:   ['fiction', 'non-fiction', 'poetry'],
+  dine:   ['restaurant', 'cafe', 'café', 'bar', 'street food'],
+  do:     ['hike', 'trail', 'adventure', 'workshop', 'live show'],
+  visit:  ['museum', 'gallery', 'heritage', 'viewpoint', 'market'],
 }
 
 // ── SYSTEM PROMPT ─────────────────────────────────────────────────
@@ -114,11 +117,11 @@ watch, listen, read, dine, do, visit
 
 SUBTYPE per category (pick one or null):
 - watch: film, series, documentary
-- listen: album, song, podcast
-- read: book, manga, article
-- dine: restaurant, bar, cafe
-- do: hike, adventure, class, experience
-- visit: exhibition, concert, play, event
+- listen: album, podcast, audiobook, artist
+- read: fiction, non-fiction, poetry
+- dine: restaurant, cafe, bar, street food
+- do: hike, trail, adventure, workshop, live show
+- visit: museum, gallery, heritage, viewpoint, market
 
 SOURCE_TYPE (pick one or null):
 friend, family, colleague, instagram, twitter, youtube, article, newsletter, podcast, self
@@ -183,7 +186,7 @@ Input: [VOICE TRANSCRIPT]: Bandra mein ek Lebanese place hai, Kabir bata raha th
 Output: {"title":null,"category":"dine","subtype":"restaurant","source_name":"Kabir","source_type":"friend","note":"Lebanese restaurant, must try","confidence":{"title":null,"category":"high","subtype":"medium","source_name":"high","source_type":"high"},"transcription_quality":"clear","multiple_items":null,"input_language":"hinglish","supplementary":{"what_to_order":null,"dates":null,"director":null,"author":null,"location_hint":"Bandra"}}
 
 Input: [VOICE TRANSCRIPT]: Meera said read Midnight's Children, Salman Rushdie
-Output: {"title":"Midnight's Children","category":"read","subtype":"book","source_name":"Meera","source_type":"friend","note":null,"confidence":{"title":"high","category":"high","subtype":"high","source_name":"high","source_type":"medium"},"transcription_quality":"clear","multiple_items":null,"input_language":"english","supplementary":{"what_to_order":null,"dates":null,"director":null,"author":"Salman Rushdie","location_hint":null}}
+Output: {"title":"Midnight's Children","category":"read","subtype":"fiction","source_name":"Meera","source_type":"friend","note":null,"confidence":{"title":"high","category":"high","subtype":"high","source_name":"high","source_type":"medium"},"transcription_quality":"clear","multiple_items":null,"input_language":"english","supplementary":{"what_to_order":null,"dates":null,"director":null,"author":"Salman Rushdie","location_hint":null}}
 
 Input: [VOICE TRANSCRIPT]: there's this podcast about Indian startups, forgot the name, Ananya was telling me
 Output: {"title":null,"category":"listen","subtype":"podcast","source_name":"Ananya","source_type":"friend","note":"podcast about Indian startups","confidence":{"title":null,"category":"high","subtype":"high","source_name":"high","source_type":"medium"},"transcription_quality":"partial","multiple_items":null,"input_language":"english","supplementary":{"what_to_order":null,"dates":null,"director":null,"author":null,"location_hint":null}}
