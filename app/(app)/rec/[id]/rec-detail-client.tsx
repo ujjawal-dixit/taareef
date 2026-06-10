@@ -26,6 +26,7 @@ import { useRouter }                      from 'next/navigation'
 import Image                              from 'next/image'
 import { CATEGORY_MAP, getCardGradient, getCardVignette, CATEGORIES } from '@/constants/categories'
 import { hasValidImage } from '@/lib/utils/fallback'
+import { CategoryMotif } from '@/components/features/cards/category-motif'
 import type { CategoryConfig } from '@/constants/categories'
 import type { Recommendation, Reaction, Category } from '@/lib/types'
 import { triggerEnrichment } from '@/lib/utils/enrich'
@@ -107,6 +108,8 @@ function buildMeta(category: Category, meta: Record<string, unknown>): string {
     case 'listen': {
       const artist   = typeof meta.artist === 'string' ? meta.artist : null
       const host     = typeof meta.host === 'string' ? meta.host : null
+      const narrator = typeof meta.narrator === 'string' ? meta.narrator : null
+      const author   = typeof meta.author === 'string' ? meta.author : null
       const genre    = typeof meta.genre === 'string' ? meta.genre : null
       const year     = meta.release_year ?? meta.year
       const album    = typeof meta.album === 'string' ? meta.album : null
@@ -114,11 +117,15 @@ function buildMeta(category: Category, meta: Record<string, unknown>): string {
       const subtype  = typeof meta.subtype === 'string' ? meta.subtype : null
       if (subtype === 'podcast') {
         if (host) p.push(host)
-      } else if (subtype === 'song') {
-        if (artist) p.push(artist)
-        if (album)  p.push(album)
-        if (year)   p.push(String(year))
+        if (genre) p.push(genre)
+      } else if (subtype === 'audiobook') {
+        if (author)   p.push(author)
+        if (narrator) p.push(`read by ${narrator}`)
+      } else if (subtype === 'artist') {
+        if (genre) p.push(genre)
+        if (year)  p.push(String(year))
       } else {
+        // album (default)
         if (artist) p.push(artist)
         if (genre)  p.push(genre)
         if (year)   p.push(String(year))
@@ -187,32 +194,6 @@ function DotGrid({ rgb }: { rgb: string }) {
       backgroundImage: `radial-gradient(circle,rgba(${rgb},1) 1.4px,transparent 1.4px)`,
       backgroundSize:  '13px 13px', opacity: 0.10,
     }} />
-  )
-}
-
-function Rangoli({ rgb }: { rgb: string }) {
-  const c = `rgba(${rgb},1)`
-  return (
-    <svg style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-54%)', zIndex: 5, pointerEvents: 'none', width: '152px', height: '152px' }} viewBox="0 0 152 152" fill="none">
-      <circle cx="76" cy="76" r="72" stroke={c} strokeWidth="2" opacity="0.22"/>
-      <circle cx="76" cy="76" r="58" stroke={c} strokeWidth="2" opacity="0.26"/>
-      <circle cx="76" cy="76" r="44" stroke={c} strokeWidth="2.2" opacity="0.30"/>
-      <circle cx="76" cy="76" r="30" stroke={c} strokeWidth="2.2" opacity="0.32"/>
-      <circle cx="76" cy="76" r="17" stroke={c} strokeWidth="2" opacity="0.38"/>
-      <circle cx="76" cy="76" r="6"  fill={c} opacity="0.45"/>
-      <line x1="76" y1="4"   x2="76"  y2="30"  stroke={c} strokeWidth="2" strokeLinecap="round" opacity="0.28"/>
-      <line x1="76" y1="122" x2="76"  y2="148" stroke={c} strokeWidth="2" strokeLinecap="round" opacity="0.28"/>
-      <line x1="4"  y1="76"  x2="30"  y2="76"  stroke={c} strokeWidth="2" strokeLinecap="round" opacity="0.28"/>
-      <line x1="122" y1="76" x2="148" y2="76"  stroke={c} strokeWidth="2" strokeLinecap="round" opacity="0.28"/>
-      <line x1="25" y1="25"  x2="44"  y2="44"  stroke={c} strokeWidth="1.8" strokeLinecap="round" opacity="0.20"/>
-      <line x1="108" y1="108" x2="127" y2="127" stroke={c} strokeWidth="1.8" strokeLinecap="round" opacity="0.20"/>
-      <line x1="127" y1="25" x2="108" y2="44"  stroke={c} strokeWidth="1.8" strokeLinecap="round" opacity="0.20"/>
-      <line x1="25" y1="127" x2="44"  y2="108" stroke={c} strokeWidth="1.8" strokeLinecap="round" opacity="0.20"/>
-      <circle cx="76" cy="32"  r="3.5" fill={c} opacity="0.35"/>
-      <circle cx="76" cy="120" r="3.5" fill={c} opacity="0.35"/>
-      <circle cx="32" cy="76"  r="3.5" fill={c} opacity="0.35"/>
-      <circle cx="120" cy="76" r="3.5" fill={c} opacity="0.35"/>
-    </svg>
   )
 }
 
@@ -654,7 +635,15 @@ export function RecDetailClient({ recommendation: rec, categoryConfig: cfg }: Pr
               <>
                 <div style={{ position: 'absolute', inset: 0, background: getCardGradient(rec.category as Category) }} />
                 <DotGrid rgb={cfg.vividRgb} />
-                <Rangoli rgb={cfg.vividRgb} />
+                <CategoryMotif
+                  category={rec.category as Category}
+                  rgb={cfg.vividRgb}
+                  subtype={typeof liveMeta.subtype === 'string'
+                    ? liveMeta.subtype
+                    : (typeof (rec.metadata as Record<string, unknown>).subtype === 'string'
+                        ? ((rec.metadata as Record<string, unknown>).subtype as string)
+                        : null)}
+                />
               </>
             )}
             <div style={{
