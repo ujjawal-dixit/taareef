@@ -29,7 +29,7 @@ export default async function DashboardPage() {
   // Preferences — use unknown typing to avoid generated-types mismatch
   // user_preferences may not be in the auto-generated Supabase types yet
   const { data: prefsRaw } = await supabase
-    .from('user_preferences' as string)
+    .from('user_preferences')
     .select('default_categories')
     .eq('user_id', user!.id)
     .single()
