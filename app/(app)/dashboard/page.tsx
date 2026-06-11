@@ -1,61 +1,57 @@
 // app/(app)/dashboard/page.tsx
-// Mosaic home — fetches category counts and latest card per category.
-// Single query, not N+1. Client receives pre-grouped data.
+// Fetches recommendation counts + user preferences.
+// First-run detection: if no preferences row → redirect to /onboarding/categories.
 
-import { createClient }    from '@/lib/supabase/server'
-import { DashboardClient } from './dashboard-client'
-import { redirect }        from 'next/navigation'
-import { CATEGORIES }      from '@/constants/categories'
-import type { Metadata }   from 'next'
-import type { Recommendation } from '@/lib/types'
-
-export const metadata: Metadata = { title: 'taareef' }
+import { redirect } from 'next/navigation'
+import { createClient } from '@/lib/supabase/server'
+import DashboardClient from './dashboard-client'
+import type { Category } from '@/lib/types'
 
 export default async function DashboardPage() {
   const supabase = await createClient()
 
-  const { data: { user }, error: authError } = await supabase.auth.getUser()
-  if (authError || !user) redirect('/login')
+  const {
+    data: { user },
+    error: authError,
+  } = await supabase.auth.getUser()
 
-  // Single query — all non-dismissed recommendations, newest first
-  const { data: all } = await supabase
+  if (authError || !user) {
+    redirect('/login')
+  }
+
+  // ── Fetch recommendation counts per category ──────────────────────────────
+  const { data: recs } = await supabase
     .from('recommendations')
-    .select('id, title, category, source_name, image_url, reaction, status, metadata, created_at')
+    .select('category')
     .eq('user_id', user.id)
     .neq('status', 'dismissed')
-    .order('created_at', { ascending: false })
-    .limit(200)
 
-  const recs = (all ?? []) as Recommendation[]
+  const counts: Record<string, number> = {}
+  if (recs) {
+    for (const rec of recs) {
+      counts[rec.category] = (counts[rec.category] ?? 0) + 1
+    }
+  }
 
-  // Group client-side — no extra queries
-  const grouped: Record<string, Recommendation[]> = {}
-  recs.forEach(r => {
-    if (!grouped[r.category]) grouped[r.category] = []
-    grouped[r.category].push(r)
-  })
+  // ── Fetch user preferences ────────────────────────────────────────────────
+  const { data: prefs } = await supabase
+    .from('user_preferences')
+    .select('default_categories, onboarding_complete')
+    .eq('user_id', user.id)
+    .single()
 
-  // Build tile data — one object per category that has saves
-  const tiles = CATEGORIES
-    .filter(cat => (grouped[cat.id]?.length ?? 0) > 0)
-    .map(cat => ({
-      category:   cat,
-      count:      grouped[cat.id].length,
-      latest:     grouped[cat.id][0],      // newest first
-      hasReacted: grouped[cat.id].some(r => r.reaction !== null),
-    }))
+  // First-run detection: no prefs row at all → send to category question
+  // This works across devices: the DB is the source of truth.
+  if (!prefs) {
+    redirect('/onboarding/categories')
+  }
 
-  const totalSaved = recs.length
-  const userName   = user.user_metadata?.full_name ?? user.email?.split('@')[0] ?? 'You'
-  const userEmail  = user.email ?? ''
+  const preferredCategories: Category[] = (prefs.default_categories ?? []) as Category[]
 
   return (
     <DashboardClient
-      tiles={tiles}
-      totalSaved={totalSaved}
-      userName={userName}
-      userEmail={userEmail}
-      userId={user.id}
+      counts={counts}
+      preferredCategories={preferredCategories}
     />
   )
 }
