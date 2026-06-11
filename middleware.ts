@@ -1,4 +1,5 @@
 // middleware.ts
+//
 // Auth protection for all app routes.
 // Public routes (no auth required): /, /login, /onboarding/*, /api/auth/*
 // Everything else: redirect to / if not logged in.
