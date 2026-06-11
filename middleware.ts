@@ -45,8 +45,13 @@ export async function middleware(request: NextRequest) {
     pathname.startsWith('/onboarding') ||
     pathname.startsWith('/api/auth')
 
-  // ── Logged-in user visiting landing or onboarding → send to dashboard ────
-  if (user && (pathname === '/' || pathname.startsWith('/onboarding'))) {
+  // ── Logged-in user visiting the landing or login page → send to dashboard ──
+  // NOTE: /onboarding/* is intentionally NOT redirected here. A logged-in user
+  // must be able to reach /onboarding/categories (the first-run question, which
+  // reads their account and writes preferences) and /onboarding/demo (the "?"
+  // replay). Redirecting /onboarding here creates an infinite loop against the
+  // dashboard's own "no preferences → /onboarding/categories" guard.
+  if (user && (pathname === '/' || pathname.startsWith('/login'))) {
     return NextResponse.redirect(new URL('/dashboard', request.url))
   }
 
