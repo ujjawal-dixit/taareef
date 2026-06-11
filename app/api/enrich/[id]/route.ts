@@ -12,7 +12,7 @@ import { createClient } from '@/lib/supabase/server'
 // Fetches enrichment data and writes to metadata.
 // ─────────────────────────────────────────────────────────────────────────────
 export async function GET(
-  request: NextRequest,
+  _request: NextRequest,
   { params }: { params: { id: string } }
 ) {
   try {
