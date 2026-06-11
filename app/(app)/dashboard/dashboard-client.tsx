@@ -1,358 +1,249 @@
 'use client'
 
 // app/(app)/dashboard/dashboard-client.tsx
-// Session 11:
-// - Rotating sub-headline: time-seeded, never same twice in a row
-// - Tile behaviour unchanged from session 10
+// Screen 4 — The real home screen.
+// On first run: tiles are ordered by the user's category preferences.
+// One tooltip on [+] for 4 seconds, shown once ever.
 
-import { useCallback, useMemo } from 'react'
-import { useRouter }   from 'next/navigation'
-import { AppShell }    from '@/components/features/navigation/app-shell'
-import { useToast }    from '@/components/ui/toast'
-import { useCreateRecommendation } from '@/hooks/use-recommendations'
-import { CATEGORIES, getTileGradient } from '@/constants/categories'
-import type { CategoryConfig } from '@/constants/categories'
-import type { Recommendation, CreateRecommendationInput } from '@/lib/types'
+import { useEffect, useState, useRef } from 'react'
+import Link from 'next/link'
+import { CATEGORIES } from '@/constants/categories'
+import type { Category } from '@/lib/types'
 
-type TileData = {
-  category:   CategoryConfig
-  count:      number
-  latest:     Recommendation | null
-  hasReacted: boolean
+interface DashboardClientProps {
+  counts: Record<string, number>
+  preferredCategories: string[]   // ordered array from user_preferences — may be empty
 }
 
-type DashboardClientProps = {
-  tiles:      TileData[]
-  totalSaved: number
-  userName:   string
-  userEmail:  string
-  userId:     string
-}
+// localStorage key — tooltip shown flag
+const TOOLTIP_SHOWN_KEY = 'taareef_tooltip_shown'
 
-const GRAIN = "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.72' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='300' height='300' filter='url(%23g)' opacity='1'/%3E%3C/svg%3E\")"
+export default function DashboardClient({ counts, preferredCategories }: DashboardClientProps) {
+  const [showTooltip, setShowTooltip] = useState(false)
+  const tooltipTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-// ── ROTATING SUB-HEADLINES ────────────────────────────────────────
-// Seeded by hour of day + day of week so it shifts naturally
-// across morning / afternoon / evening / weekend without feeling random.
-// Never purely factual. Never product-pitchy. Max 8 words.
-// The filled-vault variants weave in the count for personal resonance.
+  // Show tooltip once ever, 500ms after mount
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const alreadyShown = localStorage.getItem(TOOLTIP_SHOWN_KEY)
+    if (alreadyShown) return
 
-const EMPTY_HEADLINES = [
-  'your vault is waiting',
-  'start with one thing someone told you',
-  'every great rec lives somewhere',
-  'save it before you forget',
-  'the people you trust have good taste',
-  'what did someone tell you lately?',
-  'a vault begins with one',
-  'somewhere, someone knows what you need next',
-]
+    const delay = setTimeout(() => {
+      setShowTooltip(true)
+      localStorage.setItem(TOOLTIP_SHOWN_KEY, 'true')
 
-function getFilledHeadlines(count: number): string[] {
-  return [
-    `${count} thing${count === 1 ? '' : 's'} worth remembering`,
-    `${count} rec${count === 1 ? '' : 's'} — all from people you trust`,
-    `saved. remembered. yours.`,
-    `${count} things someone told you about`,
-    `your taste, carefully kept`,
-    `${count} moment${count === 1 ? '' : 's'} waiting for you`,
-    `the vault grows. so does the trust.`,
-    `${count} recommendation${count === 1 ? '' : 's'}. all with a source.`,
-  ]
-}
+      tooltipTimer.current = setTimeout(() => {
+        setShowTooltip(false)
+      }, 4000)
+    }, 500)
 
-function getSubHeadline(totalSaved: number): string {
-  const now    = new Date()
-  const hour   = now.getHours()
-  const day    = now.getDay()     // 0 = Sunday
-  const minute = now.getMinutes()
+    return () => {
+      clearTimeout(delay)
+      if (tooltipTimer.current) clearTimeout(tooltipTimer.current)
+    }
+  }, [])
 
-  // Seed that shifts with time but not every second
-  // Changes every 90 minutes during waking hours
-  const timeSeed = Math.floor(hour / 1.5) + day * 16 + Math.floor(minute / 90)
+  // Build ordered category list:
+  // Preferred categories first (in preference order), then remaining categories
+  const orderedCategories = (() => {
+    if (preferredCategories.length === 0) return CATEGORIES
 
-  if (totalSaved === 0) {
-    return EMPTY_HEADLINES[timeSeed % EMPTY_HEADLINES.length]
-  }
-  const lines = getFilledHeadlines(totalSaved)
-  return lines[timeSeed % lines.length]
-}
+    const preferred = preferredCategories
+      .map((id) => CATEGORIES.find((c) => c.id === id))
+      .filter((c): c is typeof CATEGORIES[number] => !!c)
 
-export function DashboardClient({ tiles, totalSaved }: DashboardClientProps) {
-  const router     = useRouter()
-  const { toast }  = useToast()
-  const { create } = useCreateRecommendation()
-
-  // Computed once on mount — stable per session, shifts across visits
-  const subHeadline = useMemo(() => getSubHeadline(totalSaved), [totalSaved])
-
-  const handleSave = useCallback(async (input: CreateRecommendationInput) => {
-    await create(
-      input, undefined,
-      () => { toast('Saved ✦', 'success'); router.refresh() },
-      (err) => toast(err, 'error'),
+    const remaining = CATEGORIES.filter(
+      (c) => !preferredCategories.includes(c.id)
     )
-  }, [create, toast, router])
 
-  const filledMap: Record<string, TileData> = {}
-  tiles.forEach(t => { filledMap[t.category.id] = t })
-
-  return (
-    <AppShell onSaveRecommendation={handleSave}>
-      <div style={{ maxWidth: '430px', margin: '0 auto', padding: '0 0 88px' }}>
-
-        <div style={{ textAlign: 'center', padding: '28px 0 12px' }}>
-          <div style={{
-            fontFamily: 'var(--f-display)',
-            fontStyle:  'italic',
-            fontWeight: 300,
-            fontSize:   '50px',
-            color:      '#1fce94',
-            lineHeight: 1,
-            textShadow: '0 0 40px rgba(31,206,148,0.45), 0 0 100px rgba(31,206,148,0.18)',
-          }}>
-            taareef
-          </div>
-          <div style={{
-            fontFamily:    'var(--f-body)',
-            fontSize:      '11px',
-            fontWeight:    300,
-            color:         'rgba(255,255,255,0.55)',
-            letterSpacing: '0.08em',
-            marginTop:     '6px',
-            transition:    'opacity 600ms ease',
-          }}>
-            {subHeadline}
-          </div>
-        </div>
-
-        <div style={{
-          display:             'grid',
-          gridTemplateColumns: '1fr 1fr',
-          gridTemplateRows:    'repeat(3, 200px)',
-          gap:                 '10px',
-          padding:             '0 14px',
-        }}>
-          {CATEGORIES.map(cat => (
-            <Tile
-              key={cat.id}
-              cat={cat}
-              filled={filledMap[cat.id] ?? null}
-              onClick={() => router.push(`/dashboard/${cat.id}`)}
-            />
-          ))}
-        </div>
-
-      </div>
-    </AppShell>
-  )
-}
-
-function Tile({
-  cat,
-  filled,
-  onClick,
-}: {
-  cat:     CategoryConfig
-  filled:  TileData | null
-  onClick: () => void
-}) {
-  const count    = filled?.count ?? 0
-  const hasSaves = count > 0
+    return [...preferred, ...remaining]
+  })()
 
   return (
     <div
-      onClick={onClick}
-      role="button"
-      tabIndex={0}
-      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onClick() }}
-      aria-label={`${cat.label}, ${count} saved`}
       style={{
-        position:                'relative',
-        borderRadius:            '14px',
-        overflow:                'hidden',
-        cursor:                  'pointer',
-        background:              '#161616',
-        border: hasSaves
-          ? `1px solid rgba(${cat.vividRgb},0.72)`
-          : `1px solid rgba(${cat.vividRgb},0.22)`,
-        boxShadow: hasSaves
-          ? `0 0 0 1px rgba(${cat.vividRgb},0.18), 0 0 20px rgba(${cat.vividRgb},0.30), 0 8px 28px -6px rgba(${cat.vividRgb},0.24)`
-          : 'none',
-        transition:              'transform 130ms ease',
-        WebkitTapHighlightColor: 'transparent',
-        display:                 'flex',
-        flexDirection:           'column',
+        height: '100%',
+        display: 'flex',
+        flexDirection: 'column',
+        padding: '0 0 80px',
       }}
-      onMouseEnter={(e) => { e.currentTarget.style.transform = 'scale(1.015)' }}
-      onMouseLeave={(e) => { e.currentTarget.style.transform = 'scale(1)' }}
     >
-      <div style={{
-        position:   'absolute',
-        inset:      0,
-        background: getTileGradient(cat.id),
-        zIndex:     1,
-      }} />
-
-      <div style={{
-        position:        'absolute',
-        inset:           0,
-        zIndex:          4,
-        pointerEvents:   'none',
-        backgroundImage: GRAIN,
-        backgroundSize:  '180px 180px',
-        opacity:         0.052,
-        mixBlendMode:    'overlay',
-      }} />
-
-      <div style={{
-        position:       'absolute',
-        top:            '50%',
-        left:           '50%',
-        transform:      'translate(-50%, -50%)',
-        zIndex:         2,
-        opacity:        hasSaves ? 0.30 : 0.20,
-        pointerEvents:  'none',
-        width:          '100px',
-        height:         '100px',
-        display:        'flex',
-        alignItems:     'center',
-        justifyContent: 'center',
-      }}>
-        <TileIcon id={cat.id} color={cat.vividColor} />
+      {/* Header */}
+      <div style={{ padding: '28px 20px 16px' }}>
+        <h1
+          style={{
+            fontFamily: 'var(--f-display)',
+            fontStyle: 'italic',
+            fontWeight: 500,
+            fontSize: 28,
+            color: '#F4F3EE',
+            margin: 0,
+            lineHeight: 1.1,
+          }}
+        >
+          Your vault
+        </h1>
       </div>
 
-      <div style={{
-        position:       'relative',
-        zIndex:         3,
-        padding:        '12px 13px 13px',
-        flex:           1,
-        display:        'flex',
-        flexDirection:  'column',
-        justifyContent: 'space-between',
-      }}>
-        <div style={{
-          display:        'flex',
-          alignItems:     'baseline',
-          justifyContent: 'space-between',
-        }}>
-          <div style={{
-            fontFamily:  'var(--f-display)',
-            fontStyle:   'italic',
-            fontWeight:  400,
-            fontSize:    '26px',
-            color:       'rgba(255,255,255,0.97)',
-            lineHeight:  1.1,
-            textShadow:  '0 1px 16px rgba(0,0,0,0.55)',
-          }}>
-            {cat.label}
-          </div>
-          <div style={{
-            fontFamily:    'var(--f-ui)',
-            fontWeight:    700,
-            fontSize:      '13px',
-            color:         hasSaves
-              ? `rgba(${cat.vividRgb},0.85)`
-              : 'rgba(255,255,255,0.30)',
-            letterSpacing: '0.02em',
-            lineHeight:    1,
-          }}>
-            {count}
-          </div>
-        </div>
-
-        <div style={{ display: 'flex', gap: '4px', flexWrap: 'nowrap' }}>
-          {cat.nudges.slice(0, 3).map(n => (
-            <span key={n} style={{
-              fontFamily:    'var(--f-ui)',
-              fontSize:      '10px',
-              fontWeight:    700,
-              letterSpacing: '0.8px',
-              textTransform: 'uppercase',
-              color:         `rgba(${cat.vividRgb},0.75)`,
-              background:    `rgba(${cat.vividRgb},0.12)`,
-              border:        `0.5px solid rgba(${cat.vividRgb},0.28)`,
-              borderRadius:  '5px',
-              padding:       '3px 7px',
-              lineHeight:    1.5,
-              whiteSpace:    'nowrap',
-            }}>
-              {n}
-            </span>
-          ))}
-        </div>
+      {/* 2×3 Category mosaic */}
+      <div
+        style={{
+          flex: 1,
+          display: 'grid',
+          gridTemplateColumns: '1fr 1fr',
+          gridTemplateRows: 'repeat(3, 1fr)',
+          gap: 10,
+          padding: '0 12px',
+          minHeight: 0,
+        }}
+      >
+        {orderedCategories.slice(0, 6).map((cat) => {
+          const count = counts[cat.id] ?? 0
+          return (
+            <CategoryTile
+              key={cat.id}
+              id={cat.id as Category}
+              label={cat.label}
+              vividHex={cat.vividHex}
+              vividRgb={cat.vividRgb}
+              count={count}
+            />
+          )
+        })}
       </div>
+
+      {/* First-run tooltip on [+] */}
+      {showTooltip && (
+        <div
+          style={{
+            position: 'fixed',
+            bottom: 86,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            background: '#1a1a18',
+            border: '0.5px solid rgba(31,206,148,0.30)',
+            borderRadius: 10,
+            padding: '10px 16px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 10,
+            zIndex: 200,
+            animation: 'tooltipIn 0.2s ease',
+            whiteSpace: 'nowrap',
+            boxShadow: '0 4px 24px rgba(0,0,0,0.6)',
+          }}
+        >
+          <span style={{ fontSize: 16 }}>＋</span>
+          <span
+            style={{
+              fontFamily: 'var(--f-body)',
+              fontSize: 13,
+              color: 'rgba(244,243,238,0.75)',
+            }}
+          >
+            Tap <strong style={{ color: '#1fce94' }}>+</strong> any time to save a recommendation
+          </span>
+          {/* Arrow pointing down to FAB */}
+          <div
+            style={{
+              position: 'absolute',
+              bottom: -6,
+              left: '50%',
+              transform: 'translateX(-50%)',
+              width: 0,
+              height: 0,
+              borderLeft: '6px solid transparent',
+              borderRight: '6px solid transparent',
+              borderTop: '6px solid rgba(31,206,148,0.30)',
+            }}
+          />
+        </div>
+      )}
+
+      <style>{`
+        @keyframes tooltipIn {
+          from { opacity: 0; transform: translateX(-50%) translateY(6px); }
+          to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+        }
+      `}</style>
     </div>
   )
 }
 
-function TileIcon({ id, color }: { id: string; color: string }) {
-  const s = {
-    stroke:        color,
-    strokeWidth:   '5.5' as const,
-    strokeLinecap: 'round' as const,
-    strokeLinejoin:'round' as const,
-    fill:          'none',
-  }
-  switch (id) {
-    case 'watch':
-      return (
-        <svg viewBox="0 0 100 100" fill="none" width="100" height="100">
-          <rect x="8" y="10" width="84" height="52" rx="4" {...s}/>
-          <path d="M32 88 L50 62 L68 88 Z" {...s}/>
-          <line x1="50" y1="62" x2="50" y2="88" stroke={color} strokeWidth="4" strokeLinecap="round"/>
-        </svg>
-      )
-    case 'listen':
-      return (
-        <svg viewBox="0 0 100 100" fill="none" width="100" height="100">
-          <circle cx="42" cy="72" r="22" {...s}/>
-          <circle cx="42" cy="72" r="8" stroke={color} strokeWidth="3" fill="none"/>
-          <line x1="56" y1="55" x2="78" y2="8" stroke={color} strokeWidth="5" strokeLinecap="round"/>
-          <line x1="42" y1="51" x2="76" y2="8" stroke={color} strokeWidth="2.5" strokeDasharray="5,3" strokeLinecap="round"/>
-          <circle cx="78" cy="8" r="5.5" fill={color}/>
-        </svg>
-      )
-    case 'read':
-      return (
-        <svg viewBox="0 0 100 100" fill="none" width="100" height="100">
-          <rect x="18" y="14" width="64" height="74" rx="3" {...s}/>
-          <line x1="30" y1="14" x2="30" y2="88" stroke={color} strokeWidth="4.5" strokeLinecap="round"/>
-          <path d="M56 14 L56 4 L64 10 L72 4 L72 14" stroke={color} strokeWidth="4" strokeLinejoin="round" fill="none"/>
-        </svg>
-      )
-    case 'dine':
-      return (
-        <svg viewBox="0 0 100 100" fill="none" width="100" height="100">
-          <path d="M22 14 Q18 48 38 62 Q44 66 50 66 Q56 66 62 62 Q82 48 78 14" stroke={color} strokeWidth="5.5" fill="none" strokeLinecap="round"/>
-          <line x1="22" y1="14" x2="78" y2="14" stroke={color} strokeWidth="5" strokeLinecap="round"/>
-          <line x1="50" y1="66" x2="50" y2="86" stroke={color} strokeWidth="4.5" strokeLinecap="round"/>
-          <line x1="28" y1="86" x2="72" y2="86" stroke={color} strokeWidth="5" strokeLinecap="round"/>
-          <path d="M26 44 Q50 52 74 44" stroke={color} strokeWidth="3" fill="none" strokeLinecap="round"/>
-        </svg>
-      )
-    case 'do':
-      return (
-        <svg viewBox="0 0 100 100" fill="none" width="100" height="100">
-          <path d="M42 88 L70 22 L98 88" stroke={color} strokeWidth="4" strokeLinejoin="round" fill="none" opacity="0.65"/>
-          <path d="M70 22 L62 40 L78 40 Z" fill={color} opacity="0.65"/>
-          <path d="M2 88 L38 12 L74 88 Z" stroke={color} strokeWidth="5.5" strokeLinejoin="round" fill="none"/>
-          <path d="M38 12 L28 32 L48 32 Z" fill={color}/>
-          <line x1="2" y1="88" x2="98" y2="88" stroke={color} strokeWidth="4" strokeLinecap="round"/>
-        </svg>
-      )
-    case 'visit':
-      return (
-        <svg viewBox="0 0 100 100" fill="none" width="100" height="100">
-          <line x1="22" y1="92" x2="22" y2="52" stroke={color} strokeWidth="5.5" strokeLinecap="round"/>
-          <line x1="78" y1="92" x2="78" y2="52" stroke={color} strokeWidth="5.5" strokeLinecap="round"/>
-          <path d="M22 52 C22 30 34 10 50 8 C66 10 78 30 78 52" stroke={color} strokeWidth="5.5" fill="none" strokeLinecap="round"/>
-          <line x1="14" y1="62" x2="86" y2="62" stroke={color} strokeWidth="3.5" strokeLinecap="round"/>
-          <circle cx="50" cy="8" r="5" fill={color}/>
-          <line x1="8" y1="92" x2="92" y2="92" stroke={color} strokeWidth="4" strokeLinecap="round"/>
-        </svg>
-      )
-    default:
-      return null
-  }
+// ─────────────────────────────────────────────────────────────────────────────
+// CategoryTile — one cell in the 2×3 mosaic
+// ─────────────────────────────────────────────────────────────────────────────
+interface CategoryTileProps {
+  id: Category
+  label: string
+  vividHex: string
+  vividRgb: string
+  count: number
+}
+
+function CategoryTile({ id, label, vividHex, vividRgb, count }: CategoryTileProps) {
+  return (
+    <Link
+      href={`/dashboard/${id}`}
+      style={{ textDecoration: 'none', display: 'block', height: '100%' }}
+    >
+      <div
+        style={{
+          height: '100%',
+          minHeight: 120,
+          borderRadius: 16,
+          background: `radial-gradient(ellipse at 30% 30%, rgba(${vividRgb},0.12) 0%, rgba(10,10,10,0.95) 70%)`,
+          border: '0.5px solid rgba(255,255,255,0.07)',
+          display: 'flex',
+          flexDirection: 'column',
+          justifyContent: 'space-between',
+          padding: '16px 16px 14px',
+          position: 'relative',
+          overflow: 'hidden',
+          transition: 'border-color 0.15s ease',
+        }}
+      >
+        {/* Subtle corner accent */}
+        <div
+          style={{
+            position: 'absolute',
+            top: 0,
+            right: 0,
+            width: 60,
+            height: 60,
+            background: `radial-gradient(circle at 100% 0%, rgba(${vividRgb},0.10) 0%, transparent 70%)`,
+            pointerEvents: 'none',
+          }}
+        />
+
+        {/* Count */}
+        <span
+          style={{
+            fontFamily: 'var(--f-display)',
+            fontStyle: 'italic',
+            fontWeight: 500,
+            fontSize: 32,
+            color: count > 0 ? vividHex : 'rgba(255,255,255,0.08)',
+            lineHeight: 1,
+          }}
+        >
+          {count > 0 ? count : '—'}
+        </span>
+
+        {/* Label */}
+        <span
+          style={{
+            fontFamily: 'var(--f-ui)',
+            fontWeight: 700,
+            fontSize: 13,
+            letterSpacing: '0.06em',
+            textTransform: 'uppercase',
+            color: count > 0 ? 'rgba(244,243,238,0.75)' : 'rgba(244,243,238,0.25)',
+          }}
+        >
+          {label}
+        </span>
+      </div>
+    </Link>
+  )
 }
