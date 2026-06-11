@@ -1,268 +1,430 @@
 // app/api/enrich/[id]/route.ts
-// Stores top 3 TMDB candidates for user to confirm.
-// RLS fix: all updates include .eq('user_id', user.id).
-// Genre hue data stored for fallback when user rejects all candidates.
+// Enrichment route for watch (TMDB) and listen (Spotify) categories.
+// Session 11 fix: TMDB now writes cast array (top 3 billed) from credits.cast.
+// Also handles PATCH /api/enrich/[id] for user confirming a TMDB candidate.
 
+import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { NextResponse }  from 'next/server'
 
-type Params = { params: Promise<{ id: string }> }
-
-// Genre → hue offset for fallback atmospheric colour
-const GENRE_HUES: Record<string, string> = {
-  'Animation':    'rgba(255,180,60,0.35)',
-  'Comedy':       'rgba(255,210,80,0.30)',
-  'Drama':        'rgba(80,120,200,0.30)',
-  'Thriller':     'rgba(180,20,40,0.35)',
-  'Horror':       'rgba(120,0,20,0.40)',
-  'Romance':      'rgba(220,80,120,0.30)',
-  'Action':       'rgba(200,80,20,0.35)',
-  'Science Fiction': 'rgba(40,160,220,0.30)',
-  'Documentary':  'rgba(80,160,100,0.28)',
-  'Fantasy':      'rgba(120,60,200,0.30)',
-  'Crime':        'rgba(60,40,80,0.35)',
-  'Adventure':    'rgba(40,180,120,0.30)',
-}
-
-export async function POST(_req: Request, { params }: Params) {
+// ─────────────────────────────────────────────────────────────────────────────
+// GET /api/enrich/[id]
+// Triggered after save for watch and listen categories.
+// Fetches enrichment data and writes to metadata.
+// ─────────────────────────────────────────────────────────────────────────────
+export async function GET(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) {
   try {
-    const { id }   = await params
     const supabase = await createClient()
 
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return NextResponse.json({ data: null, error: 'Unauthorised' }, { status: 401 })
+    const { data: { user }, error: authError } = await supabase.auth.getUser()
+    if (authError || !user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
 
-    const { data: rec } = await supabase
+    const { data: rec, error: recError } = await supabase
       .from('recommendations')
-      .select('id, title, category, metadata, image_url')
-      .eq('id', id)
+      .select('*')
+      .eq('id', params.id)
       .eq('user_id', user.id)
       .single()
 
-    if (!rec) return NextResponse.json({ data: { enriched: false }, error: null })
-    if (rec.image_url) return NextResponse.json({ data: { enriched: false, reason: 'already_has_image' }, error: null })
+    if (recError || !rec) {
+      return NextResponse.json({ error: 'Not found' }, { status: 404 })
+    }
 
-    // ── FILM / TV → TMDB ──────────────────────────────────
     if (rec.category === 'watch') {
-      const tmdbKey = process.env.TMDB_API_KEY
-      if (!tmdbKey) {
-        console.error('[Enrich] TMDB_API_KEY not set')
-        return NextResponse.json({ data: { enriched: false, reason: 'no_api_key' }, error: null })
-      }
-
-      // Use subtype hint from metadata if available — otherwise search both endpoints
-      const existingMeta = (rec.metadata as Record<string,unknown>) ?? {}
-      const subtypeHint  = typeof existingMeta.subtype === 'string' ? existingMeta.subtype : null
-      const searchBoth   = !subtypeHint || subtypeHint === 'series' || subtypeHint === 'documentary'
-      const searchMovie  = !subtypeHint || subtypeHint === 'film' || subtypeHint === 'documentary'
-      const searchTV     = !subtypeHint || subtypeHint === 'series'
-
-      const title = encodeURIComponent(rec.title)
-
-      console.log(`[Enrich] Searching TMDB for: "${rec.title}" subtype=${subtypeHint ?? 'unknown'}`)
-
-      // Search movie and/or tv in parallel — merge and rank by popularity
-      const [movieRes, tvRes] = await Promise.all([
-        searchMovie
-          ? fetch(`https://api.themoviedb.org/3/search/movie?query=${title}&api_key=${tmdbKey}&language=en-US`)
-              .then(r => r.json()).catch(() => ({ results: [] }))
-          : Promise.resolve({ results: [] }),
-        searchTV || searchBoth
-          ? fetch(`https://api.themoviedb.org/3/search/tv?query=${title}&api_key=${tmdbKey}&language=en-US`)
-              .then(r => r.json()).catch(() => ({ results: [] }))
-          : Promise.resolve({ results: [] }),
-      ])
-
-      // Tag results with media type so we fetch the right detail endpoint
-      type TMDBHit = Record<string,unknown> & { _media_type: 'movie' | 'tv' }
-      const movieHits: TMDBHit[] = ((movieRes.results ?? []) as Record<string,unknown>[])
-        .map(h => ({ ...h, _media_type: 'movie' as const }))
-      const tvHits: TMDBHit[] = ((tvRes.results ?? []) as Record<string,unknown>[])
-        .map(h => ({ ...h, _media_type: 'tv' as const }))
-
-      // Merge and rank by popularity — take top 3 across both endpoints
-      const allHits = [...movieHits, ...tvHits]
-        .sort((a, b) => ((b.popularity as number) ?? 0) - ((a.popularity as number) ?? 0))
-        .slice(0, 3)
-
-      if (!allHits.length) {
-        console.log(`[Enrich] No TMDB results for: "${rec.title}"`)
-        await supabase.from('recommendations')
-          .update({ metadata: { ...existingMeta, tmdb_no_results: true } })
-          .eq('id', id).eq('user_id', user.id)
-        return NextResponse.json({ data: { enriched: false, reason: 'no_results' }, error: null })
-      }
-
-      // Fetch details for each candidate in parallel
-      const candidates = await Promise.all(
-        allHits.map(async (hit) => {
-          const mediaType = hit._media_type
-          let genre: string | null = null
-          let genreHue: string | null = null
-          let runtime: number | null = null
-          let director: string | null = null
-          let seasons: number | null = null
-          let series_status: string | null = null
-          try {
-            const detailRes  = await fetch(
-              `https://api.themoviedb.org/3/${mediaType}/${hit.id}?api_key=${tmdbKey}&append_to_response=credits`
-            )
-            const d = await detailRes.json()
-            genre    = (d.genres as Array<{name:string}>)?.[0]?.name ?? null
-            genreHue = genre ? (GENRE_HUES[genre] ?? null) : null
-            if (mediaType === 'movie') {
-              runtime  = d.runtime ?? null
-              director = (d.credits?.crew as Array<{job:string;name:string}>)
-                ?.find(c => c.job === 'Director')?.name ?? null
-            } else {
-              seasons       = d.number_of_seasons ?? null
-              series_status = d.status ?? null
-              runtime       = d.episode_run_time?.[0] ?? null
-            }
-          } catch {}
-
-          return {
-            tmdb_id:       hit.id,
-            media_type:    mediaType,
-            title:         (hit.title ?? hit.name) as string,
-            subtype:       mediaType === 'tv' ? 'series' : 'film',
-            poster_url:    hit.poster_path
-              ? `https://image.tmdb.org/t/p/w500${hit.poster_path}`
-              : null,
-            release_year:  hit.release_date
-              ? parseInt((hit.release_date as string).slice(0, 4))
-              : hit.first_air_date
-              ? parseInt((hit.first_air_date as string).slice(0, 4))
-              : null,
-            overview:      (hit.overview as string) ?? null,
-            vote_average:  (hit.vote_average as number) ?? null,
-            genre,
-            genre_hue:     genreHue,
-            runtime,
-            director,
-            seasons,
-            series_status,
-          }
-        })
-      )
-
-      console.log(`[Enrich] ${candidates.length} candidates for "${rec.title}"`)
-
-      await supabase.from('recommendations')
-        .update({ metadata: { ...existingMeta, tmdb_candidates: candidates } })
-        .eq('id', id)
-        .eq('user_id', user.id)
-
-      return NextResponse.json({
-        data: { enriched: true, candidates, awaiting_confirmation: true },
-        error: null,
-      })
+      return await enrichWatch(supabase, rec, user.id)
     }
 
-    // ── MUSIC → SPOTIFY ───────────────────────────────────
     if (rec.category === 'listen') {
-      const clientId     = process.env.SPOTIFY_CLIENT_ID
-      const clientSecret = process.env.SPOTIFY_CLIENT_SECRET
-
-      if (clientId && clientSecret) {
-        const tokenRes = await fetch('https://accounts.spotify.com/api/token', {
-          method:  'POST',
-          headers: {
-            'Content-Type':  'application/x-www-form-urlencoded',
-            'Authorization': `Basic ${Buffer.from(`${clientId}:${clientSecret}`).toString('base64')}`,
-          },
-          body: 'grant_type=client_credentials',
-        })
-        const { access_token: token } = await tokenRes.json()
-
-        if (token) {
-          const searchRes  = await fetch(
-            `https://api.spotify.com/v1/search?q=${encodeURIComponent(rec.title)}&type=track,album&limit=1`,
-            { headers: { 'Authorization': `Bearer ${token}` } }
-          )
-          const searchData = await searchRes.json()
-          const hit        = searchData.tracks?.items?.[0] ?? searchData.albums?.items?.[0]
-
-          if (hit) {
-            const imageUrl   = hit.album?.images?.[0]?.url ?? hit.images?.[0]?.url ?? null
-            const newMetadata = {
-              ...((rec.metadata as Record<string,unknown>) ?? {}),
-              artist:       hit.artists?.[0]?.name ?? null,
-              album:        hit.album?.name ?? hit.name ?? null,
-              artwork_url:  imageUrl,
-              spotify_id:   hit.id,
-              preview_url:  hit.preview_url ?? null,
-              release_year: hit.album?.release_date
-                ? parseInt((hit.album.release_date as string).slice(0, 4))
-                : null,
-            }
-
-            await supabase.from('recommendations')
-              .update({ metadata: newMetadata, ...(imageUrl ? { image_url: imageUrl } : {}) })
-              .eq('id', id)
-              .eq('user_id', user.id)
-
-            return NextResponse.json({
-              data: { enriched: true, image_url: imageUrl, metadata: newMetadata },
-              error: null,
-            })
-          }
-        }
-      }
+      return await enrichListen(supabase, rec, user.id)
     }
 
-    return NextResponse.json({ data: { enriched: false }, error: null })
+    if (rec.category === 'read') {
+      return await enrichBook(supabase, rec, user.id)
+    }
 
-  } catch (err) {
-    console.error('[Enrich] Unexpected:', err)
-    return NextResponse.json({ data: { enriched: false }, error: null })
+    return NextResponse.json({ message: 'No enrichment available for this category' })
+  } catch (error) {
+    console.error('[enrich] GET error:', error)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
 
-// ── CONFIRM CANDIDATE ─────────────────────────────────────────────
-// Called when user taps a poster option in the card detail.
-// Saves the confirmed poster and clears the candidates.
-
-export async function PATCH(request: Request, { params }: Params) {
+// ─────────────────────────────────────────────────────────────────────────────
+// PATCH /api/enrich/[id]
+// User confirms a TMDB candidate from the detail screen.
+// Body: { tmdb_id: number, poster_path: string, title: string }
+// ─────────────────────────────────────────────────────────────────────────────
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) {
   try {
-    const { id }   = await params
     const supabase = await createClient()
 
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return NextResponse.json({ data: null, error: 'Unauthorised' }, { status: 401 })
-
-    const body = await request.json()
-    const { tmdb_id, poster_url, genre, genre_hue, overview, release_year, runtime, vote_average } = body
-
-    const { data: rec } = await supabase
-      .from('recommendations')
-      .select('metadata')
-      .eq('id', id)
-      .eq('user_id', user.id)
-      .single()
-
-    if (!rec) return NextResponse.json({ data: null, error: 'Not found' }, { status: 404 })
-
-    const existingMeta = (rec.metadata as Record<string,unknown>) ?? {}
-    const newMetadata = {
-      ...existingMeta,
-      tmdb_id, genre, genre_hue, overview,
-      release_year, runtime, vote_average,
-      tmdb_candidates: null, // clear candidates after confirmation
+    const { data: { user }, error: authError } = await supabase.auth.getUser()
+    if (authError || !user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    await supabase.from('recommendations')
+    const body = await request.json() as {
+      tmdb_id?: number
+      poster_path?: string
+      title?: string
+    }
+
+    if (!body.tmdb_id) {
+      return NextResponse.json({ error: 'tmdb_id required' }, { status: 400 })
+    }
+
+    // Fetch full TMDB details for the confirmed candidate
+    const tmdbKey = process.env.TMDB_API_KEY
+    if (!tmdbKey) {
+      return NextResponse.json({ error: 'TMDB not configured' }, { status: 500 })
+    }
+
+    // Fetch movie details + credits in one shot
+    const [detailRes, creditsRes] = await Promise.all([
+      fetch(`https://api.themoviedb.org/3/movie/${body.tmdb_id}?api_key=${tmdbKey}&language=en-US`),
+      fetch(`https://api.themoviedb.org/3/movie/${body.tmdb_id}/credits?api_key=${tmdbKey}&language=en-US`),
+    ])
+
+    if (!detailRes.ok) {
+      return NextResponse.json({ error: 'TMDB fetch failed' }, { status: 502 })
+    }
+
+    const detail = await detailRes.json() as TMDBMovieDetail
+    const credits = creditsRes.ok ? (await creditsRes.json() as TMDBCredits) : null
+
+    const director = credits?.crew?.find((c) => c.job === 'Director')?.name ?? null
+    const cast = credits?.cast
+      ?.slice(0, 3)
+      .map((c) => c.name)
+      .filter(Boolean) ?? []
+
+    const streamingPlatforms = await fetchWatchmodeStreaming(detail.title, 'movie')
+
+    const { error: updateError } = await supabase
+      .from('recommendations')
       .update({
-        metadata:  newMetadata,
-        image_url: poster_url ?? null,
+        image_url: detail.poster_path
+          ? `https://image.tmdb.org/t/p/w500${detail.poster_path}`
+          : null,
+        metadata: {
+          tmdb_id: detail.id,
+          subtype: 'film',
+          release_year: detail.release_date ? parseInt(detail.release_date.slice(0, 4)) : null,
+          genres: detail.genres?.map((g) => g.name) ?? [],
+          runtime_minutes: detail.runtime ?? null,
+          overview: detail.overview ?? null,
+          director,
+          cast,
+          streaming_platforms: streamingPlatforms,
+          tmdb_candidates: null,       // clear candidates after confirmation
+          tmdb_confirmed: true,
+        },
       })
-      .eq('id', id)
+      .eq('id', params.id)
       .eq('user_id', user.id)
 
-    return NextResponse.json({ data: { confirmed: true, image_url: poster_url }, error: null })
+    if (updateError) {
+      console.error('[enrich PATCH] update error:', updateError)
+      return NextResponse.json({ error: 'Update failed' }, { status: 500 })
+    }
 
-  } catch (err) {
-    console.error('[Enrich PATCH]', err)
-    return NextResponse.json({ data: null, error: 'Something went wrong' }, { status: 500 })
+    return NextResponse.json({ success: true, director, cast })
+  } catch (error) {
+    console.error('[enrich] PATCH error:', error)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// enrichWatch — TMDB search + top 3 candidates + credits.cast
+// ─────────────────────────────────────────────────────────────────────────────
+async function enrichWatch(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  rec: Record<string, unknown>,
+  userId: string
+) {
+  const tmdbKey = process.env.TMDB_API_KEY
+  if (!tmdbKey) {
+    return NextResponse.json({ error: 'TMDB not configured' }, { status: 500 })
+  }
+
+  const title = rec.title as string
+  const subtype = ((rec.metadata as Record<string, unknown>)?.subtype as string) ?? 'film'
+  const mediaType = subtype === 'series' ? 'tv' : 'movie'
+
+  // Search TMDB
+  const searchRes = await fetch(
+    `https://api.themoviedb.org/3/search/${mediaType}?api_key=${tmdbKey}&query=${encodeURIComponent(title)}&language=en-US&page=1`
+  )
+
+  if (!searchRes.ok) {
+    return NextResponse.json({ error: 'TMDB search failed' }, { status: 502 })
+  }
+
+  const search = await searchRes.json() as { results: TMDBSearchResult[] }
+  const results = (search.results ?? []).slice(0, 3)
+
+  if (results.length === 0) {
+    return NextResponse.json({ message: 'No TMDB results found' })
+  }
+
+  // If only one high-confidence result, auto-confirm
+  const topResult = results[0]
+  const confidence = calculateConfidence(title, topResult.title ?? topResult.name ?? '')
+
+  if (results.length === 1 || confidence >= 88) {
+    // Auto-confirm: fetch full details + credits
+    const [detailRes, creditsRes] = await Promise.all([
+      fetch(`https://api.themoviedb.org/3/${mediaType}/${topResult.id}?api_key=${tmdbKey}&language=en-US`),
+      fetch(`https://api.themoviedb.org/3/${mediaType}/${topResult.id}/credits?api_key=${tmdbKey}&language=en-US`),
+    ])
+
+    const detail = detailRes.ok ? (await detailRes.json() as TMDBMovieDetail) : null
+    const credits = creditsRes.ok ? (await creditsRes.json() as TMDBCredits) : null
+
+    const director = credits?.crew?.find((c) => c.job === 'Director')?.name
+      ?? credits?.crew?.find((c) => c.job === 'Series Director')?.name
+      ?? null
+
+    const createdBy = (detail as unknown as { created_by?: Array<{ name: string }> })
+      ?.created_by?.[0]?.name ?? null
+
+    // Top 3 billed cast — the fix from Session 11
+    const cast = credits?.cast
+      ?.slice(0, 3)
+      .map((c) => c.name)
+      .filter(Boolean) ?? []
+
+    const streamingPlatforms = await fetchWatchmodeStreaming(title, mediaType)
+
+    await supabase
+      .from('recommendations')
+      .update({
+        image_url: topResult.poster_path
+          ? `https://image.tmdb.org/t/p/w500${topResult.poster_path}`
+          : null,
+        metadata: {
+          ...(rec.metadata as object),
+          tmdb_id: topResult.id,
+          release_year: topResult.release_date
+            ? parseInt(topResult.release_date.slice(0, 4))
+            : topResult.first_air_date
+              ? parseInt(topResult.first_air_date.slice(0, 4))
+              : null,
+          genres: detail?.genres?.map((g) => g.name) ?? [],
+          runtime_minutes: detail?.runtime ?? null,
+          overview: detail?.overview ?? null,
+          director,
+          created_by: createdBy,
+          cast,
+          streaming_platforms: streamingPlatforms,
+          tmdb_candidates: null,
+          tmdb_confirmed: true,
+        },
+      })
+      .eq('id', rec.id as string)
+      .eq('user_id', userId)
+
+    return NextResponse.json({ success: true, auto_confirmed: true, cast })
+  }
+
+  // Multiple candidates — store for user to choose in detail view
+  const candidates = results.map((r) => ({
+    tmdb_id: r.id,
+    title: r.title ?? r.name ?? '',
+    poster_path: r.poster_path ?? null,
+    release_year: r.release_date
+      ? parseInt(r.release_date.slice(0, 4))
+      : r.first_air_date
+        ? parseInt(r.first_air_date.slice(0, 4))
+        : null,
+  }))
+
+  await supabase
+    .from('recommendations')
+    .update({
+      metadata: {
+        ...(rec.metadata as object),
+        tmdb_candidates: candidates,
+      },
+    })
+    .eq('id', rec.id as string)
+    .eq('user_id', userId)
+
+  return NextResponse.json({ success: true, candidates })
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// enrichListen — Spotify search
+// ─────────────────────────────────────────────────────────────────────────────
+async function enrichListen(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  rec: Record<string, unknown>,
+  userId: string
+) {
+  const clientId = process.env.SPOTIFY_CLIENT_ID
+  const clientSecret = process.env.SPOTIFY_CLIENT_SECRET
+  if (!clientId || !clientSecret) {
+    return NextResponse.json({ error: 'Spotify not configured' }, { status: 500 })
+  }
+
+  // Client credentials token
+  const tokenRes = await fetch('https://accounts.spotify.com/api/token', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+      Authorization: `Basic ${Buffer.from(`${clientId}:${clientSecret}`).toString('base64')}`,
+    },
+    body: 'grant_type=client_credentials',
+  })
+
+  if (!tokenRes.ok) {
+    return NextResponse.json({ error: 'Spotify auth failed' }, { status: 502 })
+  }
+
+  const { access_token } = await tokenRes.json() as { access_token: string }
+  const title = rec.title as string
+
+  const searchRes = await fetch(
+    `https://api.spotify.com/v1/search?q=${encodeURIComponent(title)}&type=album&limit=1`,
+    { headers: { Authorization: `Bearer ${access_token}` } }
+  )
+
+  if (!searchRes.ok) {
+    return NextResponse.json({ error: 'Spotify search failed' }, { status: 502 })
+  }
+
+  const search = await searchRes.json() as { albums?: { items: SpotifyAlbum[] } }
+  const album = search.albums?.items?.[0]
+
+  if (!album) {
+    return NextResponse.json({ message: 'No Spotify results' })
+  }
+
+  const artworkUrl = album.images?.[0]?.url ?? null
+
+  await supabase
+    .from('recommendations')
+    .update({
+      image_url: artworkUrl,
+      metadata: {
+        ...(rec.metadata as object),
+        spotify_id: album.id,
+        artist: album.artists?.[0]?.name ?? null,
+        release_year: album.release_date ? parseInt(album.release_date.slice(0, 4)) : null,
+        total_tracks: album.total_tracks ?? null,
+        artwork_url: artworkUrl,
+      },
+    })
+    .eq('id', rec.id as string)
+    .eq('user_id', userId)
+
+  return NextResponse.json({ success: true })
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// enrichBook — Google Books (delegated to /api/enrich/book/[id])
+// ─────────────────────────────────────────────────────────────────────────────
+async function enrichBook(
+  _supabase: Awaited<ReturnType<typeof createClient>>,
+  rec: Record<string, unknown>,
+  _userId: string
+) {
+  // Book enrichment is handled by a dedicated route.
+  // This entry point is a no-op — the capture pipeline calls /api/enrich/book/[id] directly.
+  console.log('[enrich] book enrichment delegated to /api/enrich/book/', rec.id)
+  return NextResponse.json({ message: 'Book enrichment uses /api/enrich/book/[id]' })
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// fetchWatchmodeStreaming — streaming platforms (IN region)
+// ─────────────────────────────────────────────────────────────────────────────
+async function fetchWatchmodeStreaming(title: string, _mediaType: string): Promise<string[]> {
+  try {
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL
+    if (!appUrl) return []
+
+    const res = await fetch(`${appUrl}/api/watchmode?title=${encodeURIComponent(title)}`)
+    if (!res.ok) return []
+
+    const data = await res.json() as { platforms?: string[] }
+    return data.platforms ?? []
+  } catch {
+    return []
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Confidence scoring — simple Levenshtein-based ratio
+// ─────────────────────────────────────────────────────────────────────────────
+function calculateConfidence(query: string, result: string): number {
+  const a = query.toLowerCase().trim()
+  const b = result.toLowerCase().trim()
+  if (a === b) return 100
+
+  const maxLen = Math.max(a.length, b.length)
+  if (maxLen === 0) return 100
+
+  const distance = levenshtein(a, b)
+  return Math.round((1 - distance / maxLen) * 100)
+}
+
+function levenshtein(a: string, b: string): number {
+  const m = a.length
+  const n = b.length
+  const dp: number[][] = Array.from({ length: m + 1 }, (_, i) =>
+    Array.from({ length: n + 1 }, (_, j) => (i === 0 ? j : j === 0 ? i : 0))
+  )
+  for (let i = 1; i <= m; i++) {
+    for (let j = 1; j <= n; j++) {
+      dp[i][j] = a[i - 1] === b[j - 1]
+        ? dp[i - 1][j - 1]
+        : 1 + Math.min(dp[i - 1][j], dp[i][j - 1], dp[i - 1][j - 1])
+    }
+  }
+  return dp[m][n]
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Type definitions
+// ─────────────────────────────────────────────────────────────────────────────
+interface TMDBSearchResult {
+  id: number
+  title?: string
+  name?: string
+  poster_path: string | null
+  release_date?: string
+  first_air_date?: string
+}
+
+interface TMDBMovieDetail {
+  id: number
+  title: string
+  overview: string | null
+  poster_path: string | null
+  release_date?: string
+  runtime?: number | null
+  genres?: Array<{ id: number; name: string }>
+  created_by?: Array<{ id: number; name: string }>
+}
+
+interface TMDBCredits {
+  cast: Array<{ id: number; name: string; order: number }>
+  crew: Array<{ id: number; name: string; job: string; department: string }>
+}
+
+interface SpotifyAlbum {
+  id: string
+  name: string
+  artists: Array<{ id: string; name: string }>
+  images: Array<{ url: string; width: number; height: number }>
+  release_date: string
+  total_tracks: number
 }
