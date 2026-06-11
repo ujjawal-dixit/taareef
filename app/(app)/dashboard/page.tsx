@@ -1,52 +1,46 @@
 // app/(app)/dashboard/page.tsx
-// Fetches recommendation counts + user preferences.
-// First-run detection: if no preferences row → redirect to /onboarding/categories.
+// Fetches counts + preferences. First-run → /onboarding/categories.
 
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import DashboardClient from './dashboard-client'
-import type { Category } from '@/lib/types'
 
 export default async function DashboardPage() {
   const supabase = await createClient()
 
-  const {
-    data: { user },
-    error: authError,
-  } = await supabase.auth.getUser()
+  const { data: { user }, error: authError } = await supabase.auth.getUser()
+  if (authError || !user) redirect('/login')
 
-  if (authError || !user) {
-    redirect('/login')
-  }
-
-  // ── Fetch recommendation counts per category ──────────────────────────────
+  // Counts
   const { data: recs } = await supabase
     .from('recommendations')
     .select('category')
-    .eq('user_id', user.id)
+    .eq('user_id', user!.id)
     .neq('status', 'dismissed')
 
   const counts: Record<string, number> = {}
   if (recs) {
     for (const rec of recs) {
-      counts[rec.category] = (counts[rec.category] ?? 0) + 1
+      const cat = rec.category as string
+      counts[cat] = (counts[cat] ?? 0) + 1
     }
   }
 
-  // ── Fetch user preferences ────────────────────────────────────────────────
-  const { data: prefs } = await supabase
-    .from('user_preferences')
-    .select('default_categories, onboarding_complete')
-    .eq('user_id', user.id)
+  // Preferences — use unknown typing to avoid generated-types mismatch
+  // user_preferences may not be in the auto-generated Supabase types yet
+  const { data: prefsRaw } = await supabase
+    .from('user_preferences' as string)
+    .select('default_categories')
+    .eq('user_id', user!.id)
     .single()
 
-  // First-run detection: no prefs row at all → send to category question
-  // This works across devices: the DB is the source of truth.
-  if (!prefs) {
+  // First-run: no row means they haven't answered the category question
+  if (!prefsRaw) {
     redirect('/onboarding/categories')
   }
 
-  const preferredCategories: Category[] = (prefs.default_categories ?? []) as Category[]
+  const prefs = prefsRaw as { default_categories: string[] | null }
+  const preferredCategories: string[] = prefs.default_categories ?? []
 
   return (
     <DashboardClient
