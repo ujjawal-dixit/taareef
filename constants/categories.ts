@@ -13,6 +13,8 @@ export type CategoryConfig = {
   label:         string
   verb:          string
   verbPast:      string
+  infinitive:    string   // base form for the "to ___" vow
+  participle:    string   // adjectival past for "Mark as ___" + experienced badge
   vividColor:    string   // pure hex — for borders, glows, badges
   vividRgb:      string   // "r,g,b" — for rgba() in gradient strings
   deepDark:      string   // info zone bg — deepest dark of this color family
@@ -30,6 +32,8 @@ export const CATEGORIES: CategoryConfig[] = [
     label:        'Watch',
     verb:         'I watched',
     verbPast:     'watched',
+    infinitive:   'watch',
+    participle:   'watched',
     vividColor:   '#3C82FF',
     vividRgb:     '60,130,255',
     deepDark:     '#030810',
@@ -51,6 +55,8 @@ export const CATEGORIES: CategoryConfig[] = [
     label:        'Listen',
     verb:         'I listened to',
     verbPast:     'listened to',
+    infinitive:   'listen',
+    participle:   'listened',
     vividColor:   '#DC3C82',
     vividRgb:     '220,60,130',
     deepDark:     '#090206',
@@ -72,6 +78,8 @@ export const CATEGORIES: CategoryConfig[] = [
     label:        'Read',
     verb:         'I read',
     verbPast:     'read',
+    infinitive:   'read',
+    participle:   'read',
     vividColor:   '#F09114',
     vividRgb:     '240,145,20',
     deepDark:     '#080401',
@@ -93,6 +101,8 @@ export const CATEGORIES: CategoryConfig[] = [
     label:        'Dine',
     verb:         'I went to',
     verbPast:     'went to',
+    infinitive:   'dine',
+    participle:   'dined',
     vividColor:   '#DA5526',
     vividRgb:     '218,85,38',
     deepDark:     '#090300',
@@ -114,6 +124,8 @@ export const CATEGORIES: CategoryConfig[] = [
     label:        'Do',
     verb:         'I did',
     verbPast:     'did',
+    infinitive:   'do',
+    participle:   'done',
     vividColor:   '#10C3B6',
     vividRgb:     '16,195,182',
     deepDark:     '#010e0d',
@@ -135,6 +147,8 @@ export const CATEGORIES: CategoryConfig[] = [
     label:        'Visit',
     verb:         'I visited',
     verbPast:     'visited',
+    infinitive:   'visit',
+    participle:   'visited',
     vividColor:   '#1991E1',
     vividRgb:     '25,145,225',
     deepDark:     '#010810',
