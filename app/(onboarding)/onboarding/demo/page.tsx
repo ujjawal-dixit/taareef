@@ -15,7 +15,7 @@ const CAT_CONFIG: Record<string, { label: string; vividHex: string; vividRgb: st
   listen: { label: 'Listen',     vividHex: '#DC3C82', vividRgb: '220,60,130',  verb: 'to listen'     },
   read:   { label: 'Read',       vividHex: '#F09114', vividRgb: '240,145,20',  verb: 'to read'       },
   dine:   { label: 'Dine',       vividHex: '#DA5526', vividRgb: '218,85,38',   verb: 'to dine'       },
-  do:     { label: 'Experience', vividHex: '#10C3B6', vividRgb: '16,195,182',  verb: 'to experience' },
+  do:     { label: 'Do',         vividHex: '#10C3B6', vividRgb: '16,195,182',  verb: 'to do'         },
   visit:  { label: 'Visit',      vividHex: '#1991E1', vividRgb: '25,145,225',  verb: 'to visit'      },
 }
 
