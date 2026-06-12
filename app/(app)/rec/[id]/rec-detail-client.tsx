@@ -605,7 +605,7 @@ export function RecDetailClient({ recommendation: rec, categoryConfig: cfg }: Pr
             : typeof liveMeta.creators === 'string' ? liveMeta.creators
             : (typeof meta.cast === 'string' ? meta.cast : null)
           const isLoved   = rec.reaction === 'loved'
-          const vowText   = isExp ? cfg.verbPast : `to ${cfg.verb.replace(/^I\s+/, '')}`
+          const vowText   = isExp ? cfg.participle : `to ${cfg.infinitive}`
           const titleSize = rec.title.length > 34 ? 19 : rec.title.length > 22 ? 22 : 25
 
           return (
@@ -1091,7 +1091,7 @@ export function RecDetailClient({ recommendation: rec, categoryConfig: cfg }: Pr
               boxShadow:               `0 4px 20px rgba(${cfg.vividRgb},0.35)`,
             }}
           >
-            Mark as {cfg.verbPast}
+            Mark as {cfg.participle}
           </button>
         )}
 
