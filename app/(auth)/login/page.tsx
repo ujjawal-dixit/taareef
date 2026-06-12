@@ -21,7 +21,7 @@ export default function LoginPage() {
           fontSize: '14px', fontWeight: 300, color: 'rgba(240,230,200,0.42)',
           lineHeight: 1.6, textAlign: 'center', maxWidth: '240px', margin: '0 auto',
         }}>
-          Every recommendation you'll ever get. One place.
+          Save what you trust. Share what you love.
         </p>
       </div>
       <div style={{
