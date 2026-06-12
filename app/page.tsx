@@ -23,9 +23,12 @@ export default function LandingPage() {
 
   return (
     <main style={{ minHeight: '100dvh', background: '#0a0a0a', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'space-between', padding: '0 24px', overflowX: 'hidden' }}>
-      <header style={{ width: '100%', maxWidth: 390, paddingTop: 52, display: 'flex', justifyContent: 'center' }}>
+      <header style={{ width: '100%', maxWidth: 390, paddingTop: 52, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
         <span style={{ fontFamily: 'var(--f-display)', fontStyle: 'italic', fontWeight: 300, fontSize: 48, color: '#1fce94', letterSpacing: '-0.01em', textShadow: '0 0 20px rgba(31,206,148,0.60), 0 0 48px rgba(31,206,148,0.25)' }}>
           taareef
+        </span>
+        <span style={{ fontFamily: 'var(--f-body)', fontWeight: 400, fontSize: 13, color: 'rgba(244,243,238,0.50)', letterSpacing: '0.01em', textAlign: 'center' }}>
+          Your recommendations &mdash; stored, arranged and enriched.
         </span>
       </header>
 
