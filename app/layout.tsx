@@ -1,61 +1,54 @@
-// app/layout.tsx
-// Root layout — 3 fonts only: Cormorant Garamond, Rajdhani, DM Sans.
-// Plus Jakarta Sans deliberately removed (Session 11) — dead import, unused in design system.
-
-import type { Metadata } from 'next'
-import { Cormorant_Garamond, Rajdhani, DM_Sans } from 'next/font/google'
+import type { Metadata, Viewport } from 'next'
+import {
+  Cormorant_Garamond,
+  Rajdhani,
+  DM_Sans,
+} from 'next/font/google'
 import './globals.css'
 
 const cormorant = Cormorant_Garamond({
-  subsets: ['latin'],
-  weight: ['300', '400', '500', '600'],
-  style: ['normal', 'italic'],
+  subsets:  ['latin'],
   variable: '--font-cormorant',
-  display: 'swap',
+  weight:   ['300', '400', '500'],
+  style:    ['normal', 'italic'],
+  display:  'swap',
 })
 
 const rajdhani = Rajdhani({
-  subsets: ['latin', 'devanagari'],
-  weight: ['400', '500', '600', '700'],
+  subsets:  ['latin'],
   variable: '--font-rajdhani',
-  display: 'swap',
+  weight:   ['400', '500', '600', '700'],
+  display:  'swap',
 })
 
 const dmSans = DM_Sans({
-  subsets: ['latin'],
-  weight: ['300', '400', '500', '600'],
+  subsets:  ['latin'],
   variable: '--font-dm-sans',
-  display: 'swap',
+  weight:   ['300', '400', '500', '600'],
+  display:  'swap',
 })
 
 export const metadata: Metadata = {
-  title: 'Taareef — Your recommendation vault',
-  description: 'Every recommendation you\'ll ever get. One place.',
-  manifest: '/manifest.json',
-  appleWebApp: {
-    capable: true,
-    statusBarStyle: 'black-translucent',
-    title: 'Taareef',
-  },
-  formatDetection: {
-    telephone: false,
-  },
+  title:           { default: 'taareef', template: '%s · taareef' },
+  description:     "Every recommendation you'll ever get. One place.",
+  applicationName: 'taareef',
+  appleWebApp:     { capable: true, statusBarStyle: 'black-translucent', title: 'taareef' },
 }
 
-export const viewport = {
-  width: 'device-width',
-  initialScale: 1,
-  maximumScale: 1,
-  themeColor: '#0a0a0a',
+export const viewport: Viewport = {
+  width:         'device-width',
+  initialScale:  1,
+  maximumScale:  1,
+  userScalable:  false,
+  themeColor:    '#080f0a',
 }
 
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode
-}) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`${cormorant.variable} ${rajdhani.variable} ${dmSans.variable}`}>
+    <html
+      lang="en"
+      className={`${cormorant.variable} ${rajdhani.variable} ${dmSans.variable}`}
+    >
       <body>{children}</body>
     </html>
   )
