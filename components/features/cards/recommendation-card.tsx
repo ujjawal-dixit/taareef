@@ -182,7 +182,7 @@ export function RecommendationCard({ recommendation, variant = 'full', categoryC
   const statusStr  = typeof recommendation.status === 'string' ? recommendation.status : null
   const isExperienced = statusStr ? experiencedStatuses.includes(statusStr) : false
   const isLoved    = reaction === 'loved'
-  const vowText    = isExperienced ? config.verbPast : `to ${config.verb.replace(/^I\s+/, '')}`
+  const vowText    = isExperienced ? config.participle : `to ${config.infinitive}`
 
   // Title size curve — comes down from monumental so it leads without starving the record.
   const titleSize  = title.length > 34 ? 19 : title.length > 22 ? 22 : 25
