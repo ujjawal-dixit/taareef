@@ -18,6 +18,7 @@ import { CATEGORY_MAP, getCardGradient, getCardVignette, type CategoryConfig } f
 import { hasValidImage } from '@/lib/utils/fallback'
 import { CategoryMotif } from '@/components/features/cards/category-motif'
 import { PlatformLogo } from '@/components/features/cards/platform-logo'
+import { buildMetaLine, getDateUrgency } from '@/lib/card/derive'
 import type { Recommendation, Category } from '@/lib/types'
 
 const GRAIN = "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='400'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.68' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='400' height='400' filter='url(%23g)' opacity='1'/%3E%3C/svg%3E\")"
@@ -33,108 +34,6 @@ function DotGrid({ rgb }: { rgb: string }) {
   )
 }
 
-function buildMetaLine(category: Category, meta: Record<string, unknown>): string {
-  const parts: string[] = []
-
-  switch (category) {
-    case 'watch': {
-      const subtype  = typeof meta.subtype === 'string' ? meta.subtype : null
-      const director = typeof meta.director === 'string' ? meta.director : null
-      const creator  = typeof meta.created_by === 'string' ? meta.created_by : null
-      const genre    = Array.isArray(meta.genres)
-        ? (meta.genres as string[])[0]
-        : typeof meta.genres === 'string' ? meta.genres : null
-      const year    = meta.release_year ?? meta.year
-      const runtime = meta.runtime_minutes ? `${meta.runtime_minutes} min` : null
-      const status  = typeof meta.series_status === 'string' ? meta.series_status : null
-      const seasons = meta.seasons ? `${meta.seasons} seasons` : null
-      if (subtype === 'series') {
-        if (creator) parts.push(creator)
-        if (status)  parts.push(status)
-        if (seasons) parts.push(seasons)
-      } else {
-        if (director) parts.push(director)
-        if (genre)    parts.push(String(genre))
-        if (year)     parts.push(String(year))
-        if (runtime)  parts.push(runtime)
-      }
-      break
-    }
-    case 'listen': {
-      const subtype = typeof meta.subtype === 'string' ? meta.subtype : null
-      const artist  = typeof meta.artist === 'string' ? meta.artist : null
-      const host    = typeof meta.host === 'string' ? meta.host : null
-      const narrator = typeof meta.narrator === 'string' ? meta.narrator : null
-      const author  = typeof meta.author === 'string' ? meta.author : null
-      const genre   = typeof meta.genre === 'string' ? meta.genre : null
-      const year    = meta.release_year ?? meta.year
-      if (subtype === 'podcast') {
-        if (host) parts.push(host)
-      } else if (subtype === 'audiobook') {
-        if (author)   parts.push(author)
-        if (narrator) parts.push(`read by ${narrator}`)
-      } else if (subtype === 'artist') {
-        if (genre) parts.push(genre)
-      } else {
-        // album (default)
-        if (artist) parts.push(artist)
-        if (year)   parts.push(String(year))
-      }
-      break
-    }
-    case 'read': {
-      const author   = typeof meta.author === 'string' ? meta.author : null
-      const subgenre = typeof meta.subgenre === 'string' ? meta.subgenre
-        : typeof meta.genre === 'string' ? meta.genre : null
-      const year = meta.year ?? meta.published_year
-      if (author)   parts.push(author)
-      if (year)     parts.push(String(year))
-      if (subgenre) parts.push(subgenre)
-      break
-    }
-    case 'dine': {
-      const type = typeof meta.type === 'string' ? meta.type : null
-      const city = typeof meta.city === 'string' ? meta.city
-        : typeof (meta.location as Record<string,unknown>)?.city === 'string'
-          ? (meta.location as Record<string,unknown>).city as string
-          : null
-      if (type) parts.push(type)
-      if (city) parts.push(city)
-      break
-    }
-    case 'do': {
-      const location   = typeof meta.city === 'string' ? meta.city
-        : typeof meta.location === 'string' ? meta.location : null
-      const difficulty = typeof meta.difficulty === 'string' ? meta.difficulty : null
-      if (location)   parts.push(location)
-      if (difficulty) parts.push(difficulty)
-      break
-    }
-    case 'visit': {
-      const venue = typeof meta.venue === 'string' ? meta.venue : null
-      const city  = typeof meta.city === 'string' ? meta.city : null
-      if (venue) parts.push(venue)
-      if (city)  parts.push(city)
-      break
-    }
-  }
-
-  return parts.slice(0, 3).join(' · ')
-}
-
-function getDateUrgency(dateStr: string | null): 'none' | 'info' | 'soon' | 'urgent' | 'closed' {
-  if (!dateStr) return 'none'
-  const cleaned = dateStr.replace(/until|closes|closing|through/gi, '').trim()
-  const parsed  = new Date(cleaned)
-  if (isNaN(parsed.getTime())) return 'info'
-  const now  = new Date()
-  const days = Math.ceil((parsed.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
-  if (days < 0)   return 'closed'
-  if (days <= 7)  return 'urgent'
-  if (days <= 30) return 'soon'
-  return 'info'
-}
-
 type Props = {
   recommendation: Recommendation
   variant?: 'full' | 'compact' | 'grid'
@@ -148,7 +47,7 @@ export function RecommendationCard({ recommendation, variant = 'full', categoryC
 
   const hasImage = hasValidImage(image_url)
   const meta     = metadata as Record<string, unknown>
-  const metaLine = buildMetaLine(category as Category, meta)
+  const metaLine = buildMetaLine(category as Category, meta, 3)
 
   if (variant === 'compact') {
     return <CompactRow rec={recommendation} config={config} metaLine={metaLine} />
