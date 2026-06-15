@@ -660,7 +660,7 @@ export function RecDetailClient({ recommendation: rec, categoryConfig: cfg }: Pr
                       position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
                       background: `radial-gradient(ellipse at 50% 42%, rgba(${rgb},0.20) 0%, rgba(10,10,10,0.96) 60%, #0a0a0a 100%)`,
                     }}>
-                      <CategoryMotif category={rec.category as Category} rgb={rgb} subtype={dSubtype} size={150} />
+                      <CategoryMotif category={rec.category as Category} rgb={rgb} subtype={dSubtype} size={220} />
                     </div>
                   )}
 
@@ -685,16 +685,16 @@ export function RecDetailClient({ recommendation: rec, categoryConfig: cfg }: Pr
                   height: '28px', display: 'flex', alignItems: 'center',
                 }}>
                   <span style={{
-                    fontFamily: 'var(--f-display)', fontStyle: 'italic', fontWeight: 400, fontSize: '13px',
-                    lineHeight: 1, color: '#1fce94', position: 'relative', top: '0.5px',
+                    fontFamily: 'var(--f-display)', fontStyle: 'italic', fontWeight: 400, fontSize: '14px',
+                    lineHeight: 1, color: '#1fce94',
                   }}>taareef</span>
                   <span style={{
-                    display: 'inline-block', width: '9px', height: '1px',
-                    background: 'rgba(255,255,255,0.45)', margin: '0 6px', position: 'relative', top: '-1px',
+                    display: 'inline-block', width: '10px', height: '1px',
+                    background: 'rgba(255,255,255,0.45)', margin: '0 7px',
                   }} />
                   <span style={{
-                    fontFamily: 'var(--f-ui)', fontSize: '8px', fontWeight: 700,
-                    letterSpacing: '1px', textTransform: 'uppercase', lineHeight: 1, color: cfg.vividColor,
+                    fontFamily: 'var(--f-ui)', fontSize: '12px', fontWeight: 700,
+                    letterSpacing: '0.5px', textTransform: 'uppercase', lineHeight: 1, color: cfg.vividColor,
                   }}>from {src.display}</span>
                 </div>
               </div>
@@ -710,7 +710,7 @@ export function RecDetailClient({ recommendation: rec, categoryConfig: cfg }: Pr
 
                 {metaLine && (
                   <div style={{
-                    fontFamily: 'var(--f-body)', fontSize: '11px', fontWeight: 400,
+                    fontFamily: 'var(--f-body)', fontSize: '14px', fontWeight: 400,
                     color: 'var(--ink-soft)', lineHeight: 1.55,
                   }}>
                     {metaLine}
@@ -719,7 +719,7 @@ export function RecDetailClient({ recommendation: rec, categoryConfig: cfg }: Pr
 
                 {castLine && (
                   <div style={{
-                    fontFamily: 'var(--f-body)', fontSize: '11px', fontWeight: 400,
+                    fontFamily: 'var(--f-body)', fontSize: '14px', fontWeight: 400,
                     color: 'var(--ink-faint)', lineHeight: 1.5, marginTop: '1px',
                   }}>
                     {castLine}
@@ -728,7 +728,7 @@ export function RecDetailClient({ recommendation: rec, categoryConfig: cfg }: Pr
 
                 {note && (
                   <div style={{
-                    fontFamily: 'var(--f-display)', fontStyle: 'italic', fontSize: '12.5px',
+                    fontFamily: 'var(--f-display)', fontStyle: 'italic', fontSize: '14px',
                     lineHeight: 1.35, color: 'rgba(244,243,238,0.82)',
                     paddingLeft: '10px', marginTop: '10px',
                     borderLeft: `2px solid rgba(${rgb},0.5)`,
@@ -743,7 +743,7 @@ export function RecDetailClient({ recommendation: rec, categoryConfig: cfg }: Pr
                   marginTop: '12px', paddingTop: '10px', borderTop: '0.5px solid rgba(255,255,255,0.08)',
                 }}>
                   <span style={{
-                    fontFamily: 'var(--f-display)', fontStyle: 'italic', fontSize: '15px',
+                    fontFamily: 'var(--f-display)', fontStyle: 'italic', fontSize: '16px',
                     color: `rgba(${rgb},${isExp ? 0.9 : 0.82})`,
                   }}>
                     {vowText}
@@ -757,7 +757,7 @@ export function RecDetailClient({ recommendation: rec, categoryConfig: cfg }: Pr
                   </span>
                   {subcatLbl && (
                     <span style={{
-                      fontFamily: 'var(--f-ui)', fontSize: '9px', fontWeight: 600,
+                      fontFamily: 'var(--f-ui)', fontSize: '16px', fontWeight: 600,
                       letterSpacing: '1.5px', textTransform: 'uppercase', color: 'var(--ink-faint)',
                     }}>
                       {subcatLbl}
