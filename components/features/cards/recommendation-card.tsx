@@ -17,7 +17,6 @@ import Image  from 'next/image'
 import { CATEGORY_MAP, getCardGradient, getCardVignette, type CategoryConfig } from '@/constants/categories'
 import { hasValidImage } from '@/lib/utils/fallback'
 import { CategoryMotif } from '@/components/features/cards/category-motif'
-import { PlatformLogo } from '@/components/features/cards/platform-logo'
 import { buildMetaLine, getDateUrgency } from '@/lib/card/derive'
 import type { Recommendation, Category } from '@/lib/types'
 
@@ -36,12 +35,12 @@ function DotGrid({ rgb }: { rgb: string }) {
 
 type Props = {
   recommendation: Recommendation
-  variant?: 'full' | 'compact' | 'grid'
+  variant: 'compact' | 'grid'
   categoryConfig?: CategoryConfig  // optional — falls back to CATEGORY_MAP lookup
 }
 
-export function RecommendationCard({ recommendation, variant = 'full', categoryConfig: propConfig }: Props) {
-  const { id, title, category, source_name, image_url, reaction, notes, metadata } = recommendation
+export function RecommendationCard({ recommendation, variant, categoryConfig: propConfig }: Props) {
+  const { category, image_url, metadata } = recommendation
   const config = propConfig ?? CATEGORY_MAP[category as Category]
   if (!config) return null
 
@@ -53,214 +52,7 @@ export function RecommendationCard({ recommendation, variant = 'full', categoryC
     return <CompactRow rec={recommendation} config={config} metaLine={metaLine} />
   }
 
-  if (variant === 'grid') {
-    return <GridCard rec={recommendation} config={config} metaLine={metaLine} hasImage={hasImage} />
-  }
-
-  // ── FULL CARD — matches taareef-decision-cards.html (locked) ─────
-  // Fixed object height; the WELL flexes and the INFO takes only its content
-  // height. Built around the decision: record line (year · genre · length),
-  // then cast, then tip. Notch carries taareef — from X with a real dash bar.
-  // OTT logo lives in the poster bottom-left. No badge, no footer handshake.
-  const rgb       = config.vividRgb
-  const subtype   = typeof meta.subtype === 'string' ? meta.subtype : null
-  const subcatLbl = subtype ? subtype.charAt(0).toUpperCase() + subtype.slice(1) : null
-  const platform  = Array.isArray(meta.streaming_platforms) && meta.streaming_platforms.length > 0
-    && typeof meta.streaming_platforms[0] === 'string'
-    ? meta.streaming_platforms[0] as string
-    : null
-
-  // The decision line and the secondary "cast" recognizer (category-aware).
-  const castLine  = typeof meta.cast === 'string' ? meta.cast
-    : Array.isArray(meta.cast) ? meta.cast.filter((x): x is string => typeof x === 'string').slice(0, 2).join(', ')
-    : typeof meta.creators === 'string' ? meta.creators
-    : null
-
-  // Experienced state: the vow transforms (to watch → watched); loved adds glow + dot.
-  const experiencedStatuses = ['experienced', 'done', 'finished', 'read', 'watched', 'visited']
-  const statusStr  = typeof recommendation.status === 'string' ? recommendation.status : null
-  const isExperienced = statusStr ? experiencedStatuses.includes(statusStr) : false
-  const isLoved    = reaction === 'loved'
-  const vowText    = isExperienced ? config.participle : `to ${config.infinitive}`
-
-  // Title size curve — comes down from monumental so it leads without starving the record.
-  const titleSize  = title.length > 34 ? 19 : title.length > 22 ? 22 : 25
-
-  return (
-    <Link href={`/rec/${id}`} style={{ textDecoration: 'none', display: 'block' }}>
-      {/* OBJECT — fixed height; contact shadow grounds it as a kept thing */}
-      <div style={{
-        position: 'relative',
-        width:    '100%',
-        height:   '432px',
-        filter:   'drop-shadow(0 2px 3px rgba(0,0,0,0.65)) drop-shadow(0 11px 20px rgba(0,0,0,0.55))',
-      }}>
-        {/* RIM — the lit physical edge */}
-        <div style={{
-          position:     'relative',
-          height:       '100%',
-          borderRadius: '14px',
-          background:   'linear-gradient(to bottom,#2a2a28,#161614 4px,#161614 calc(100% - 6px),#050504)',
-          paddingBottom:'5px',
-          boxShadow:    'inset 0 1px 0 rgba(255,255,255,0.08), inset -1px 0 0 rgba(0,0,0,0.4)',
-        }}>
-          {/* FACE — flex column so well flexes, info hugs content */}
-          <div style={{
-            position:      'relative',
-            height:        '100%',
-            borderRadius:  '12px',
-            padding:       '7px',
-            overflow:      'hidden',
-            display:       'flex',
-            flexDirection: 'column',
-            background:    'linear-gradient(158deg,#0e1421,#0a0a0a 72%)',
-            boxShadow:     isLoved ? `0 0 0 1px rgba(${rgb},0.30)` : undefined,
-          }}>
-            {/* grain */}
-            <div style={{
-              position: 'absolute', inset: 0, zIndex: 40, pointerEvents: 'none', borderRadius: '12px',
-              backgroundImage: GRAIN, backgroundSize: '150px', opacity: 0.07, mixBlendMode: 'overlay',
-            }} />
-
-            {/* WELL — flexes to fill; double-line seam */}
-            <div style={{
-              position: 'relative', borderRadius: '7px', overflow: 'hidden',
-              flex: '1 1 auto', minHeight: 0,
-              boxShadow: `0 0 0 2px #0a0a0a, 0 0 0 3px rgba(${rgb},0.3)`,
-            }}>
-              {/* poster (image) OR criterion (motif) */}
-              <div style={{ position: 'absolute', inset: 0, overflow: 'hidden' }}>
-                {hasImage ? (
-                  <>
-                    <Image
-                      src={image_url!}
-                      alt={title}
-                      fill
-                      style={{ objectFit: 'cover' }}
-                      sizes="(max-width:480px) 100vw,480px"
-                    />
-                    {/* 14% category wash — "poster is a guest in our house" */}
-                    <div style={{ position: 'absolute', inset: 0, mixBlendMode: 'overlay', background: `rgba(${rgb},0.14)`, zIndex: 4 }} />
-                  </>
-                ) : (
-                  <div style={{
-                    position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    background: `radial-gradient(ellipse at 50% 42%, rgba(${rgb},0.20) 0%, rgba(10,10,10,0.96) 60%, #0a0a0a 100%)`,
-                  }}>
-                    <CategoryMotif category={category as Category} rgb={rgb} subtype={subtype} size={220} />
-                  </div>
-                )}
-
-                {/* the "marriage" — poster dissolves into the category-tinted dark */}
-                <div style={{
-                  position: 'absolute', bottom: 0, left: 0, right: 0, height: '32%', zIndex: 5,
-                  background: `linear-gradient(to top, #0e1421, transparent)`,
-                }} />
-
-                {/* OTT logo — bottom-left of the poster, on a dark scrim (locked placement) */}
-                {hasImage && platform && (
-                  <div style={{ position: 'absolute', left: '9px', bottom: '9px', zIndex: 8 }}>
-                    <PlatformLogo platform={platform} />
-                  </div>
-                )}
-              </div>
-
-              {/* NOTCH — taareef — from X, one line, real dash bar, fixed 28px */}
-              <div style={{
-                position: 'absolute', top: 0, right: 0, zIndex: 20,
-                background: '#000', borderRadius: '0 7px 0 12px', padding: '0 11px',
-                height: '28px', display: 'flex', alignItems: 'center',
-              }}>
-                <span style={{
-                  fontFamily: 'var(--f-display)', fontStyle: 'italic', fontWeight: 400, fontSize: '14px',
-                  lineHeight: 1, color: '#1fce94',
-                }}>taareef</span>
-                <span style={{
-                  display: 'inline-block', width: '10px', height: '1px',
-                  background: 'rgba(255,255,255,0.45)', margin: '0 7px',
-                }} />
-                <span style={{
-                  fontFamily: 'var(--f-ui)', fontSize: '12px', fontWeight: 700,
-                  letterSpacing: '0.5px', textTransform: 'uppercase', lineHeight: 1, color: config.vividColor,
-                }}>from {source_name}</span>
-              </div>
-            </div>
-
-            {/* INFO — flex:0, takes only content height */}
-            <div style={{ flex: '0 0 auto', padding: '12px 12px 11px', position: 'relative', zIndex: 5 }}>
-              <div style={{
-                fontFamily: 'var(--f-display)', fontStyle: 'italic', fontWeight: 500,
-                fontSize: `${titleSize}px`, color: 'var(--ink)', lineHeight: 1.05, marginBottom: '6px',
-              }}>
-                {title}
-              </div>
-
-              {/* decision line — the spine */}
-              {metaLine && (
-                <div style={{
-                  fontFamily: 'var(--f-body)', fontSize: '14px', fontWeight: 400,
-                  color: 'var(--ink-soft)', lineHeight: 1.55,
-                }}>
-                  {metaLine}
-                </div>
-              )}
-
-              {/* secondary recognizer — cast / creators */}
-              {castLine && (
-                <div style={{
-                  fontFamily: 'var(--f-body)', fontSize: '14px', fontWeight: 400,
-                  color: 'var(--ink-faint)', lineHeight: 1.5, marginTop: '1px',
-                }}>
-                  {castLine}
-                </div>
-              )}
-
-              {/* tip — 2-line clamp */}
-              {notes && (
-                <div style={{
-                  fontFamily: 'var(--f-display)', fontStyle: 'italic', fontSize: '14px',
-                  lineHeight: 1.35, color: 'rgba(244,243,238,0.82)',
-                  paddingLeft: '10px', marginTop: '10px',
-                  borderLeft: `2px solid rgba(${rgb},0.5)`,
-                  display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
-                }}>
-                  &ldquo;{notes}&rdquo;
-                </div>
-              )}
-
-              {/* FOOTER — vow bottom-left (transforms when experienced) + subcategory bottom-right */}
-              <div style={{
-                display: 'flex', alignItems: 'baseline', justifyContent: 'space-between',
-                marginTop: '12px', paddingTop: '10px', borderTop: '0.5px solid rgba(255,255,255,0.08)',
-              }}>
-                <span style={{
-                  fontFamily: 'var(--f-display)', fontStyle: 'italic', fontSize: '16px',
-                  color: `rgba(${rgb},${isExperienced ? 0.9 : 0.82})`,
-                }}>
-                  {vowText}
-                  {isLoved && (
-                    <span style={{
-                      display: 'inline-block', width: '6px', height: '6px', borderRadius: '50%',
-                      background: config.vividColor, boxShadow: `0 0 7px rgba(${rgb},0.8)`,
-                      marginLeft: '7px', verticalAlign: 'middle',
-                    }} />
-                  )}
-                </span>
-                {subcatLbl && (
-                  <span style={{
-                    fontFamily: 'var(--f-ui)', fontSize: '16px', fontWeight: 600,
-                    letterSpacing: '1.5px', textTransform: 'uppercase', color: 'var(--ink-faint)',
-                  }}>
-                    {subcatLbl}
-                  </span>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </Link>
-  )
+  return <GridCard rec={recommendation} config={config} metaLine={metaLine} hasImage={hasImage} />
 }
 
 // ── GRID CARD — Watch / Listen 2-col poster grid ──────────────────
