@@ -518,9 +518,9 @@ function GridCard({ rec, config, metaLine, hasImage }: {
           {/* Source — always shown */}
           <div style={{
             fontFamily:   'var(--f-body)',
-            fontSize:     '10px',
+            fontSize:     '11px',
             fontWeight:   500,
-            color:        '#d41020',
+            color:        config.vividColor,
             whiteSpace:   'nowrap',
             overflow:     'hidden',
             textOverflow: 'ellipsis',
@@ -603,7 +603,7 @@ function CompactRow({ rec, config, metaLine }: {
         </div>
         <div style={{
           fontFamily:   'var(--f-body)', fontSize: '12px', fontWeight: 500,
-          color:        '#d41020',
+          color:        config.vividColor,
           marginBottom: '2px',
         }}>
           from {rec.source_name}
