@@ -23,27 +23,22 @@ export default function LandingPage() {
 
   return (
     <main style={{ minHeight: '100dvh', background: '#0a0a0a', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'space-between', padding: '0 24px', overflowX: 'hidden' }}>
-      <header style={{ width: '100%', maxWidth: 390, paddingTop: 52, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
+      <header style={{ width: '100%', maxWidth: 390, paddingTop: 52, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 22 }}>
         <span style={{ fontFamily: 'var(--f-display)', fontStyle: 'italic', fontWeight: 300, fontSize: 48, color: '#1fce94', letterSpacing: '-0.01em', textShadow: '0 0 20px rgba(31,206,148,0.60), 0 0 48px rgba(31,206,148,0.25)' }}>
           taareef
         </span>
-        <span style={{ fontFamily: 'var(--f-body)', fontWeight: 400, fontSize: 13, color: 'rgba(244,243,238,0.50)', letterSpacing: '0.01em', textAlign: 'center' }}>
-          Your recommendations &mdash; stored, arranged and enriched.
-        </span>
+        <h1 style={{ fontFamily: 'var(--f-display)', fontStyle: 'italic', fontWeight: 500, fontSize: 30, lineHeight: 1.22, color: '#F4F3EE', margin: 0, letterSpacing: '-0.01em', textAlign: 'center' }}>
+          Your recommendations &mdash; collected and enriched.
+        </h1>
       </header>
 
-      <section style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 40, paddingTop: 24, paddingBottom: 24, width: '100%', maxWidth: 390 }}>
+      <section style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 36, paddingTop: 24, paddingBottom: 24, width: '100%', maxWidth: 390 }}>
         <div ref={illustrationRef} style={{ transition: 'transform 0.12s ease-out', willChange: 'transform' }} aria-hidden="true">
           <ShelfIllustration />
         </div>
-        <div style={{ textAlign: 'center' }}>
-          <h1 style={{ fontFamily: 'var(--f-display)', fontStyle: 'italic', fontWeight: 500, fontSize: 32, lineHeight: 1.15, color: '#F4F3EE', margin: 0, letterSpacing: '-0.01em' }}>
-            Save what you trust.<br />Share what you love.
-          </h1>
-          <p style={{ fontFamily: 'var(--f-body)', fontSize: 14, color: 'rgba(244,243,238,0.45)', marginTop: 14, lineHeight: 1.55 }}>
-            From friends. From Instagram.<br />From YouTube. From texts.<br />Saved before they slip away.
-          </p>
-        </div>
+        <p style={{ fontFamily: 'var(--f-display)', fontStyle: 'italic', fontWeight: 400, fontSize: 21, color: 'rgba(244,243,238,0.60)', margin: 0, lineHeight: 1.3, textAlign: 'center', letterSpacing: '-0.005em' }}>
+          Save what you trust.<br />Share what you love.
+        </p>
       </section>
 
       <footer style={{ width: '100%', maxWidth: 390, paddingBottom: 48, display: 'flex', flexDirection: 'column', gap: 12 }}>
