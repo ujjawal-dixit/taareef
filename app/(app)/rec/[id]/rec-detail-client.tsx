@@ -14,7 +14,7 @@
 // - Back nav: full-width neon pill every screen
 // - Source block: dedicated section with source type display
 // - Edit details: full-width pill, same style as back nav
-// - Share card: full-width neon pill (PNG export via html2canvas)
+// - Share card: full-width neon pill (PNG export via html-to-image)
 // - Mark as experienced: full-width, category color, always visible when not experienced
 // - Tell source: "Tell them" instead of "SEND"
 // - Experienced status: structured label, not floating text
@@ -375,16 +375,17 @@ export function RecDetailClient({ recommendation: rec, categoryConfig: cfg }: Pr
   async function handleShare() {
     setSharing(true)
     try {
-      // PNG export via html2canvas
-      const html2canvas = (await import('html2canvas')).default
+      // PNG export via html-to-image — it embeds the web fonts before capture,
+      // so the shared card matches the on-screen card. (html2canvas captured
+      // before Cormorant/Rajdhani loaded and fell back to system fonts, which
+      // is what caused the misalignment.)
       if (!cardRef.current) return
-      const canvas = await html2canvas(cardRef.current, {
-        backgroundColor: null,
-        scale:           2,
-        useCORS:         true,
-        logging:         false,
+      await document.fonts.ready
+      const { toBlob } = await import('html-to-image')
+      const blob = await toBlob(cardRef.current, {
+        pixelRatio: 2,
+        cacheBust:  true,
       })
-      const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/png'))
       if (!blob) return
       const file = new File([blob], `taareef-${rec.title.toLowerCase().replace(/\s+/g, '-')}.png`, { type: 'image/png' })
       if (navigator.canShare?.({ files: [file] })) {
