@@ -103,7 +103,7 @@ export function FullCard({
               }} />
 
               {/* OTT logo — poster bottom-left */}
-              {hasImage && platform && (
+              {platform && (
                 <div style={{ position: 'absolute', left: '9px', bottom: '9px', zIndex: 8 }}>
                   <PlatformLogo platform={platform} />
                 </div>
