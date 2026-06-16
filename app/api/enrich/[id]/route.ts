@@ -14,7 +14,8 @@
 //      watchmode route returns { data: { platforms } })
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { createClient }          from '@/lib/supabase/server'
+import { getStreamingPlatforms } from '@/lib/utils/watchmode-server'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // POST /api/enrich/[id]
@@ -172,7 +173,7 @@ export async function PATCH(
       ?? (detail as TMDBMovieDetail).runtime
       ?? null
 
-    const streamingPlatforms = await fetchWatchmodeStreaming(canonicalTitle, mediaType)
+    const streamingPlatforms = await getStreamingPlatforms(canonicalTitle)
 
     const { error: updateError } = await supabase
       .from('recommendations')
@@ -360,7 +361,7 @@ async function autoConfirmWatch(
     ?? (detail as TMDBMovieDetail | null)?.runtime
     ?? null
 
-  const streamingPlatforms = await fetchWatchmodeStreaming(canonicalTitle, mediaType)
+  const streamingPlatforms = await getStreamingPlatforms(canonicalTitle)
 
   await supabase
     .from('recommendations')
@@ -602,8 +603,9 @@ async function enrichPlaces(
   const top        = results[0]
   const confidence = calculateConfidence(title, top.name)
 
-  // Venue names are distinctive — 65% is a safe threshold
-  if (confidence < 65) return NextResponse.json({ message: 'Low confidence place match' })
+  // 55% threshold for venues — names vary more than film titles,
+  // and Foursquare results can differ slightly in punctuation or word order
+  if (confidence < 55) return NextResponse.json({ message: 'Low confidence place match' })
 
   // Fetch a venue photo — best-effort, not a blocker
   let photoUrl: string | null = null
@@ -651,29 +653,6 @@ async function enrichBook(
   return NextResponse.json({ message: 'Book enrichment uses /api/enrich/book/[id]' })
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// fetchWatchmodeStreaming — streaming platforms (IN region)
-// Note: called server-side from within this route. The watchmode route requires
-// auth, so this call will return [] in practice (no auth cookie in a server-to-
-// server request). Streaming data is fetched client-side by the watchmode hook
-// and cached in metadata there. This helper is kept so the confirm paths can
-// attempt streaming enrichment if the auth mechanism changes.
-// ─────────────────────────────────────────────────────────────────────────────
-async function fetchWatchmodeStreaming(title: string, _mediaType: string): Promise<string[]> {
-  try {
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL
-    if (!appUrl) return []
-
-    const res = await fetch(`${appUrl}/api/watchmode?title=${encodeURIComponent(title)}`)
-    if (!res.ok) return []
-
-    // Fixed: watchmode route returns { data: { platforms }, error }
-    const body = await res.json() as { data?: { platforms?: string[] } }
-    return body.data?.platforms ?? []
-  } catch {
-    return []
-  }
-}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Confidence scoring — Levenshtein-based similarity ratio (0–100)
