@@ -76,6 +76,8 @@ export function PlatformLogo({ platform, height = 13 }: PlatformLogoProps) {
         alignItems:     'center',
         justifyContent: 'center',
         height:         `${height + 9}px`,
+        maxWidth:       '110px',
+        overflow:       'hidden',
         padding:        '0 8px',
         borderRadius:   '5px',
         background:     'rgba(0,0,0,0.62)',
