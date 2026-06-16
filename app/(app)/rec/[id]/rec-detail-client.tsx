@@ -23,10 +23,11 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
 import Link                               from 'next/link'
 import { useRouter }                      from 'next/navigation'
+import Image                              from 'next/image'
 import { CATEGORY_MAP, CATEGORIES } from '@/constants/categories'
 import { hasValidImage } from '@/lib/utils/fallback'
-import { FullCard } from '@/components/features/cards/full-card'
-import { buildMetaLine, getDateUrgency } from '@/lib/card/derive'
+import { CategoryMotif } from '@/components/features/cards/category-motif'
+import { PlatformLogo } from '@/components/features/cards/platform-logo'
 import type { CategoryConfig } from '@/constants/categories'
 import type { Recommendation, Reaction, Category } from '@/lib/types'
 import { triggerEnrichment } from '@/lib/utils/enrich'
@@ -77,6 +78,115 @@ function getTellConfig(sourceType: string, sourceName: string, reaction: Reactio
   }
 }
 
+function buildMeta(category: Category, meta: Record<string, unknown>): string {
+  const p: string[] = []
+  switch (category) {
+    case 'watch': {
+      const subtype  = typeof meta.subtype === 'string' ? meta.subtype : null
+      const director = typeof meta.director === 'string' ? meta.director : null
+      const creator  = typeof meta.created_by === 'string' ? meta.created_by : null
+      const genre    = Array.isArray(meta.genres)
+        ? (meta.genres as string[])[0]
+        : typeof meta.genres === 'string' ? meta.genres : null
+      const year     = meta.release_year ?? meta.year
+      const runtime  = meta.runtime_minutes ? `${meta.runtime_minutes} min` : null
+      const status   = typeof meta.series_status === 'string' ? meta.series_status : null
+      const seasons  = meta.seasons ? `${meta.seasons} seasons` : null
+      const platform = typeof meta.platform === 'string' ? meta.platform : null
+      if (subtype === 'series') {
+        if (creator)  p.push(creator)
+        if (platform) p.push(platform)
+        if (seasons)  p.push(seasons)
+        if (status)   p.push(status)
+      } else {
+        if (director) p.push(director)
+        if (genre)    p.push(String(genre))
+        if (year)     p.push(String(year))
+        if (runtime)  p.push(runtime)
+      }
+      break
+    }
+    case 'listen': {
+      const artist   = typeof meta.artist === 'string' ? meta.artist : null
+      const host     = typeof meta.host === 'string' ? meta.host : null
+      const narrator = typeof meta.narrator === 'string' ? meta.narrator : null
+      const author   = typeof meta.author === 'string' ? meta.author : null
+      const genre    = typeof meta.genre === 'string' ? meta.genre : null
+      const year     = meta.release_year ?? meta.year
+      const album    = typeof meta.album === 'string' ? meta.album : null
+      const tracks   = meta.total_tracks ? `${meta.total_tracks} tracks` : null
+      const subtype  = typeof meta.subtype === 'string' ? meta.subtype : null
+      if (subtype === 'podcast') {
+        if (host) p.push(host)
+        if (genre) p.push(genre)
+      } else if (subtype === 'audiobook') {
+        if (author)   p.push(author)
+        if (narrator) p.push(`read by ${narrator}`)
+      } else if (subtype === 'artist') {
+        if (genre) p.push(genre)
+        if (year)  p.push(String(year))
+      } else {
+        // album (default)
+        if (artist) p.push(artist)
+        if (genre)  p.push(genre)
+        if (year)   p.push(String(year))
+        if (tracks) p.push(tracks)
+      }
+      break
+    }
+    case 'read': {
+      const author   = typeof meta.author === 'string' ? meta.author : null
+      const subgenre = typeof meta.subgenre === 'string' ? meta.subgenre
+        : typeof meta.genre === 'string' ? meta.genre : null
+      const year     = meta.year ?? meta.published_year
+      const pages    = meta.pages ? `${meta.pages} pp` : null
+      if (author)   p.push(author)
+      if (subgenre) p.push(subgenre)
+      if (year)     p.push(String(year))
+      if (pages)    p.push(pages)
+      break
+    }
+    case 'dine': {
+      const type = typeof meta.type === 'string' ? meta.type : null
+      const nbhd = typeof meta.neighbourhood === 'string' ? meta.neighbourhood : null
+      const city = typeof meta.city === 'string' ? meta.city : null
+      if (type) p.push(type)
+      if (nbhd) p.push(nbhd)
+      if (city) p.push(city)
+      break
+    }
+    case 'do': {
+      const location   = typeof meta.city === 'string' ? meta.city : typeof meta.location === 'string' ? meta.location : null
+      const difficulty = typeof meta.difficulty === 'string' ? meta.difficulty : null
+      if (location)   p.push(location)
+      if (difficulty) p.push(difficulty)
+      break
+    }
+    case 'visit': {
+      const venue = typeof meta.venue === 'string' ? meta.venue : null
+      const city  = typeof meta.city === 'string' ? meta.city : null
+      if (venue) p.push(venue)
+      if (city)  p.push(city)
+      break
+    }
+  }
+  return p.slice(0, 4).join(' · ')
+}
+
+function getDateUrgency(dateStr: string | null): 'none' | 'info' | 'soon' | 'urgent' | 'closed' {
+  if (!dateStr) return 'none'
+  const cleaned = dateStr.replace(/until|closes|closing|through/gi, '').trim()
+  const parsed  = new Date(cleaned)
+  if (isNaN(parsed.getTime())) return 'info'
+  const now  = new Date()
+  const days = Math.ceil((parsed.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
+  if (days < 0)   return 'closed'
+  if (days <= 7)  return 'urgent'
+  if (days <= 30) return 'soon'
+  return 'info'
+}
+
+const GRAIN = "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='400'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.68' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='400' height='400' filter='url(%23g)' opacity='1'/%3E%3C/svg%3E\")"
 
 export function RecDetailClient({ recommendation: rec, categoryConfig: cfg }: Props) {
   const [reaction,     setReaction]     = useState<Reaction | null>(rec.reaction)
@@ -115,6 +225,8 @@ export function RecDetailClient({ recommendation: rec, categoryConfig: cfg }: Pr
       : []
   )
   const [dismissedBookCands, setDismissedBookCands] = useState(false)
+  const [uploading,          setUploading]          = useState(false)
+  const posterInputRef = useRef<HTMLInputElement>(null)
   const [confirmingBookId,   setConfirmingBookId]   = useState<string | null>(null)
 
   // Retroactive enrichment — fires if Watch/Listen card has no image and no candidates.
@@ -213,7 +325,7 @@ export function RecDetailClient({ recommendation: rec, categoryConfig: cfg }: Pr
   const hasImage = hasValidImage(liveImageUrl)
   const isExp    = rec.status !== 'saved'
   const meta     = rec.metadata as Record<string, unknown>
-  const metaLine = buildMetaLine(rec.category as Category, meta, 4)
+  const metaLine = buildMeta(rec.category as Category, meta)
   const tell     = getTellConfig(rec.source_type, rec.source_name, reaction)
   const src      = formatSource(rec.source_type, rec.source_name)
 
@@ -360,6 +472,28 @@ export function RecDetailClient({ recommendation: rec, categoryConfig: cfg }: Pr
     }).catch(() => {})
   }
 
+  async function handleUploadPoster(file: File) {
+    if (!file.type.startsWith('image/')) { setError('Please choose an image file'); return }
+    if (file.size > 5 * 1024 * 1024)    { setError('Image must be under 5MB');      return }
+    setUploading(true); setError(null)
+    try {
+      const form = new FormData()
+      form.append('image', file)
+      const res  = await fetch(`/api/posters/${rec.id}`, { method: 'POST', body: form })
+      const json = await res.json()
+      if (json.data?.url) {
+        setLiveImageUrl(json.data.url)
+        setLiveMeta(prev => ({ ...prev, tmdb_candidates: null, user_uploaded: true }))
+      } else {
+        setError(json.error ?? 'Upload failed — try again?')
+      }
+    } catch {
+      setError('Upload failed — try again?')
+    } finally {
+      setUploading(false)
+    }
+  }
+
   // Dismiss all TMDB candidates — keeps Criterion mode permanently
   function handleDismissCandidates() {
     setDismissedCands(true)
@@ -375,17 +509,11 @@ export function RecDetailClient({ recommendation: rec, categoryConfig: cfg }: Pr
   async function handleShare() {
     setSharing(true)
     try {
-      // PNG export via html-to-image — it embeds the web fonts before capture,
-      // so the shared card matches the on-screen card. (html2canvas captured
-      // before Cormorant/Rajdhani loaded and fell back to system fonts, which
-      // is what caused the misalignment.)
+      // PNG export via html-to-image — waits for fonts before capture
       if (!cardRef.current) return
       await document.fonts.ready
       const { toBlob } = await import('html-to-image')
-      const blob = await toBlob(cardRef.current, {
-        pixelRatio: 2,
-        cacheBust:  true,
-      })
+      const blob = await toBlob(cardRef.current, { pixelRatio: 2, cacheBust: true })
       if (!blob) return
       const file = new File([blob], `taareef-${rec.title.toLowerCase().replace(/\s+/g, '-')}.png`, { type: 'image/png' })
       if (navigator.canShare?.({ files: [file] })) {
@@ -500,25 +628,165 @@ export function RecDetailClient({ recommendation: rec, categoryConfig: cfg }: Pr
           const titleSize = rec.title.length > 34 ? 19 : rec.title.length > 22 ? 22 : 25
 
           return (
-        <FullCard
-          cardRef={cardRef}
-          rec={rec}
-          cfg={cfg}
-          rgb={rgb}
-          hasImage={hasImage}
-          liveImageUrl={liveImageUrl}
-          dSubtype={dSubtype}
-          subcatLbl={subcatLbl}
-          platform={platform}
-          castLine={castLine}
-          metaLine={metaLine}
-          note={note}
-          isLoved={isLoved}
-          isExp={isExp}
-          vowText={vowText}
-          titleSize={titleSize}
-          srcDisplay={src.display}
-        />
+        <div ref={cardRef} style={{
+          position: 'relative',
+          width:    'calc(100% - 32px)',
+          height:   '432px',
+          margin:   '12px 16px 0',
+          filter:   'drop-shadow(0 2px 3px rgba(0,0,0,0.65)) drop-shadow(0 11px 20px rgba(0,0,0,0.55))',
+        }}>
+          {/* RIM */}
+          <div style={{
+            position: 'relative', height: '100%', borderRadius: '14px',
+            background: 'linear-gradient(to bottom,#2a2a28,#161614 4px,#161614 calc(100% - 6px),#050504)',
+            paddingBottom: '5px',
+            boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.08), inset -1px 0 0 rgba(0,0,0,0.4)',
+          }}>
+            {/* FACE — flex column */}
+            <div style={{
+              position: 'relative', height: '100%', borderRadius: '12px', padding: '7px',
+              overflow: 'hidden', display: 'flex', flexDirection: 'column',
+              background: 'linear-gradient(158deg,#0e1421,#0a0a0a 72%)',
+              boxShadow: isLoved ? `0 0 0 1px rgba(${rgb},0.30)` : undefined,
+            }}>
+              {/* grain */}
+              <div style={{
+                position: 'absolute', inset: 0, zIndex: 40, pointerEvents: 'none', borderRadius: '12px',
+                backgroundImage: GRAIN, backgroundSize: '150px', opacity: 0.07, mixBlendMode: 'overlay',
+              }} />
+
+              {/* WELL — flexes */}
+              <div style={{
+                position: 'relative', borderRadius: '7px', overflow: 'hidden',
+                flex: '1 1 auto', minHeight: 0,
+                boxShadow: `0 0 0 2px #0a0a0a, 0 0 0 3px rgba(${rgb},0.3)`,
+              }}>
+                <div style={{ position: 'absolute', inset: 0, overflow: 'hidden' }}>
+                  {hasImage ? (
+                    <>
+                      <Image
+                        src={liveImageUrl!}
+                        alt={rec.title}
+                        fill
+                        style={{ objectFit: 'cover' }}
+                        sizes="(max-width:480px) 100vw,480px"
+                        priority
+                      />
+                      <div style={{ position: 'absolute', inset: 0, mixBlendMode: 'overlay', background: `rgba(${rgb},0.14)`, zIndex: 4 }} />
+                    </>
+                  ) : (
+                    <div style={{
+                      position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      background: `radial-gradient(ellipse at 50% 42%, rgba(${rgb},0.20) 0%, rgba(10,10,10,0.96) 60%, #0a0a0a 100%)`,
+                    }}>
+                      <CategoryMotif category={rec.category as Category} rgb={rgb} subtype={dSubtype} size={220} />
+                    </div>
+                  )}
+
+                  {/* marriage */}
+                  <div style={{
+                    position: 'absolute', bottom: 0, left: 0, right: 0, height: '32%', zIndex: 5,
+                    background: 'linear-gradient(to top, #0e1421, transparent)',
+                  }} />
+
+                  {/* OTT logo — poster bottom-left */}
+                  {hasImage && platform && (
+                    <div style={{ position: 'absolute', left: '9px', bottom: '9px', zIndex: 8 }}>
+                      <PlatformLogo platform={platform} />
+                    </div>
+                  )}
+                </div>
+
+                {/* NOTCH — taareef — from X */}
+                <div style={{
+                  position: 'absolute', top: 0, right: 0, zIndex: 20,
+                  background: '#000', borderRadius: '0 7px 0 12px', padding: '0 11px',
+                  height: '28px', display: 'flex', alignItems: 'center',
+                }}>
+                  <span style={{
+                    fontFamily: 'var(--f-display)', fontStyle: 'italic', fontWeight: 400, fontSize: '14px',
+                    lineHeight: 1, color: '#1fce94',
+                  }}>taareef</span>
+                  <span style={{
+                    display: 'inline-block', width: '10px', height: '1px',
+                    background: 'rgba(255,255,255,0.45)', margin: '0 7px',
+                  }} />
+                  <span style={{
+                    fontFamily: 'var(--f-ui)', fontSize: '12px', fontWeight: 700,
+                    letterSpacing: '0.5px', textTransform: 'uppercase', lineHeight: 1, color: cfg.vividColor,
+                  }}>from {src.display}</span>
+                </div>
+              </div>
+
+              {/* INFO */}
+              <div style={{ flex: '0 0 auto', padding: '12px 12px 11px', position: 'relative', zIndex: 5 }}>
+                <div style={{
+                  fontFamily: 'var(--f-display)', fontStyle: 'italic', fontWeight: 500,
+                  fontSize: `${titleSize}px`, color: 'var(--ink)', lineHeight: 1.05, marginBottom: '6px',
+                }}>
+                  {rec.title}
+                </div>
+
+                {metaLine && (
+                  <div style={{
+                    fontFamily: 'var(--f-body)', fontSize: '14px', fontWeight: 400,
+                    color: 'var(--ink-soft)', lineHeight: 1.55,
+                  }}>
+                    {metaLine}
+                  </div>
+                )}
+
+                {castLine && (
+                  <div style={{
+                    fontFamily: 'var(--f-body)', fontSize: '14px', fontWeight: 400,
+                    color: 'var(--ink-faint)', lineHeight: 1.5, marginTop: '1px',
+                  }}>
+                    {castLine}
+                  </div>
+                )}
+
+                {note && (
+                  <div style={{
+                    fontFamily: 'var(--f-display)', fontStyle: 'italic', fontSize: '14px',
+                    lineHeight: 1.35, color: 'rgba(244,243,238,0.82)',
+                    paddingLeft: '10px', marginTop: '10px',
+                    borderLeft: `2px solid rgba(${rgb},0.5)`,
+                    display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
+                  }}>
+                    &ldquo;{note}&rdquo;
+                  </div>
+                )}
+
+                <div style={{
+                  display: 'flex', alignItems: 'baseline', justifyContent: 'space-between',
+                  marginTop: '12px', paddingTop: '10px', borderTop: '0.5px solid rgba(255,255,255,0.08)',
+                }}>
+                  <span style={{
+                    fontFamily: 'var(--f-display)', fontStyle: 'italic', fontSize: '16px',
+                    color: `rgba(${rgb},${isExp ? 0.9 : 0.82})`,
+                  }}>
+                    {vowText}
+                    {isLoved && (
+                      <span style={{
+                        display: 'inline-block', width: '6px', height: '6px', borderRadius: '50%',
+                        background: cfg.vividColor, boxShadow: `0 0 7px rgba(${rgb},0.8)`,
+                        marginLeft: '7px', verticalAlign: 'middle',
+                      }} />
+                    )}
+                  </span>
+                  {subcatLbl && (
+                    <span style={{
+                      fontFamily: 'var(--f-ui)', fontSize: '16px', fontWeight: 600,
+                      letterSpacing: '1.5px', textTransform: 'uppercase', color: 'var(--ink-faint)',
+                    }}>
+                      {subcatLbl}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
           )
         })()}
 
@@ -673,6 +941,23 @@ export function RecDetailClient({ recommendation: rec, categoryConfig: cfg }: Pr
               >
                 None of these
               </button>
+
+              {/* Upload your own — escape hatch when no candidate fits */}
+              <button
+                onClick={() => posterInputRef.current?.click()}
+                disabled={uploading}
+                style={{
+                  marginTop: '4px', background: 'none', border: 'none',
+                  cursor:    uploading ? 'not-allowed' : 'pointer',
+                  fontFamily: 'var(--f-body)', fontSize: '11px', fontWeight: 300,
+                  color:     `rgba(${cfg.vividRgb},0.55)`, padding: '4px 0',
+                  WebkitTapHighlightColor: 'transparent',
+                  textDecoration: 'underline', textUnderlineOffset: '3px',
+                  textDecorationColor: `rgba(${cfg.vividRgb},0.25)`,
+                }}
+              >
+                {uploading ? 'Uploading…' : 'Upload your own →'}
+              </button>
             </div>
           )
         })()}
@@ -783,6 +1068,36 @@ export function RecDetailClient({ recommendation: rec, categoryConfig: cfg }: Pr
             </button>
           </div>
         )}
+
+        {/* Upload photo — universal trigger when no image exists yet */}
+        {!liveImageUrl && (
+          <div style={{ marginBottom: '16px', textAlign: 'center' }}>
+            <button
+              onClick={() => posterInputRef.current?.click()}
+              disabled={uploading}
+              style={{
+                background: 'none', border: 'none',
+                cursor:     uploading ? 'not-allowed' : 'pointer',
+                fontFamily: 'var(--f-body)', fontSize: '11px', fontWeight: 300,
+                color:      'rgba(255,255,255,0.28)', padding: '4px 8px',
+                WebkitTapHighlightColor: 'transparent',
+                textDecoration: 'underline', textUnderlineOffset: '3px',
+                textDecorationColor: 'rgba(255,255,255,0.12)',
+              }}
+            >
+              {uploading ? 'Uploading…' : 'add a photo'}
+            </button>
+          </div>
+        )}
+
+        {/* Hidden file input — shared by all upload triggers above */}
+        <input
+          ref={posterInputRef}
+          type="file"
+          accept="image/jpeg,image/png,image/webp"
+          style={{ display: 'none' }}
+          onChange={e => { const f = e.target.files?.[0]; if (f) handleUploadPoster(f); e.target.value = '' }}
+        />
 
         {/* Share card + Edit details — full-width pills */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '20px' }}>
