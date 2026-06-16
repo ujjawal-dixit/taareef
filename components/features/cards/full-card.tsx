@@ -81,7 +81,7 @@ export function FullCard({
                     src={liveImageUrl!}
                     alt={rec.title}
                     fill
-                    style={{ objectFit: 'cover' }}
+                    style={{ objectFit: 'cover', objectPosition: 'top' }}
                     sizes="(max-width:480px) 100vw,480px"
                     priority
                   />
