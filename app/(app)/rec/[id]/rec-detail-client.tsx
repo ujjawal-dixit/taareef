@@ -253,12 +253,11 @@ export function RecDetailClient({ recommendation: rec, categoryConfig: cfg }: Pr
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rec.id, rec.category])
 
-  // Fetch Watchmode streaming platforms for experienced Watch cards
+  // Fetch Watchmode streaming platforms — fires on any Watch card open
   useEffect(() => {
     const cachedPlatforms = liveMeta.streaming_platforms
     if (
       rec.category !== 'watch' ||
-      rec.status === 'saved' ||
       platforms.length > 0 ||
       Array.isArray(cachedPlatforms)
     ) return
@@ -1062,8 +1061,8 @@ export function RecDetailClient({ recommendation: rec, categoryConfig: cfg }: Pr
           </div>
         )}
 
-        {/* Streaming platforms — Watch cards only, after experiencing */}
-        {rec.category === 'watch' && isExp && (
+        {/* Streaming platforms — Watch cards only */}
+        {rec.category === 'watch' && (
           <div style={{ marginBottom: '20px' }}>
             <span style={sectionLabel}>Stream on</span>
             {loadingPlatforms ? (
