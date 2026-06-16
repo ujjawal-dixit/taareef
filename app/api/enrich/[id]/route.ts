@@ -1,5 +1,4 @@
 // app/api/enrich/[id]/route.ts
-//
 // Fixes applied in this version:
 //   1. GET renamed → POST (enrichment writes to DB; client already sends POST)
 //   2. PATCH rewritten: series-aware (film→/movie, series→/tv), merges metadata
