@@ -49,6 +49,7 @@ export async function POST(
     const alreadyEnriched = !!(
       (rec.metadata as Record<string, unknown>)?.tmdb_confirmed ||
       (rec.metadata as Record<string, unknown>)?.spotify_id ||
+      (rec.metadata as Record<string, unknown>)?.foursquare_confirmed ||
       rec.image_url
     )
     if (alreadyEnriched) {
@@ -58,6 +59,10 @@ export async function POST(
     if (rec.category === 'watch') return await enrichWatch(supabase, rec, user.id)
     if (rec.category === 'listen') return await enrichListen(supabase, rec, user.id)
     if (rec.category === 'read') return await enrichBook(supabase, rec, user.id)
+
+    if (rec.category === 'dine' || rec.category === 'visit' || rec.category === 'do') {
+      return await enrichPlaces(supabase, rec, user.id)
+    }
 
     return NextResponse.json({ message: 'No enrichment available for this category' })
   } catch (error) {
@@ -556,6 +561,84 @@ async function enrichSpotifyPodcast(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// enrichPlaces — Foursquare for dine, visit, and venue-based do
+//
+// Searches for the venue, fetches a photo, writes: image_url, address,
+// locality, cuisine, foursquare_id. Uses location_hint from metadata
+// (captured by the Understand LLM) to tighten the search when available.
+// ─────────────────────────────────────────────────────────────────────────────
+async function enrichPlaces(
+  supabase:  Awaited<ReturnType<typeof createClient>>,
+  rec:       Record<string, unknown>,
+  userId:    string,
+) {
+  const apiKey = process.env.FOURSQUARE_API_KEY
+  if (!apiKey) return NextResponse.json({ message: 'Foursquare not configured' })
+
+  const title        = rec.title as string
+  const meta         = (rec.metadata as Record<string, unknown>) ?? {}
+  const locationHint = meta.location_hint as string | null | undefined
+
+  const params = new URLSearchParams({
+    query:  title,
+    limit:  '3',
+    fields: 'fsq_id,name,location,categories,geocodes',
+  })
+  if (locationHint) params.set('near', locationHint)
+
+  const searchRes = await fetch(
+    `https://api.foursquare.com/v3/places/search?${params.toString()}`,
+    { headers: { Authorization: apiKey, Accept: 'application/json' } }
+  )
+
+  if (!searchRes.ok) {
+    return NextResponse.json({ error: 'Foursquare search failed' }, { status: 502 })
+  }
+
+  const search  = await searchRes.json() as { results: FoursquarePlace[] }
+  const results = search.results ?? []
+  if (results.length === 0) return NextResponse.json({ message: 'No Foursquare results' })
+
+  const top        = results[0]
+  const confidence = calculateConfidence(title, top.name)
+
+  // Venue names are distinctive — 65% is a safe threshold
+  if (confidence < 65) return NextResponse.json({ message: 'Low confidence place match' })
+
+  // Fetch a venue photo — best-effort, not a blocker
+  let photoUrl: string | null = null
+  try {
+    const photosRes = await fetch(
+      `https://api.foursquare.com/v3/places/${top.fsq_id}/photos?limit=1`,
+      { headers: { Authorization: apiKey, Accept: 'application/json' } }
+    )
+    if (photosRes.ok) {
+      const photos = await photosRes.json() as FoursquarePhoto[]
+      if (photos[0]) photoUrl = `${photos[0].prefix}500x500${photos[0].suffix}`
+    }
+  } catch { /* photo is nice-to-have */ }
+
+  await supabase
+    .from('recommendations')
+    .update({
+      image_url: photoUrl,
+      metadata:  {
+        ...meta,
+        foursquare_id:        top.fsq_id,
+        venue_name:           top.name,
+        address:              top.location.address  ?? null,
+        locality:             top.location.locality ?? null,
+        cuisine:              top.categories?.[0]?.name ?? null,
+        foursquare_confirmed: true,
+      },
+    })
+    .eq('id', rec.id as string)
+    .eq('user_id', userId)
+
+  return NextResponse.json({ success: true })
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // enrichBook — books use a dedicated route (/api/enrich/book/[id])
 // This entry point is a no-op; kept here so the POST dispatcher is complete.
 // ─────────────────────────────────────────────────────────────────────────────
@@ -680,6 +763,22 @@ interface SpotifyArtist {
   name:   string
   images: Array<{ url: string; width: number; height: number }>
   genres: string[]
+}
+
+interface FoursquarePlace {
+  fsq_id:     string
+  name:       string
+  location:   { address?: string; locality?: string; region?: string; country?: string }
+  categories?: Array<{ id: number; name: string; icon: { prefix: string; suffix: string } }>
+  geocodes?:  { main: { latitude: number; longitude: number } }
+}
+
+interface FoursquarePhoto {
+  id:     string
+  prefix: string
+  suffix: string
+  width:  number
+  height: number
 }
 
 interface SpotifyShow {
