@@ -73,7 +73,7 @@ export async function POST(request: NextRequest) {
     // completes — the save response has already been sent to the user.
     // Auth cookie is forwarded so the enrich route authenticates correctly.
     // Books use a dedicated route; dine/do/visit are enriched by Places (step 4).
-    const enrichableCategories = ['watch', 'listen']
+    const enrichableCategories = ['watch', 'listen', 'dine', 'visit', 'do']
     if (enrichableCategories.includes(data.category)) {
       const appUrl = process.env.NEXT_PUBLIC_APP_URL
       if (appUrl) {
