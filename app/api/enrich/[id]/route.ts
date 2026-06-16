@@ -68,6 +68,7 @@ export async function POST(
     return NextResponse.json({ message: 'No enrichment available for this category' })
   } catch (error) {
     console.error('[enrich] POST error:', error)
+    console.error('[enrich] POST stack:', error instanceof Error ? error.stack : String(error))
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
@@ -173,7 +174,7 @@ export async function PATCH(
       ?? (detail as TMDBMovieDetail).runtime
       ?? null
 
-    const streamingPlatforms = await getStreamingPlatforms(canonicalTitle)
+    const streamingPlatforms = await getStreamingPlatforms(canonicalTitle).catch(() => [] as string[])
 
     const { error: updateError } = await supabase
       .from('recommendations')
@@ -361,7 +362,7 @@ async function autoConfirmWatch(
     ?? (detail as TMDBMovieDetail | null)?.runtime
     ?? null
 
-  const streamingPlatforms = await getStreamingPlatforms(canonicalTitle)
+  const streamingPlatforms = await getStreamingPlatforms(canonicalTitle).catch(() => [] as string[])
 
   await supabase
     .from('recommendations')
