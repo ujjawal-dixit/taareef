@@ -505,8 +505,9 @@ function TypeInput({ onUnderstood, onError, error }: {
   const [category,   setCategory]   = useState<Category | null>(null)
   const [subtype,    setSubtype]    = useState<string | null>(null)
   const [sourceName, setSourceName] = useState('')
-  const [note,       setNote]       = useState('')
-  const [processing, setProcessing] = useState(false)
+  const [note,         setNote]         = useState('')
+  const [locationHint, setLocationHint] = useState('')
+  const [processing,   setProcessing]   = useState(false)
   const [promptIdx,  setPromptIdx]  = useState(0)
   const titleRef = useRef<HTMLInputElement>(null)
 
@@ -558,7 +559,7 @@ function TypeInput({ onUnderstood, onError, error }: {
           dates:         null,
           director:      null,
           author:        null,
-          location_hint: null,
+          location_hint: locationHint.trim() || null,
         },
         clarification: { needed: false, field: null, question: null, type: null, options: null },
         raw_input: `${title} ${sourceName}`.trim(),
@@ -573,7 +574,8 @@ function TypeInput({ onUnderstood, onError, error }: {
       title.trim(),
       category ? `category: ${category}` : '',
       subtype  ? `type: ${subtype}` : '',
-      sourceName.trim() ? `from: ${sourceName.trim()}` : '',
+      sourceName.trim()   ? `from: ${sourceName.trim()}` : '',
+      locationHint.trim() ? `in: ${locationHint.trim()}`  : '',
       note.trim() ? `note: ${note.trim()}` : '',
     ].filter(Boolean).join(', ')
 
@@ -716,6 +718,26 @@ function TypeInput({ onUnderstood, onError, error }: {
         />
       </div>
 
+      {/* CITY / AREA — only for place categories (dine, do, visit) */}
+      {(category === 'dine' || category === 'do' || category === 'visit') && (
+        <div>
+          <label style={LABEL_STYLE}>
+            City or area
+            <span style={{ marginLeft: '6px', fontWeight: 400, fontSize: '9px', textTransform: 'none', opacity: 0.45 }}>optional</span>
+          </label>
+          <input
+            type="text"
+            value={locationHint}
+            onChange={e => setLocationHint(e.target.value)}
+            placeholder="Bandra, Lower Parel, Delhi…"
+            style={FIELD_STYLE}
+            autoComplete="off"
+            onFocus={e => { e.target.style.borderColor = `rgba(${vividRgb},0.45)` }}
+            onBlur={e => { e.target.style.borderColor = 'rgba(255,255,255,0.08)' }}
+          />
+        </div>
+      )}
+
       {/* NOTE */}
       <div>
         <label style={LABEL_STYLE}>
@@ -811,6 +833,15 @@ function ClarificationStep({ understood, onClarified, selectedCat }: {
     if (!textAnswer.trim()) return
     if (clarification.field === 'title') {
       onClarified({ ...understood, title: textAnswer.trim(), clarification: { needed: false, field: null, question: null, type: null, options: null } })
+      return
+    }
+    if (clarification.field === 'location_hint') {
+      onClarified({
+        ...understood,
+        supplementary: { ...understood.supplementary, location_hint: textAnswer.trim() },
+        clarification: { needed: false, field: null, question: null, type: null, options: null },
+      })
+      return
     }
   }
 
