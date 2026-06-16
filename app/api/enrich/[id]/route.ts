@@ -44,6 +44,17 @@ export async function POST(
       return NextResponse.json({ error: 'Not found' }, { status: 404 })
     }
 
+    // Skip if already enriched — prevents double-work when both save-time
+    // enrichment and the detail-screen fallback trigger fire for the same record
+    const alreadyEnriched = !!(
+      (rec.metadata as Record<string, unknown>)?.tmdb_confirmed ||
+      (rec.metadata as Record<string, unknown>)?.spotify_id ||
+      rec.image_url
+    )
+    if (alreadyEnriched) {
+      return NextResponse.json({ message: 'Already enriched' })
+    }
+
     if (rec.category === 'watch') return await enrichWatch(supabase, rec, user.id)
     if (rec.category === 'listen') return await enrichListen(supabase, rec, user.id)
     if (rec.category === 'read') return await enrichBook(supabase, rec, user.id)
