@@ -2,6 +2,7 @@
 // GET (list) + POST (create). 6-category validation.
 
 import { NextRequest, NextResponse } from 'next/server'
+import { waitUntil }                from '@vercel/functions'
 import { createClient } from '@/lib/supabase/server'
 import { VALID_CATEGORIES, isValidCategory } from '@/lib/types'
 import type { ApiResponse, Recommendation, CreateRecommendationInput } from '@/lib/types'
@@ -65,6 +66,25 @@ export async function POST(request: NextRequest) {
     }).select().single()
 
     if (error) { console.error('[POST /api/recommendations]', error); return NextResponse.json<ApiResponse<null>>({ data: null, error: 'Something went wrong' }, { status: 500 }) }
+
+    // ── Save-time enrichment ─────────────────────────────────────────
+    // Fire enrichment immediately after save, server-side.
+    // waitUntil keeps the serverless function alive until enrichment
+    // completes — the save response has already been sent to the user.
+    // Auth cookie is forwarded so the enrich route authenticates correctly.
+    // Books use a dedicated route; dine/do/visit are enriched by Places (step 4).
+    const enrichableCategories = ['watch', 'listen']
+    if (enrichableCategories.includes(data.category)) {
+      const appUrl = process.env.NEXT_PUBLIC_APP_URL
+      if (appUrl) {
+        waitUntil(
+          fetch(`${appUrl}/api/enrich/${data.id}`, {
+            method:  'POST',
+            headers: { cookie: request.headers.get('cookie') ?? '' },
+          }).catch((err) => console.error('[save-time enrich] failed for', data.id, err))
+        )
+      }
+    }
 
     return NextResponse.json<ApiResponse<Recommendation>>({ data: data as Recommendation, error: null }, { status: 201 })
   } catch (err) {
