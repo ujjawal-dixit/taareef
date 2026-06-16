@@ -298,6 +298,26 @@ function computeClarification(
     return none
   }
 
+  // Location hint missing for place-based categories (dine, visit, do)
+  // Without a city or area, Foursquare searches globally and can return
+  // the wrong venue. One light question dramatically improves enrichment.
+  // Only ask when: title is confirmed, category is a place, and hint is absent.
+  const placeCategories = ['dine', 'visit', 'do']
+  if (
+    placeCategories.includes(result.category ?? '') &&
+    !result.supplementary?.location_hint &&
+    result.title &&
+    (result.confidence.title === 'high' || result.confidence.title === 'medium')
+  ) {
+    return {
+      needed:   true,
+      field:    'location_hint',
+      question: 'Which city or area is this in?',
+      type:     'text_input',
+      options:  null,
+    }
+  }
+
   return none
 }
 
