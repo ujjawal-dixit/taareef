@@ -78,10 +78,13 @@ export async function POST(request: NextRequest) {
       const appUrl = process.env.NEXT_PUBLIC_APP_URL
       if (appUrl) {
         waitUntil(
-          fetch(`${appUrl}/api/enrich/${data.id}`, {
-            method:  'POST',
-            headers: { cookie: request.headers.get('cookie') ?? '' },
-          }).catch((err) => console.error('[save-time enrich] failed for', data.id, err))
+          // Small delay lets the database write fully commit before enrichment reads the record
+          new Promise<void>(resolve => setTimeout(resolve, 800))
+            .then(() => fetch(`${appUrl}/api/enrich/${data.id}`, {
+              method:  'POST',
+              headers: { cookie: request.headers.get('cookie') ?? '' },
+            }))
+            .catch((err) => console.error('[save-time enrich] failed for', data.id, err))
         )
       }
     }
