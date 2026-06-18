@@ -47,12 +47,13 @@ export async function POST(
 
     // Skip if already enriched — prevents double-work when both save-time
     // enrichment and the detail-screen fallback trigger fire for the same record
-    const alreadyEnriched = !!(
-      (rec.metadata as Record<string, unknown>)?.tmdb_confirmed ||
-      (rec.metadata as Record<string, unknown>)?.spotify_id ||
-      (rec.metadata as Record<string, unknown>)?.foursquare_confirmed ||
-      rec.image_url
-    )
+    const meta = (rec.metadata as Record<string, unknown>) ?? {}
+    // For place categories, only check foursquare_confirmed — not image_url,
+    // because Foursquare is what SETS image_url and checking it would block itself
+    const isPlaceCategory = rec.category === 'dine' || rec.category === 'visit' || rec.category === 'do'
+    const alreadyEnriched = isPlaceCategory
+      ? !!meta.foursquare_confirmed
+      : !!(meta.tmdb_confirmed || meta.spotify_id || rec.image_url)
     if (alreadyEnriched) {
       return NextResponse.json({ message: 'Already enriched' })
     }
@@ -581,6 +582,8 @@ async function enrichPlaces(
   const meta         = (rec.metadata as Record<string, unknown>) ?? {}
   const locationHint = meta.location_hint as string | null | undefined
 
+  console.log('[enrichPlaces] searching:', { title, locationHint, category: rec.category })
+
   const params = new URLSearchParams({
     query:  title,
     limit:  '3',
@@ -594,19 +597,26 @@ async function enrichPlaces(
   )
 
   if (!searchRes.ok) {
+    const errText = await searchRes.text().catch(() => '')
+    console.error('[enrichPlaces] Foursquare search failed:', searchRes.status, errText)
     return NextResponse.json({ error: 'Foursquare search failed' }, { status: 502 })
   }
 
   const search  = await searchRes.json() as { results: FoursquarePlace[] }
   const results = search.results ?? []
+  console.log('[enrichPlaces] results:', results.map(r => r.name))
   if (results.length === 0) return NextResponse.json({ message: 'No Foursquare results' })
 
   const top        = results[0]
   const confidence = calculateConfidence(title, top.name)
+  console.log('[enrichPlaces] top match:', top.name, 'confidence:', confidence)
 
   // 55% threshold for venues — names vary more than film titles,
   // and Foursquare results can differ slightly in punctuation or word order
-  if (confidence < 55) return NextResponse.json({ message: 'Low confidence place match' })
+  if (confidence < 55) {
+    console.log('[enrichPlaces] confidence too low, skipping')
+    return NextResponse.json({ message: 'Low confidence place match' })
+  }
 
   // Fetch a venue photo — best-effort, not a blocker
   let photoUrl: string | null = null
@@ -621,6 +631,7 @@ async function enrichPlaces(
     }
   } catch { /* photo is nice-to-have */ }
 
+  console.log('[enrichPlaces] confirmed:', top.name, '| photo:', !!photoUrl)
   await supabase
     .from('recommendations')
     .update({
