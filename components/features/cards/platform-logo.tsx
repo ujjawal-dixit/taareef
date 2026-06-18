@@ -4,7 +4,6 @@
 // Streaming-platform logo for the poster's bottom-left scrim (locked placement).
 // Inline brand SVGs — render immediately, no external files, never broken.
 // Platform strings from Watchmode (metadata.streaming_platforms).
-//
 
 type Mark = (h: number) => string
 
@@ -14,8 +13,8 @@ const NETFLIX: Mark = (h) => {
 }
 
 const PRIME: Mark = (h) => {
-  const w = h * 3.1
-  return `<svg height="${h}" viewBox="0 0 120 30" width="${w}" xmlns="http://www.w3.org/2000/svg" aria-label="Prime Video"><text x="0" y="17" font-family="Arial, sans-serif" font-size="17" font-weight="700" fill="#ffffff" letter-spacing="-0.5">prime</text><path d="M2 23 q34 9 64 0" stroke="#1FAEE9" stroke-width="3.4" fill="none" stroke-linecap="round"/></svg>`
+  const w = Math.round(h * 3.0)
+  return `<svg height="${h}" viewBox="0 0 78 26" width="${w}" xmlns="http://www.w3.org/2000/svg" aria-label="Prime Video"><text x="1" y="16" font-family="Arial, sans-serif" font-size="15" font-weight="700" fill="#ffffff" letter-spacing="-0.3">prime</text><path d="M1 21 q19 6 38 0" stroke="#00A8E1" stroke-width="2.5" fill="none" stroke-linecap="round"/></svg>`
 }
 
 const HOTSTAR: Mark = (h) => {
