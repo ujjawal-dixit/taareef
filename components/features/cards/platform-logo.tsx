@@ -4,6 +4,7 @@
 // Streaming-platform logo for the poster's bottom-left scrim (locked placement).
 // Inline brand SVGs — render immediately, no external files, never broken.
 // Platform strings from Watchmode (metadata.streaming_platforms).
+//
 
 type Mark = (h: number) => string
 
