@@ -65,7 +65,7 @@ type PlatformLogoProps = {
   height?: number
 }
 
-export function PlatformLogo({ platform, height = 13 }: PlatformLogoProps) {
+export function PlatformLogo({ platform, height = 11 }: PlatformLogoProps) {
   const key  = platform.toLowerCase().trim()
   const mark = MARKS[key] ?? GENERIC
 
@@ -75,14 +75,14 @@ export function PlatformLogo({ platform, height = 13 }: PlatformLogoProps) {
         display:        'inline-flex',
         alignItems:     'center',
         justifyContent: 'center',
-        height:         `${height + 9}px`,
-        maxWidth:       '110px',
+        height:         `${height + 6}px`,
+        maxWidth:       '100px',
         overflow:       'hidden',
-        padding:        '0 8px',
-        borderRadius:   '5px',
-        background:     'rgba(0,0,0,0.62)',
+        padding:        '0 5px',
+        borderRadius:   '4px',
+        background:     'rgba(0,0,0,0.55)',
         backdropFilter: 'blur(4px)',
-        boxShadow:      '0 1px 4px rgba(0,0,0,0.5)',
+        boxShadow:      '0 1px 3px rgba(0,0,0,0.45)',
       }}
       dangerouslySetInnerHTML={{ __html: mark(height) }}
     />
