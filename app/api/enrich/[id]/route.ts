@@ -591,7 +591,7 @@ async function enrichPlaces(
   })
   if (locationHint) params.set('near', locationHint)
 
-  const searchRes = await fetch(
+  let searchRes = await fetch(
     `https://api.foursquare.com/v3/places/search?${params.toString()}`,
     { headers: { Authorization: apiKey, Accept: 'application/json' } }
   )
@@ -602,9 +602,30 @@ async function enrichPlaces(
     return NextResponse.json({ error: 'Foursquare search failed' }, { status: 502 })
   }
 
-  const search  = await searchRes.json() as { results: FoursquarePlace[] }
-  const results = search.results ?? []
+  let search  = await searchRes.json() as { results: FoursquarePlace[] }
+  let results = search.results ?? []
   console.log('[enrichPlaces] results:', results.map(r => r.name))
+
+  // If location-scoped search returned nothing, retry without the location constraint
+  // (handles cases where Foursquare doesn't recognise the city string)
+  if (results.length === 0 && locationHint) {
+    console.log('[enrichPlaces] retrying without location hint')
+    const fallbackParams = new URLSearchParams({
+      query:  title,
+      limit:  '3',
+      fields: 'fsq_id,name,location,categories,geocodes',
+    })
+    const fallbackRes = await fetch(
+      `https://api.foursquare.com/v3/places/search?${fallbackParams.toString()}`,
+      { headers: { Authorization: apiKey, Accept: 'application/json' } }
+    )
+    if (fallbackRes.ok) {
+      const fallback = await fallbackRes.json() as { results: FoursquarePlace[] }
+      results = fallback.results ?? []
+      console.log('[enrichPlaces] fallback results:', results.map(r => r.name))
+    }
+  }
+
   if (results.length === 0) return NextResponse.json({ message: 'No Foursquare results' })
 
   const top        = results[0]
