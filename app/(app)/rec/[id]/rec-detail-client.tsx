@@ -32,6 +32,7 @@ import { FullCard }     from '@/components/features/cards/full-card'
 import type { CategoryConfig } from '@/constants/categories'
 import type { Recommendation, Reaction, Category } from '@/lib/types'
 import { triggerEnrichment } from '@/lib/utils/enrich'
+import { buildMetaLine }      from '@/lib/card/derive'
 
 type Props = {
   recommendation: Recommendation
@@ -77,101 +78,6 @@ function getTellConfig(sourceType: string, sourceName: string, reaction: Reactio
       return { label: 'Enjoyed it?', sub: 'Share this with a friend.', action: 'share-card' }
     default: return null
   }
-}
-
-function buildMeta(category: Category, meta: Record<string, unknown>): string {
-  const p: string[] = []
-  switch (category) {
-    case 'watch': {
-      const subtype  = typeof meta.subtype === 'string' ? meta.subtype : null
-      const director = typeof meta.director === 'string' ? meta.director : null
-      const creator  = typeof meta.created_by === 'string' ? meta.created_by : null
-      const genre    = Array.isArray(meta.genres)
-        ? (meta.genres as string[])[0]
-        : typeof meta.genres === 'string' ? meta.genres : null
-      const year     = meta.release_year ?? meta.year
-      const runtime  = meta.runtime_minutes ? `${meta.runtime_minutes} min` : null
-      const status   = typeof meta.series_status === 'string' ? meta.series_status : null
-      const seasons  = meta.seasons ? `${meta.seasons} seasons` : null
-      const platform = typeof meta.platform === 'string' ? meta.platform : null
-      if (subtype === 'series') {
-        if (creator)  p.push(creator)
-        if (platform) p.push(platform)
-        if (seasons)  p.push(seasons)
-        if (status)   p.push(status)
-      } else {
-        if (director) p.push(director)
-        if (genre)    p.push(String(genre))
-        if (year)     p.push(String(year))
-        if (runtime)  p.push(runtime)
-      }
-      break
-    }
-    case 'listen': {
-      const artist   = typeof meta.artist === 'string' ? meta.artist : null
-      const host     = typeof meta.host === 'string' ? meta.host : null
-      const narrator = typeof meta.narrator === 'string' ? meta.narrator : null
-      const author   = typeof meta.author === 'string' ? meta.author : null
-      const genre    = typeof meta.genre === 'string' ? meta.genre : null
-      const year     = meta.release_year ?? meta.year
-      const album    = typeof meta.album === 'string' ? meta.album : null
-      const tracks   = meta.total_tracks ? `${meta.total_tracks} tracks` : null
-      const subtype  = typeof meta.subtype === 'string' ? meta.subtype : null
-      if (subtype === 'podcast') {
-        if (host) p.push(host)
-        if (genre) p.push(genre)
-      } else if (subtype === 'audiobook') {
-        if (author)   p.push(author)
-        if (narrator) p.push(`read by ${narrator}`)
-      } else if (subtype === 'artist') {
-        if (genre) p.push(genre)
-        if (year)  p.push(String(year))
-      } else {
-        // album (default)
-        if (artist) p.push(artist)
-        if (genre)  p.push(genre)
-        if (year)   p.push(String(year))
-        if (tracks) p.push(tracks)
-      }
-      break
-    }
-    case 'read': {
-      const author   = typeof meta.author === 'string' ? meta.author : null
-      const subgenre = typeof meta.subgenre === 'string' ? meta.subgenre
-        : typeof meta.genre === 'string' ? meta.genre : null
-      const year     = meta.year ?? meta.published_year
-      const pages    = meta.pages ? `${meta.pages} pp` : null
-      if (author)   p.push(author)
-      if (subgenre) p.push(subgenre)
-      if (year)     p.push(String(year))
-      if (pages)    p.push(pages)
-      break
-    }
-    case 'dine': {
-      const type = typeof meta.type === 'string' ? meta.type : null
-      const nbhd = typeof meta.neighbourhood === 'string' ? meta.neighbourhood : null
-      const city = typeof meta.city === 'string' ? meta.city : null
-      if (type) p.push(type)
-      if (nbhd) p.push(nbhd)
-      if (city) p.push(city)
-      break
-    }
-    case 'do': {
-      const location   = typeof meta.city === 'string' ? meta.city : typeof meta.location === 'string' ? meta.location : null
-      const difficulty = typeof meta.difficulty === 'string' ? meta.difficulty : null
-      if (location)   p.push(location)
-      if (difficulty) p.push(difficulty)
-      break
-    }
-    case 'visit': {
-      const venue = typeof meta.venue === 'string' ? meta.venue : null
-      const city  = typeof meta.city === 'string' ? meta.city : null
-      if (venue) p.push(venue)
-      if (city)  p.push(city)
-      break
-    }
-  }
-  return p.slice(0, 4).join(' · ')
 }
 
 function getDateUrgency(dateStr: string | null): 'none' | 'info' | 'soon' | 'urgent' | 'closed' {
@@ -324,8 +230,12 @@ export function RecDetailClient({ recommendation: rec, categoryConfig: cfg }: Pr
 
   const hasImage = hasValidImage(liveImageUrl)
   const isExp    = rec.status !== 'saved'
-  const meta     = rec.metadata as Record<string, unknown>
-  const metaLine = buildMeta(rec.category as Category, meta)
+  // liveMeta reflects post-enrichment state; rec.metadata is the original.
+  // metaLine reads liveMeta so it shows enrichment data immediately.
+  // meta (stale) kept for JSX sections that haven't been updated yet.
+  const meta      = rec.metadata as import('@/lib/types').RecMetadata
+  const liveMeta2 = liveMeta     as import('@/lib/types').RecMetadata
+  const metaLine  = buildMetaLine(rec.category as Category, liveMeta2)
   const tell     = getTellConfig(rec.source_type, rec.source_name, reaction)
   const src      = formatSource(rec.source_type, rec.source_name)
 
@@ -612,17 +522,16 @@ export function RecDetailClient({ recommendation: rec, categoryConfig: cfg }: Pr
             cardRef stays on the object for share/export capture. */}
         {(() => {
           const rgb       = cfg.vividRgb
-          const dSubtype  = typeof liveMeta.subtype === 'string'
-            ? liveMeta.subtype
-            : (typeof meta.subtype === 'string' ? meta.subtype : null)
+          // All card props from liveMeta2 — typed, post-enrichment
+          const dSubtype  = liveMeta2.subtype ?? meta.subtype ?? null
           const subcatLbl = dSubtype ? dSubtype.charAt(0).toUpperCase() + dSubtype.slice(1) : null
-          const platforms = liveMeta.streaming_platforms
-          const platform  = Array.isArray(platforms) && platforms.length > 0 && typeof platforms[0] === 'string'
-            ? platforms[0] as string : null
-          const castLine  = typeof liveMeta.cast === 'string' ? liveMeta.cast
-            : Array.isArray(liveMeta.cast) ? (liveMeta.cast as unknown[]).filter((x): x is string => typeof x === 'string').slice(0, 2).join(', ')
-            : typeof liveMeta.creators === 'string' ? liveMeta.creators
-            : (typeof meta.cast === 'string' ? meta.cast : null)
+          const platforms = liveMeta2.streaming_platforms
+          const platform  = Array.isArray(platforms) && platforms.length > 0
+            ? platforms[0] ?? null : null
+          const castArr   = liveMeta2.cast ?? meta.cast
+          const castLine  = Array.isArray(castArr)
+            ? castArr.slice(0, 2).join(', ')
+            : typeof castArr === 'string' ? castArr : null
           const isLoved   = rec.reaction === 'loved'
           const vowText   = isExp ? cfg.participle : `to ${cfg.infinitive}`
           const titleSize = rec.title.length > 34 ? 19 : rec.title.length > 22 ? 22 : 25
