@@ -3,7 +3,6 @@
 // Never inline types in component files.
 
 // ── CATEGORY ─────────────────────────────────────────────────────
-// 6 experience-based categories. Locked.
 export type Category =
   | 'watch'   // Film · Series · Documentary           — Warli
   | 'listen'  // Album · Podcast · Audiobook · Artist   — Gond
@@ -49,6 +48,87 @@ export type Location = {
   lng?: number
 }
 
+// ── METADATA CONTRACT ─────────────────────────────────────────────
+// The canonical vocabulary for every field any layer writes or reads.
+// Writers (enrichment routes, capture screen) and readers (derive.ts,
+// detail screen, card components) must all use these exact key names.
+// Adding a key here and using it in tsc-checked code prevents the
+// vocabulary-mismatch bugs that caused recurring silent failures.
+export type RecMetadata = {
+  // ── subtype (all categories) ────────────────────────────────────
+  subtype?: string | null           // film | series | documentary | album | podcast | artist | audiobook | restaurant | café | bar | ...
+
+  // ── capture-time supplementary (from understand route) ──────────
+  location_hint?: string | null     // city/area hint the user gave at save time — fallback when enrichment has no locality
+  what_to_order?: string | null     // dine: specific dish/drink mentioned
+  dates?: string | null             // visit: closing or run dates
+
+  // ── watch enrichment (TMDB) ─────────────────────────────────────
+  tmdb_id?: number | null
+  tmdb_confirmed?: boolean
+  tmdb_candidates?: TmdbCandidate[] | null
+  director?: string | null          // film director OR series creator (both fold here)
+  cast?: string[]                   // top 3 cast names
+  genres?: string[]                 // e.g. ['Drama', 'Thriller']
+  release_year?: number | null
+  runtime_minutes?: number | null
+  overview?: string | null
+  streaming_platforms?: string[]    // e.g. ['Netflix', 'Prime Video'] — first element shown as logo
+  series_status?: string | null     // 'Ended' | 'Returning Series' | etc.
+  seasons?: number | null
+
+  // ── listen enrichment (Spotify) ─────────────────────────────────
+  spotify_id?: string | null
+  artist?: string | null            // album: artist name
+  publisher?: string | null         // podcast: publisher / show host
+  total_tracks?: number | null      // album: track count
+  artwork_url?: string | null       // Spotify CDN URL (set as image_url too)
+  release_year_listen?: number | null // kept separate to avoid collision with watch
+
+  // ── read enrichment (Google Books) ──────────────────────────────
+  google_books_id?: string | null
+  author?: string | null
+  published_year?: number | null
+  pages?: number | null
+  genre?: string | null
+  description?: string | null
+  language?: string | null
+  books_candidates?: BookCandidate[] | null
+
+  // ── dine / visit / do enrichment (Foursquare) ───────────────────
+  foursquare_id?: string | null
+  foursquare_confirmed?: boolean
+  venue_name?: string | null        // confirmed venue name from Foursquare
+  address?: string | null
+  locality?: string | null          // neighbourhood or area (e.g. 'Soho', 'Bandra')
+  cuisine?: string | null           // e.g. 'Indian', 'Italian', 'Café'
+
+  // ── user actions ────────────────────────────────────────────────
+  user_uploaded?: boolean           // true when user uploaded their own poster
+}
+
+// Candidate types used in enrichment flows
+export type TmdbCandidate = {
+  tmdb_id: number
+  title: string
+  poster_path: string | null
+  poster_url: string | null
+  release_year: number | null
+  subtype: string
+}
+
+export type BookCandidate = {
+  google_id: string
+  title: string
+  author: string | null
+  published_year: number | null
+  cover_url: string | null
+  genre: string | null
+  pages: number | null
+  description: string | null
+  language: string | null
+}
+
 // ── RECOMMENDATION ────────────────────────────────────────────────
 export type Recommendation = {
   id: string
@@ -64,7 +144,7 @@ export type Recommendation = {
   status: string
   priority: Priority
   reaction: Reaction | null
-  metadata: Record<string, unknown>
+  metadata: RecMetadata          // typed — no longer a free-for-all bag
   created_at: string
   updated_at: string
 }
@@ -87,7 +167,7 @@ export type CreateRecommendationInput = {
   notes?: string
   location?: Location
   priority?: Priority
-  metadata?: Record<string, unknown>
+  metadata?: RecMetadata
 }
 
 // ── UPDATE INPUT ──────────────────────────────────────────────────
@@ -100,5 +180,5 @@ export type UpdateRecommendationInput = {
   reaction?: Reaction | null
   priority?: Priority
   location?: Location
-  metadata?: Record<string, unknown>
+  metadata?: RecMetadata
 }
