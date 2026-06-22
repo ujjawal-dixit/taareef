@@ -1,63 +1,65 @@
 // lib/card/derive.ts
-// Single source of truth for deriving display data from a recommendation.
-// Used by the card views (grid/compact) AND the detail screen, so the
-// meta line can never drift between surfaces again.
+// Single source of truth for deriving display text from a recommendation.
+// Used by grid cards, compact rows, AND the detail screen — so the meta
+// line is identical across every surface. If it reads a key that doesn't
+// exist in RecMetadata, TypeScript will catch it at build time.
 
-import type { Category } from '@/lib/types'
+import type { Category, RecMetadata } from '@/lib/types'
 
 /**
- * Build the ordered list of metadata "parts" for a recommendation.
- * Returns the full list; callers slice to the count their surface allows
- * (detail = 4, compact = 3). This is the canonical, richer field selection.
+ * Build the ordered list of display "parts" for a recommendation.
+ * Returns the full list; callers slice to their surface's max
+ * (detail = 4 parts, compact rows = 3 parts).
+ *
+ * Key names here must match what enrichment writes — RecMetadata is
+ * the contract that enforces this. Never read a key that isn't in that type.
  */
-export function buildMetaParts(category: Category, meta: Record<string, unknown>): string[] {
+export function buildMetaParts(category: Category, meta: RecMetadata): string[] {
   const p: string[] = []
+
   switch (category) {
+
     case 'watch': {
-      const subtype  = typeof meta.subtype === 'string' ? meta.subtype : null
-      const director = typeof meta.director === 'string' ? meta.director : null
-      const creator  = typeof meta.created_by === 'string' ? meta.created_by : null
-      const genre    = Array.isArray(meta.genres)
-        ? (meta.genres as string[])[0]
-        : typeof meta.genres === 'string' ? meta.genres : null
-      const year     = meta.release_year ?? meta.year
+      const subtype  = meta.subtype ?? null
+      // Both film director and series creator are stored under `director`
+      const director = meta.director ?? null
+      const genre    = Array.isArray(meta.genres) ? meta.genres[0] ?? null
+        : null
+      const year     = meta.release_year ?? null
       const runtime  = meta.runtime_minutes ? `${meta.runtime_minutes} min` : null
-      const status   = typeof meta.series_status === 'string' ? meta.series_status : null
+      const status   = meta.series_status ?? null
       const seasons  = meta.seasons ? `${meta.seasons} seasons` : null
-      const platform = typeof meta.platform === 'string' ? meta.platform : null
+
       if (subtype === 'series') {
-        if (creator)  p.push(creator)
-        if (platform) p.push(platform)
+        if (director) p.push(director)   // series creator stored in director
         if (seasons)  p.push(seasons)
         if (status)   p.push(status)
+        if (genre)    p.push(genre)
       } else {
         if (director) p.push(director)
-        if (genre)    p.push(String(genre))
+        if (genre)    p.push(genre)
         if (year)     p.push(String(year))
         if (runtime)  p.push(runtime)
       }
       break
     }
+
     case 'listen': {
-      const artist   = typeof meta.artist === 'string' ? meta.artist : null
-      const host     = typeof meta.host === 'string' ? meta.host : null
-      const narrator = typeof meta.narrator === 'string' ? meta.narrator : null
-      const author   = typeof meta.author === 'string' ? meta.author : null
-      const genre    = typeof meta.genre === 'string' ? meta.genre : null
-      const year     = meta.release_year ?? meta.year
+      const subtype  = meta.subtype ?? null
+      const artist   = meta.artist ?? null
+      const publisher = meta.publisher ?? null   // podcast: show publisher / host
+      const genre    = meta.genre ?? null
+      const year     = meta.release_year ?? null
       const tracks   = meta.total_tracks ? `${meta.total_tracks} tracks` : null
-      const subtype  = typeof meta.subtype === 'string' ? meta.subtype : null
+
       if (subtype === 'podcast') {
-        if (host)  p.push(host)
-        if (genre) p.push(genre)
-      } else if (subtype === 'audiobook') {
-        if (author)   p.push(author)
-        if (narrator) p.push(`read by ${narrator}`)
+        if (publisher) p.push(publisher)
+        if (genre)     p.push(genre)
       } else if (subtype === 'artist') {
         if (genre) p.push(genre)
         if (year)  p.push(String(year))
       } else {
-        // album (default)
+        // album (default) + audiobook
         if (artist) p.push(artist)
         if (genre)  p.push(genre)
         if (year)   p.push(String(year))
@@ -65,57 +67,64 @@ export function buildMetaParts(category: Category, meta: Record<string, unknown>
       }
       break
     }
+
     case 'read': {
-      const author   = typeof meta.author === 'string' ? meta.author : null
-      const subgenre = typeof meta.subgenre === 'string' ? meta.subgenre
-        : typeof meta.genre === 'string' ? meta.genre : null
-      const year     = meta.year ?? meta.published_year
-      const pages    = meta.pages ? `${meta.pages} pp` : null
-      if (author)   p.push(author)
-      if (subgenre) p.push(subgenre)
-      if (year)     p.push(String(year))
-      if (pages)    p.push(pages)
+      const author = meta.author ?? null
+      const genre  = meta.genre ?? null
+      const year   = meta.published_year ?? null
+      const pages  = meta.pages ? `${meta.pages} pp` : null
+      if (author) p.push(author)
+      if (genre)  p.push(genre)
+      if (year)   p.push(String(year))
+      if (pages)  p.push(pages)
       break
     }
+
     case 'dine': {
-      const type = typeof meta.type === 'string' ? meta.type : null
-      const nbhd = typeof meta.neighbourhood === 'string' ? meta.neighbourhood : null
-      const city = typeof meta.city === 'string' ? meta.city : null
-      if (type) p.push(type)
-      if (nbhd) p.push(nbhd)
-      if (city) p.push(city)
+      // cuisine: Foursquare writes `cuisine` (e.g. 'Indian Restaurant')
+      // locality: Foursquare writes `locality` (e.g. 'Soho', 'Bandra')
+      // location_hint: user's own typed city — fallback when Foursquare has no locality
+      const cuisine  = meta.cuisine ?? null
+      const locality = meta.locality ?? meta.location_hint ?? null
+      if (cuisine)  p.push(cuisine)
+      if (locality) p.push(locality)
       break
     }
+
     case 'do': {
-      const location   = typeof meta.city === 'string' ? meta.city
-        : typeof meta.location === 'string' ? meta.location : null
-      const difficulty = typeof meta.difficulty === 'string' ? meta.difficulty : null
-      if (location)   p.push(location)
-      if (difficulty) p.push(difficulty)
+      // locality first, fallback to user's location_hint
+      const locality = meta.locality ?? meta.location_hint ?? null
+      if (locality) p.push(locality)
       break
     }
+
     case 'visit': {
-      const venue = typeof meta.venue === 'string' ? meta.venue : null
-      const city  = typeof meta.city === 'string' ? meta.city : null
-      if (venue) p.push(venue)
-      if (city)  p.push(city)
+      // venue_name: Foursquare writes `venue_name`
+      // locality: area or neighbourhood
+      const venue    = meta.venue_name ?? null
+      const locality = meta.locality ?? meta.location_hint ?? null
+      if (venue)    p.push(venue)
+      if (locality) p.push(locality)
       break
     }
   }
+
   return p
 }
 
-/** Convenience: the meta parts joined, capped to `maxParts` (detail=4, compact=3). */
+/** Convenience: parts joined with · , capped to maxParts. */
 export function buildMetaLine(
   category: Category,
-  meta: Record<string, unknown>,
+  meta: RecMetadata,
   maxParts = 4,
 ): string {
   return buildMetaParts(category, meta).slice(0, maxParts).join(' · ')
 }
 
-/** Date-urgency bucket for time-sensitive recommendations (e.g. exhibitions). */
-export function getDateUrgency(dateStr: string | null): 'none' | 'info' | 'soon' | 'urgent' | 'closed' {
+/** Date-urgency bucket for time-sensitive saves (e.g. exhibitions). */
+export function getDateUrgency(
+  dateStr: string | null,
+): 'none' | 'info' | 'soon' | 'urgent' | 'closed' {
   if (!dateStr) return 'none'
   const cleaned = dateStr.replace(/until|closes|closing|through/gi, '').trim()
   const parsed  = new Date(cleaned)
