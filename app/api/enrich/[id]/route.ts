@@ -580,10 +580,10 @@ async function enrichPlaces(
     return NextResponse.json({ message: 'Google Places not configured' })
   }
 
-  const title        = rec.title as string
-  const category     = rec.category as string
+  const title        = rec.title
+  const category     = rec.category
   const meta         = rec.metadata
-  const locationHint = meta.location_hint as string | null | undefined
+  const locationHint = meta.location_hint ?? null
 
   // ── Monthly usage counter ─────────────────────────────────────────
   const MONTHLY_LIMIT = 1000
@@ -605,22 +605,27 @@ async function enrichPlaces(
           .update({ call_count: 0, reset_at: new Date(now.getFullYear(), now.getMonth(), 1).toISOString() })
           .eq('id', 'google_places')
       } else if (usage.call_count >= MONTHLY_LIMIT) {
-            return NextResponse.json({ message: 'Monthly Places API limit reached' })
+        return NextResponse.json({ message: 'Monthly Places API limit reached' })
       }
     }
   } catch (err) {
     console.error('[enrichPlaces] usage counter error:', err)
   }
 
-  // ── Text Search ───────────────────────────────────────────────────
-  // Append category hint to bias Google toward the right venue type.
-  // dine → "restaurant", visit → "landmark", do → omitted (too varied).
-  const categoryHint = category === 'dine' ? 'restaurant'
-    : category === 'visit'                  ? 'landmark or attraction'
-    : null
-  const textQuery = [title, categoryHint, locationHint].filter(Boolean).join(' in ')
+  // ── LAYER 1: Google Places Text Search ───────────────────────────
+  // Query = title + locationHint only — clean, natural, what a human types.
+  // Category is passed as a structured includedType filter, not injected
+  // into the text query where it corrupts the search phrase.
+  const textQuery = locationHint ? `${title} ${locationHint}` : title
 
-  console.log('[enrichPlaces] searching:', { textQuery, category })
+  // includedType biases results by venue category without polluting the query.
+  // Google Places API (New) category codes — deliberately conservative:
+  // dine  → restaurant (broad enough to include bars, cafes, etc.)
+  // visit → tourist_attraction
+  // do    → omitted — too varied (gyms, hiking, concerts all differ)
+  const includedType = category === 'dine'  ? 'restaurant'
+    :                  category === 'visit' ? 'tourist_attraction'
+    :                  null
 
   let searchRes: Response
   try {
@@ -631,9 +636,22 @@ async function enrichPlaces(
         headers: {
           'Content-Type':     'application/json',
           'X-Goog-Api-Key':   googleKey,
-          'X-Goog-FieldMask': 'places.displayName,places.formattedAddress,places.location,places.primaryType,places.photos',
+          // addressComponents gives us labelled address segments —
+          // no string parsing required to extract locality
+          'X-Goog-FieldMask': [
+            'places.displayName',
+            'places.formattedAddress',
+            'places.addressComponents',
+            'places.primaryType',
+            'places.photos',
+          ].join(','),
         },
-        body: JSON.stringify({ textQuery, maxResultCount: 3, languageCode: 'en' }),
+        body: JSON.stringify({
+          textQuery,
+          maxResultCount: 3,
+          languageCode:   'en',
+          ...(includedType ? { includedType } : {}),
+        }),
       }
     )
   } catch (err) {
@@ -648,22 +666,91 @@ async function enrichPlaces(
   }
 
   const searchData = await searchRes.json() as { places?: GooglePlace[] }
-  const places     = searchData.places ?? []
-  console.log('[enrichPlaces] results:', places.map(p => p.displayName?.text))
+  const allPlaces  = searchData.places ?? []
 
-  // Zero results — mark so the UI can show a nudge
-  if (places.length === 0) {
+  if (allPlaces.length === 0) {
     await supabase
       .from('recommendations')
       .update({ metadata: { ...meta, place_no_results: true } })
-      .eq('id', rec.id as string)
+      .eq('id', rec.id)
       .eq('user_id', userId)
     return NextResponse.json({ message: 'No Google Places results' })
   }
 
-  // ── Fetch all candidate photos in parallel with LLM disambiguation ─
-  // We prefetch photos for all candidates so whichever one the LLM picks
-  // (or the user picks) already has its image ready — no extra round trip.
+  // ── LAYER 2: Name pre-filter ──────────────────────────────────────
+  // Reject candidates whose name shares no meaningful words with the
+  // user's title. This catches Bademiya for "Gokul Bar" before the LLM
+  // ever sees it — string comparison is the right tool for this job.
+  //
+  // Logic: tokenise both names into words of 3+ characters, excluding
+  // noise words. If word overlap is zero AND string similarity < 55%,
+  // the candidate is not a plausible match. Filtered out entirely.
+  const NOISE_WORDS = new Set([
+    'bar', 'restaurant', 'cafe', 'café', 'hotel', 'house',
+    'the', 'and', 'or', 'of', 'at', 'in', 'by', 'new',
+  ])
+
+  function tokenise(name: string): Set<string> {
+    return new Set(
+      name.toLowerCase()
+        .replace(/[^a-z0-9\s]/g, ' ')
+        .split(/\s+/)
+        .filter(w => w.length >= 3 && !NOISE_WORDS.has(w))
+    )
+  }
+
+  function hasNameOverlap(userTitle: string, candidateName: string): boolean {
+    const titleTokens     = tokenise(userTitle)
+    const candidateTokens = tokenise(candidateName)
+    // Check word overlap
+    for (const word of titleTokens) {
+      if (candidateTokens.has(word)) return true
+    }
+    // Check partial match — "Gokul" inside "Gokul Bar & Restaurant"
+    const titleLower     = userTitle.toLowerCase()
+    const candidateLower = candidateName.toLowerCase()
+    if (candidateLower.includes(titleLower) || titleLower.includes(candidateLower)) return true
+    // Fall back to string similarity
+    return calculateConfidence(userTitle, candidateName) >= 55
+  }
+
+  const plausiblePlaces = allPlaces.filter(p =>
+    hasNameOverlap(title, p.displayName?.text ?? '')
+  )
+
+  // If the name filter removed everything, store candidates for the
+  // user to pick — don't show empty-handed
+  const places = plausiblePlaces.length > 0 ? plausiblePlaces : allPlaces
+
+  // ── LAYER 3: Structured locality extraction ───────────────────────
+  // Read Google's addressComponents directly — each segment is already
+  // labelled with its type. No comma-counting, no regex fragility,
+  // no "Maharashtra 400001" leaking into the locality field.
+  function extractLocality(
+    components: GoogleAddressComponent[] | undefined,
+    fallback:   string | null,
+  ): string | null {
+    if (!components?.length) return fallback
+
+    // Priority order: sublocality_level_1 (neighbourhood) → locality (city)
+    // This gives "Colaba" over "Mumbai" when both are present.
+    const priority = [
+      'sublocality_level_1',
+      'sublocality_level_2',
+      'sublocality',
+      'neighborhood',
+      'locality',
+    ]
+
+    for (const type of priority) {
+      const match = components.find(c => c.types.includes(type))
+      if (match) return match.longText
+    }
+
+    return fallback
+  }
+
+  // ── LAYER 4: Fetch photos in parallel with LLM ───────────────────
   const fetchPhoto = async (place: GooglePlace): Promise<string | null> => {
     const ref = place.photos?.[0]?.name
     if (!ref) return null
@@ -678,52 +765,65 @@ async function enrichPlaces(
     } catch { return null }
   }
 
-  // ── LLM disambiguation ────────────────────────────────────────────
-  // Run in parallel with photo fetches — LLM thinks while photos download.
+  // ── LAYER 5: LLM disambiguation ──────────────────────────────────
+  // The LLM's role is rejection, not ranking. By the time candidates
+  // reach it, Layer 2 has already removed obvious mismatches.
+  // The prompt is restructured around one question: "is this a match?"
+  // with name matching as the explicit primary signal.
   const disambiguateWithLLM = async (): Promise<PlaceLLMResult> => {
-    if (!groqKey) return { match_type: 'possible', chosen_index: 0, reason: 'No LLM key' }
+    // Default: if no LLM key, pick by string similarity
+    if (!groqKey) {
+      return stringFallback(places, title)
+    }
+
+    // Only pass plausible candidates to the LLM (post-filter)
+    // If we fell back to allPlaces because filter removed everything,
+    // skip LLM — it has nothing useful to work with
+    if (plausiblePlaces.length === 0) {
+      return { match_type: 'none', chosen_index: 0, reason: 'No plausible name match found' }
+    }
 
     const candidateSummary = places.map((p, i) => ({
       index:   i,
       name:    p.displayName?.text ?? '',
-      address: p.formattedAddress ?? '',
-      type:    p.primaryType ?? '',
+      address: p.formattedAddress  ?? '',
+      type:    p.primaryType       ?? '',
     }))
 
-    const prompt = `You are helping match a user's saved recommendation to the correct venue from Google Places results.
+    const prompt = `You are verifying whether a venue from Google Places matches what a user saved in a recommendation app.
 
 User saved:
 - Title: "${title}"
-- Category: ${category}
-- Location hint: ${locationHint ?? 'not provided'}
+- Category: ${category}${locationHint ? `
+- Location: ${locationHint}` : ''}
 
-Google Places returned these candidates:
+Google Places candidates (already filtered to plausible name matches):
 ${JSON.stringify(candidateSummary, null, 2)}
 
-Your task: decide which candidate (if any) best matches what the user saved.
+Decision rules — apply in this order:
+1. NAME is the primary signal. The candidate name must resemble the user's title.
+   "Gokul Bar" → "Gokul Bar & Restaurant" ✓ | "Bademiya" ✗
+   Informal/short names are fine: "Gokul" → "Gokul Bar" ✓
+2. If a location hint is given, prefer candidates in that area.
+3. If NO candidate name resembles the title → match_type must be "none".
+4. Never pick the "least bad" option when the name clearly doesn't match.
 
-Rules:
-1. Match on venue name — informal names are fine ("Gokul" matches "Gokul Bar & Restaurant")
-2. If the location hint is provided, the address should be in that area
-3. Never pick a result that is clearly a different business (different name, different type)
-4. If two candidates are plausible, prefer the one whose name is closer to the user's title
-
-Return ONLY this JSON, nothing else:
+Return ONLY valid JSON, no other text:
 {
-  "chosen_index": <0, 1, or 2 — index of the best match>,
-  "match_type": <"exact" | "likely" | "possible" | "none">,
-  "reason": <one short sentence explaining the choice>
+  "chosen_index": <0, 1, or 2>,
+  "match_type": "exact" | "likely" | "possible" | "none",
+  "reason": "<one sentence>"
 }
 
-match_type guide:
-- "exact": name matches closely and location is consistent
-- "likely": name matches but location is uncertain or address missing
-- "possible": partial match — user should confirm
-- "none": no candidate is a plausible match`
+match_type:
+- "exact"    → name matches closely, location consistent
+- "likely"   → name matches, location uncertain
+- "possible" → partial name match, user should confirm
+- "none"     → no candidate name resembles the user's title`
 
     try {
       const controller = new AbortController()
-      const timeout    = setTimeout(() => controller.abort(), 5000) // 5s hard timeout
+      const timeout    = setTimeout(() => controller.abort(), 5000)
 
       const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
         method:  'POST',
@@ -731,7 +831,7 @@ match_type guide:
         body: JSON.stringify({
           model:       'llama-3.3-70b-versatile',
           temperature: 0.0,
-          max_tokens:  120,
+          max_tokens:  100,
           messages:    [{ role: 'user', content: prompt }],
         }),
         signal: controller.signal,
@@ -743,19 +843,21 @@ match_type guide:
       const data    = await res.json() as { choices?: Array<{ message?: { content?: string } }> }
       const content = data.choices?.[0]?.message?.content ?? ''
       const parsed  = JSON.parse(content.replace(/```json|```/g, '').trim()) as PlaceLLMResult
-        return parsed
+
+      // Sanity check: if LLM picked a winner but the name has no overlap
+      // with the title, override to 'none' — the name test is a hard rule
+      if (parsed.match_type !== 'none') {
+        const chosenName = places[parsed.chosen_index]?.displayName?.text ?? ''
+        if (!hasNameOverlap(title, chosenName)) {
+          return { match_type: 'none', chosen_index: parsed.chosen_index,
+                   reason: 'LLM overridden: chosen name has no overlap with title' }
+        }
+      }
+
+      return parsed
     } catch (err) {
-      // LLM timed out or failed — fall back to string confidence
-      console.error('[enrichPlaces] LLM fallback:', err)
-      const bestIdx  = places.reduce((best, p, i) => {
-        const score = calculateConfidence(title, p.displayName?.text ?? '')
-        return score > best.score ? { idx: i, score } : best
-      }, { idx: 0, score: 0 })
-      const matchType = bestIdx.score >= 80 ? 'exact'
-        : bestIdx.score >= 65              ? 'likely'
-        : bestIdx.score >= 50              ? 'possible'
-        : 'none'
-      return { chosen_index: bestIdx.idx, match_type: matchType as PlaceLLMResult['match_type'], reason: 'LLM fallback: string confidence' }
+      console.error('[enrichPlaces] LLM error, using string fallback:', err)
+      return stringFallback(places, title)
     }
   }
 
@@ -765,59 +867,64 @@ match_type guide:
     disambiguateWithLLM(),
   ])
 
-  // ── Address contradiction check ───────────────────────────────────
-  // If the user gave a location hint, verify the chosen place's address
-  // contains the expected area. A mismatch demotes confidence to "possible".
+  // ── LAYER 5b: Geographic consistency (hard rule) ──────────────────
+  // If the user gave a location hint, verify the chosen place's
+  // structured locality (from addressComponents) contains hint words.
+  // This is a hard rule: mismatch → "possible", always.
+  // We use the structured locality here, not the raw formattedAddress,
+  // so "Colaba" is compared to "Colaba" not "Mumbai, Maharashtra 400001".
   let finalResult = { ...llmResult }
-  if (locationHint && llmResult.match_type !== 'none') {
-    const chosenAddress = (places[llmResult.chosen_index]?.formattedAddress ?? '').toLowerCase()
-    const hintLower     = locationHint.toLowerCase()
-    const hintWords     = hintLower.split(/[\s,]+/).filter(w => w.length > 2)
-    const addressMatch  = hintWords.some(w => chosenAddress.includes(w))
-    if (!addressMatch && llmResult.match_type === 'exact') {
-        finalResult = { ...llmResult, match_type: 'possible', reason: `${llmResult.reason} (address contradicts location hint)` }
+  if (locationHint && llmResult.match_type !== 'none' && llmResult.match_type !== 'possible') {
+    const chosen       = places[llmResult.chosen_index]
+    const chosenLocale = extractLocality(chosen?.addressComponents, null)
+    if (chosenLocale) {
+      const hintWords   = locationHint.toLowerCase().split(/[\s,]+/).filter(w => w.length > 2)
+      const localeMatch = hintWords.some(w =>
+        chosenLocale.toLowerCase().includes(w) ||
+        w.includes(chosenLocale.toLowerCase().slice(0, 4))
+      )
+      if (!localeMatch) {
+        finalResult = {
+          ...llmResult,
+          match_type: 'possible',
+          reason: `${llmResult.reason} (locality '${chosenLocale}' doesn't match hint '${locationHint}')`,
+        }
+      }
     }
   }
 
-  // ── Act on match_type ─────────────────────────────────────────────
+  // ── ACT on final result ───────────────────────────────────────────
   const chosen = places[finalResult.chosen_index]
 
   if (finalResult.match_type === 'none') {
-    // No match — show zero-result nudge
     await supabase
       .from('recommendations')
       .update({ metadata: { ...meta, place_no_results: true } })
-      .eq('id', rec.id as string)
+      .eq('id', rec.id)
       .eq('user_id', userId)
     return NextResponse.json({ message: 'No confident place match' })
   }
 
   if (finalResult.match_type === 'possible') {
-    // Store candidates for the user to pick — same pattern as TMDB
     const candidates = places.map((p, i) => ({
       name:     p.displayName?.text ?? '',
-      address:  p.formattedAddress ?? null,
-      locality: deriveLocality(p.formattedAddress ?? null, locationHint),
-      cuisine:  p.primaryType ? p.primaryType.replace(/_/g, ' ').replace(/\w/g, (c: string) => c.toUpperCase()) : null,
+      address:  p.formattedAddress  ?? null,
+      locality: extractLocality(p.addressComponents, locationHint),
+      cuisine:  formatPrimaryType(p.primaryType),
       photoUrl: photoUrls[i] ?? null,
     }))
     await supabase
       .from('recommendations')
       .update({ metadata: { ...meta, place_candidates: candidates } })
-      .eq('id', rec.id as string)
+      .eq('id', rec.id)
       .eq('user_id', userId)
     return NextResponse.json({ success: true, candidates: true })
   }
 
   // exact or likely — auto-confirm
-  const photoUrl  = photoUrls[finalResult.chosen_index] ?? null
-  const address   = chosen.formattedAddress ?? null
-  const locality  = deriveLocality(address, locationHint)
-  const cuisine   = chosen.primaryType
-    ? chosen.primaryType.replace(/_/g, ' ').replace(/\w/g, (c: string) => c.toUpperCase())
-    : null
-
-  console.log('[enrichPlaces] confirmed:', chosen.displayName?.text, '| photo:', !!photoUrl, '| locality:', locality)
+  const photoUrl = photoUrls[finalResult.chosen_index] ?? null
+  const locality = extractLocality(chosen.addressComponents, locationHint)
+  const cuisine  = formatPrimaryType(chosen.primaryType)
 
   await supabase
     .from('recommendations')
@@ -825,18 +932,17 @@ match_type guide:
       image_url: photoUrl,
       metadata:  {
         ...meta,
-        venue_name:           chosen.displayName?.text ?? null,
-        address,
+        venue_name:       chosen.displayName?.text ?? null,
+        address:          chosen.formattedAddress  ?? null,
         locality,
         cuisine,
-        place_confirmed: true,
-        place_candidates:     null,
+        place_confirmed:  true,
+        place_candidates: null,
       },
     })
-    .eq('id', rec.id as string)
+    .eq('id', rec.id)
     .eq('user_id', userId)
 
-  // Increment counter after successful confirmation
   try {
     await supabase.rpc('increment_api_usage', { api_id: 'google_places' })
   } catch { /* non-fatal */ }
@@ -844,18 +950,35 @@ match_type guide:
   return NextResponse.json({ success: true })
 }
 
-// Derive a clean locality string from Google's formattedAddress.
-// "14 Brick Lane, Whitechapel, London E1 6RF, UK" → "Whitechapel"
-// Falls back to the user's location_hint when address is absent.
-function deriveLocality(address: string | null, locationHint: string | null | undefined): string | null {
-  if (!address) return locationHint ?? null
-  const parts = address.split(',').map(p => p.trim())
-  // Take the second-to-last non-postcode, non-country segment
-  // (last = country, second-last often = city+postcode, third-last = area)
-  const meaningful = parts.filter(p => !/^[A-Z]{1,2}\d/.test(p) && p.length > 1)
-  return meaningful.length >= 2
-    ? meaningful[meaningful.length - 2]
-    : (locationHint ?? null)
+// ── Helpers ───────────────────────────────────────────────────────
+
+// Convert Google's snake_case primaryType to readable Title Case.
+// "indian_restaurant" → "Indian Restaurant"
+function formatPrimaryType(primaryType: string | undefined): string | null {
+  if (!primaryType) return null
+  return primaryType
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, c => c.toUpperCase())
+}
+
+// String-similarity fallback when LLM is unavailable.
+// Uses calculateConfidence (Levenshtein) as a last resort.
+function stringFallback(candidates: GooglePlace[], userTitle: string): PlaceLLMResult {
+  const best = candidates.reduce((b, p, i) => {
+    const score = calculateConfidence(userTitle, p.displayName?.text ?? '')
+    return score > b.score ? { idx: i, score } : b
+  }, { idx: 0, score: 0 })
+
+  const mt = best.score >= 80 ? 'exact'
+    : best.score >= 65        ? 'likely'
+    : best.score >= 50        ? 'possible'
+    : 'none'
+
+  return {
+    chosen_index: best.idx,
+    match_type:   mt as PlaceLLMResult['match_type'],
+    reason:       `String fallback: confidence ${best.score}%`,
+  }
 }
 
 
@@ -969,12 +1092,19 @@ interface PlaceLLMResult {
   reason:       string
 }
 
+interface GoogleAddressComponent {
+  longText:  string
+  shortText: string
+  types:     string[]
+}
+
 interface GooglePlace {
-  displayName?:      { text: string; languageCode?: string }
-  formattedAddress?: string
-  location?:         { latitude: number; longitude: number }
-  primaryType?:      string
-  photos?:           Array<{ name: string; widthPx?: number; heightPx?: number }>
+  displayName?:        { text: string; languageCode?: string }
+  formattedAddress?:   string
+  addressComponents?:  GoogleAddressComponent[]
+  location?:           { latitude: number; longitude: number }
+  primaryType?:        string
+  photos?:             Array<{ name: string; widthPx?: number; heightPx?: number }>
 }
 
 interface SpotifyShow {
