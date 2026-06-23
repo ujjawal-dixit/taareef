@@ -131,7 +131,9 @@ export function RecDetailClient({ recommendation: rec, categoryConfig: cfg }: Pr
       ? (rec.metadata as Record<string,unknown>).books_candidates as Record<string,unknown>[]
       : []
   )
-  const [dismissedBookCands, setDismissedBookCands] = useState(false)
+  const [dismissedBookCands,  setDismissedBookCands]  = useState(false)
+  const [dismissedPlaceCands, setDismissedPlaceCands] = useState(false)
+  const [confirmingPlace,     setConfirmingPlace]     = useState(false)
   const [uploading,          setUploading]          = useState(false)
   const posterInputRef = useRef<HTMLInputElement>(null)
   const [confirmingBookId,   setConfirmingBookId]   = useState<string | null>(null)
@@ -380,6 +382,44 @@ export function RecDetailClient({ recommendation: rec, categoryConfig: cfg }: Pr
       headers: { 'Content-Type': 'application/json' },
       body:    JSON.stringify({ metadata: { ...liveMeta, books_candidates: null } }),
     }).catch(() => {})
+  }
+
+  async function handleConfirmPlace(candidate: Record<string, unknown>) {
+    setConfirmingPlace(true)
+    try {
+      const res  = await fetch(`/api/recommendations/${rec.id}`, {
+        method:  'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({
+          metadata: {
+            ...liveMeta,
+            venue_name:           candidate.name,
+            address:              candidate.address,
+            locality:             candidate.locality,
+            cuisine:              candidate.cuisine,
+            foursquare_confirmed: true,
+            place_candidates:     null,
+          },
+          image_url: candidate.photoUrl ?? undefined,
+        }),
+      })
+      const json = await res.json()
+      if (json.data) {
+        if (candidate.photoUrl) setLiveImageUrl(candidate.photoUrl as string)
+        setLiveMeta(prev => ({
+          ...prev,
+          venue_name:       candidate.name as string,
+          address:          candidate.address as string | null,
+          locality:         candidate.locality as string | null,
+          cuisine:          candidate.cuisine as string | null,
+          place_candidates: null,
+        }))
+      }
+    } catch {
+      setError('Could not confirm place — try again?')
+    } finally {
+      setConfirmingPlace(false)
+    }
   }
 
   async function handleUploadPoster(file: File) {
@@ -726,6 +766,136 @@ export function RecDetailClient({ recommendation: rec, categoryConfig: cfg }: Pr
                 }}
               >
                 {uploading ? 'Uploading…' : 'Upload your own →'}
+              </button>
+            </div>
+          )
+        })()}
+
+        {/* ── PLACE CANDIDATE STRIP ──────────────────────────────────────
+             Shows when Google found results but the LLM wasn't fully confident.
+             Same pattern as TMDB strip — user picks the right venue.
+             Also shows "add a photo" nudge for zero-result place cards. */}
+        {(() => {
+          const isPlaceCat  = rec.category === 'dine' || rec.category === 'visit' || rec.category === 'do'
+          if (!isPlaceCat) return null
+
+          // Zero results nudge — venue wasn't found on Google
+          const noResults = (liveMeta as import('@/lib/types').RecMetadata).place_no_results
+          if (noResults && !liveImageUrl) {
+            return (
+              <div style={{ marginBottom: '16px' }}>
+                <div style={{
+                  fontFamily: 'var(--f-ui)', fontSize: '9px', fontWeight: 700,
+                  letterSpacing: '2px', textTransform: 'uppercase',
+                  color: `rgba(${cfg.vividRgb},0.45)`, marginBottom: '8px',
+                }}>
+                  We couldn't find this place automatically
+                </div>
+                <button
+                  onClick={() => posterInputRef.current?.click()}
+                  style={{
+                    background: 'none', border: `1px solid rgba(${cfg.vividRgb},0.25)`,
+                    borderRadius: '6px', padding: '8px 14px', cursor: 'pointer',
+                    fontFamily: 'var(--f-body)', fontSize: '11px', fontWeight: 300,
+                    color: `rgba(${cfg.vividRgb},0.65)`,
+                    WebkitTapHighlightColor: 'transparent',
+                  }}
+                >
+                  Add a photo →
+                </button>
+              </div>
+            )
+          }
+
+          // Place candidate strip
+          const placeCands = Array.isArray((liveMeta as import('@/lib/types').RecMetadata).place_candidates)
+            && !dismissedPlaceCands
+            ? (liveMeta as import('@/lib/types').RecMetadata).place_candidates as import('@/lib/types').PlaceCandidate[]
+            : []
+          if (!placeCands.length) return null
+
+          return (
+            <div style={{ marginBottom: '20px' }}>
+              <div style={{
+                fontFamily: 'var(--f-ui)', fontSize: '9px', fontWeight: 700,
+                letterSpacing: '2px', textTransform: 'uppercase',
+                color: `rgba(${cfg.vividRgb},0.60)`, marginBottom: '10px',
+              }}>
+                Is this the right place?
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                {placeCands.map((c, idx) => (
+                  <button
+                    key={idx}
+                    onClick={() => handleConfirmPlace(c as unknown as Record<string, unknown>)}
+                    disabled={confirmingPlace}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: '10px',
+                      border: `1px solid rgba(${cfg.vividRgb},0.25)`,
+                      borderRadius: '8px', background: cfg.deepDark,
+                      padding: '8px 10px', cursor: confirmingPlace ? 'not-allowed' : 'pointer',
+                      textAlign: 'left', WebkitTapHighlightColor: 'transparent',
+                    }}
+                  >
+                    {/* Venue thumbnail */}
+                    <div style={{
+                      width: '44px', height: '44px', borderRadius: '5px',
+                      overflow: 'hidden', flexShrink: 0,
+                      background: `rgba(${cfg.vividRgb},0.15)`,
+                    }}>
+                      {c.photoUrl ? (
+                        <img src={c.photoUrl} alt={c.name}
+                          style={{ width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center' }} />
+                      ) : (
+                        <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                          <span style={{ fontFamily: 'var(--f-ui)', fontSize: '8px', color: `rgba(${cfg.vividRgb},0.5)`, textAlign: 'center', padding: '2px' }}>
+                            {c.name.slice(0, 2).toUpperCase()}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                    {/* Venue name + address */}
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{
+                        fontFamily: 'var(--f-body)', fontSize: '12px', fontWeight: 500,
+                        color: 'rgba(255,255,255,0.85)', lineHeight: 1.3,
+                        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                      }}>
+                        {c.name}
+                      </div>
+                      {(c.cuisine || c.locality) && (
+                        <div style={{
+                          fontFamily: 'var(--f-body)', fontSize: '10px', fontWeight: 300,
+                          color: `rgba(${cfg.vividRgb},0.55)`, marginTop: '2px',
+                        }}>
+                          {[c.cuisine, c.locality].filter(Boolean).join(' · ')}
+                        </div>
+                      )}
+                      {c.address && (
+                        <div style={{
+                          fontFamily: 'var(--f-body)', fontSize: '9px', fontWeight: 300,
+                          color: 'rgba(255,255,255,0.30)', marginTop: '2px',
+                          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                        }}>
+                          {c.address}
+                        </div>
+                      )}
+                    </div>
+                  </button>
+                ))}
+              </div>
+              <button
+                onClick={() => setDismissedPlaceCands(true)}
+                style={{
+                  marginTop: '8px', background: 'none', border: 'none',
+                  cursor: 'pointer', fontFamily: 'var(--f-body)', fontSize: '11px',
+                  fontWeight: 300, color: 'rgba(255,255,255,0.28)', padding: '4px 0',
+                  WebkitTapHighlightColor: 'transparent',
+                  textDecoration: 'underline', textUnderlineOffset: '3px',
+                  textDecorationColor: 'rgba(255,255,255,0.14)',
+                }}
+              >
+                None of these
               </button>
             </div>
           )
