@@ -575,96 +575,155 @@ async function enrichPlaces(
   rec:       Record<string, unknown>,
   userId:    string,
 ) {
-  const apiKey = process.env.FOURSQUARE_API_KEY
-  if (!apiKey) return NextResponse.json({ message: 'Foursquare not configured' })
+  const apiKey = process.env.GOOGLE_PLACES_API_KEY
+  if (!apiKey) {
+    console.error('[enrichPlaces] GOOGLE_PLACES_API_KEY not configured')
+    return NextResponse.json({ message: 'Google Places not configured' })
+  }
 
   const title        = rec.title as string
   const meta         = (rec.metadata as Record<string, unknown>) ?? {}
   const locationHint = meta.location_hint as string | null | undefined
 
-  console.log('[enrichPlaces] searching:', { title, locationHint, category: rec.category })
+  // ── Check monthly usage counter ───────────────────────────────────
+  // Reads the api_usage table, auto-resets at month boundary, skips
+  // enrichment if we've hit our self-imposed monthly ceiling.
+  const MONTHLY_LIMIT = 1000
+  try {
+    const now       = new Date()
+    const { data: usage } = await supabase
+      .from('api_usage')
+      .select('call_count, reset_at')
+      .eq('id', 'google_places')
+      .single()
 
-  const params = new URLSearchParams({
-    query:  title,
-    limit:  '3',
-    fields: 'fsq_id,name,location,categories,geocodes',
-  })
-  if (locationHint) params.set('near', locationHint)
+    if (usage) {
+      const resetAt = new Date(usage.reset_at)
+      const needsReset = now.getFullYear() > resetAt.getFullYear() ||
+                         now.getMonth()    > resetAt.getMonth()
 
-  let searchRes = await fetch(
-    `https://api.foursquare.com/v3/places/search?${params.toString()}`,
-    { headers: { Authorization: apiKey, Accept: 'application/json' } }
-  )
+      if (needsReset) {
+        // New month — reset the counter
+        await supabase
+          .from('api_usage')
+          .update({ call_count: 0, reset_at: new Date(now.getFullYear(), now.getMonth(), 1).toISOString() })
+          .eq('id', 'google_places')
+      } else if (usage.call_count >= MONTHLY_LIMIT) {
+        console.log('[enrichPlaces] monthly limit reached:', usage.call_count, '/', MONTHLY_LIMIT)
+        return NextResponse.json({ message: 'Monthly Places API limit reached' })
+      }
+    }
+  } catch (err) {
+    // Counter failure is non-fatal — log and continue
+    console.error('[enrichPlaces] usage counter error:', err)
+  }
+
+  // ── Text Search (New) ─────────────────────────────────────────────
+  // One call per save. Fields requested: name, address, location,
+  // primaryType (cuisine), photos. All are Pro-tier (India) fields —
+  // 35,000 free per month.
+  const textQuery = locationHint ? `${title} in ${locationHint}` : title
+
+  console.log('[enrichPlaces] searching:', { textQuery, category: rec.category })
+
+  let searchRes: Response
+  try {
+    searchRes = await fetch(
+      'https://places.googleapis.com/v1/places:searchText',
+      {
+        method:  'POST',
+        headers: {
+          'Content-Type':     'application/json',
+          'X-Goog-Api-Key':   apiKey,
+          'X-Goog-FieldMask': 'places.displayName,places.formattedAddress,places.location,places.primaryType,places.photos',
+        },
+        body: JSON.stringify({
+          textQuery,
+          maxResultCount: 3,
+          languageCode:   'en',
+        }),
+      }
+    )
+  } catch (err) {
+    console.error('[enrichPlaces] network error:', err)
+    return NextResponse.json({ error: 'Places search network error' }, { status: 502 })
+  }
 
   if (!searchRes.ok) {
     const errText = await searchRes.text().catch(() => '')
-    console.error('[enrichPlaces] Foursquare search failed:', searchRes.status, errText)
-    return NextResponse.json({ error: 'Foursquare search failed' }, { status: 502 })
+    console.error('[enrichPlaces] Google search failed:', searchRes.status, errText)
+    return NextResponse.json({ error: 'Google Places search failed' }, { status: 502 })
   }
 
-  let search  = await searchRes.json() as { results: FoursquarePlace[] }
-  let results = search.results ?? []
-  console.log('[enrichPlaces] results:', results.map(r => r.name))
+  const searchData = await searchRes.json() as { places?: GooglePlace[] }
+  const places     = searchData.places ?? []
+  console.log('[enrichPlaces] results:', places.map(p => p.displayName?.text))
 
-  // If location-scoped search returned nothing, retry without the location constraint
-  // (handles cases where Foursquare doesn't recognise the city string)
-  if (results.length === 0 && locationHint) {
-    console.log('[enrichPlaces] retrying without location hint')
-    const fallbackParams = new URLSearchParams({
-      query:  title,
-      limit:  '3',
-      fields: 'fsq_id,name,location,categories,geocodes',
-    })
-    const fallbackRes = await fetch(
-      `https://api.foursquare.com/v3/places/search?${fallbackParams.toString()}`,
-      { headers: { Authorization: apiKey, Accept: 'application/json' } }
-    )
-    if (fallbackRes.ok) {
-      const fallback = await fallbackRes.json() as { results: FoursquarePlace[] }
-      results = fallback.results ?? []
-      console.log('[enrichPlaces] fallback results:', results.map(r => r.name))
-    }
+  if (places.length === 0) {
+    return NextResponse.json({ message: 'No Google Places results' })
   }
 
-  if (results.length === 0) return NextResponse.json({ message: 'No Foursquare results' })
+  const top        = places[0]
+  const topName    = top.displayName?.text ?? ''
+  const confidence = calculateConfidence(title, topName)
+  console.log('[enrichPlaces] top match:', topName, 'confidence:', confidence)
 
-  const top        = results[0]
-  const confidence = calculateConfidence(title, top.name)
-  console.log('[enrichPlaces] top match:', top.name, 'confidence:', confidence)
-
-  // 55% threshold for venues — names vary more than film titles,
-  // and Foursquare results can differ slightly in punctuation or word order
   if (confidence < 55) {
     console.log('[enrichPlaces] confidence too low, skipping')
     return NextResponse.json({ message: 'Low confidence place match' })
   }
 
-  // Fetch a venue photo — best-effort, not a blocker
+  // ── Fetch venue photo ─────────────────────────────────────────────
+  // The Text Search returns a photo reference; we fetch the image URL
+  // separately. This is the second SKU call — also Pro-tier, 35K free.
   let photoUrl: string | null = null
-  try {
-    const photosRes = await fetch(
-      `https://api.foursquare.com/v3/places/${top.fsq_id}/photos?limit=1`,
-      { headers: { Authorization: apiKey, Accept: 'application/json' } }
-    )
-    if (photosRes.ok) {
-      const photos = await photosRes.json() as FoursquarePhoto[]
-      if (photos[0]) photoUrl = `${photos[0].prefix}500x500${photos[0].suffix}`
-    }
-  } catch { /* photo is nice-to-have */ }
+  const photoRef = top.photos?.[0]?.name
+  if (photoRef) {
+    try {
+      const photoRes = await fetch(
+        `https://places.googleapis.com/v1/${photoRef}/media?maxWidthPx=800&skipHttpRedirect=true`,
+        { headers: { 'X-Goog-Api-Key': apiKey } }
+      )
+      if (photoRes.ok) {
+        const photoData = await photoRes.json() as { photoUri?: string }
+        photoUrl = photoData.photoUri ?? null
+      }
+    } catch { /* photo is best-effort — card shows motif if missing */ }
+  }
 
-  console.log('[enrichPlaces] confirmed:', top.name, '| photo:', !!photoUrl)
+  // ── Increment usage counter ───────────────────────────────────────
+  // Count the Text Search call (photo is a second call but we count
+  // conservatively — one increment per save, not two).
+  try {
+    await supabase.rpc('increment_api_usage', { api_id: 'google_places' })
+  } catch { /* non-fatal */ }
+
+  // ── Write to the recommendation ───────────────────────────────────
+  const address  = top.formattedAddress ?? null
+  // Derive locality from address: take the second-to-last comma segment
+  // e.g. "14 Brick Lane, Whitechapel, London E1 6RF" → "Whitechapel"
+  const locality = address
+    ? (address.split(',').slice(-3, -2)[0]?.trim() ?? null)
+    : (locationHint ?? null)
+
+  // cuisine from primaryType — convert snake_case to Title Case
+  const cuisine = top.primaryType
+    ? top.primaryType.replace(/_/g, ' ').replace(/\w/g, c => c.toUpperCase())
+    : null
+
+  console.log('[enrichPlaces] confirmed:', topName, '| photo:', !!photoUrl, '| locality:', locality)
+
   await supabase
     .from('recommendations')
     .update({
       image_url: photoUrl,
       metadata:  {
         ...meta,
-        foursquare_id:        top.fsq_id,
-        venue_name:           top.name,
-        address:              top.location.address  ?? null,
-        locality:             top.location.locality ?? null,
-        cuisine:              top.categories?.[0]?.name ?? null,
-        foursquare_confirmed: true,
+        venue_name:           topName,
+        address,
+        locality,
+        cuisine,
+        foursquare_confirmed: true,   // reusing existing flag — means "place confirmed"
       },
     })
     .eq('id', rec.id as string)
@@ -777,20 +836,12 @@ interface SpotifyArtist {
   genres: string[]
 }
 
-interface FoursquarePlace {
-  fsq_id:     string
-  name:       string
-  location:   { address?: string; locality?: string; region?: string; country?: string }
-  categories?: Array<{ id: number; name: string; icon: { prefix: string; suffix: string } }>
-  geocodes?:  { main: { latitude: number; longitude: number } }
-}
-
-interface FoursquarePhoto {
-  id:     string
-  prefix: string
-  suffix: string
-  width:  number
-  height: number
+interface GooglePlace {
+  displayName?:     { text: string; languageCode?: string }
+  formattedAddress?: string
+  location?:        { latitude: number; longitude: number }
+  primaryType?:     string
+  photos?:          Array<{ name: string; widthPx?: number; heightPx?: number }>
 }
 
 interface SpotifyShow {
