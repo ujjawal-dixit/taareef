@@ -105,6 +105,19 @@ export type RecMetadata = {
 
   // ── user actions ────────────────────────────────────────────────
   user_uploaded?: boolean           // true when user uploaded their own poster
+
+  place_no_results?: boolean        // true when Google found no results for this place
+
+  // Place candidate strip — shown when LLM confidence is 'possible'
+  place_candidates?: PlaceCandidate[] | null
+}
+
+export type PlaceCandidate = {
+  name:     string
+  address:  string | null
+  locality: string | null
+  cuisine:  string | null
+  photoUrl: string | null     // already-fetched image URL — ready to use on confirm
 }
 
 // Candidate types used in enrichment flows
