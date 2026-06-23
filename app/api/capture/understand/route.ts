@@ -107,7 +107,13 @@ Extract supplementary context if present without being asked:
 - For visit: any closing date, run dates, or deadline mentioned (dates)
 - For watch: director or creator mentioned (director)
 - For read: author mentioned (author)
-- For dine/do/visit: city or neighbourhood hint (location_hint)
+- For dine/do/visit: city or neighbourhood hint (location_hint).
+     Extract ONLY the neighbourhood or city name — never relational phrases.
+     "the one near Carter Road, Bandra" → "Bandra"
+     "close to Juhu beach" → "Juhu"
+     "in South Mumbai" → "South Mumbai"
+     "next to the mall in Andheri" → "Andheri"
+     If a city and neighbourhood are both present, prefer the neighbourhood.
 These go in the supplementary object. Never invent them.
 
 ━━━ VALID VALUES ━━━
