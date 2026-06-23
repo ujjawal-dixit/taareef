@@ -575,22 +575,22 @@ async function enrichPlaces(
   rec:       Record<string, unknown>,
   userId:    string,
 ) {
-  const apiKey = process.env.GOOGLE_PLACES_API_KEY
-  if (!apiKey) {
+  const googleKey = process.env.GOOGLE_PLACES_API_KEY
+  const groqKey   = process.env.GROQ_API_KEY
+  if (!googleKey) {
     console.error('[enrichPlaces] GOOGLE_PLACES_API_KEY not configured')
     return NextResponse.json({ message: 'Google Places not configured' })
   }
 
   const title        = rec.title as string
+  const category     = rec.category as string
   const meta         = (rec.metadata as Record<string, unknown>) ?? {}
   const locationHint = meta.location_hint as string | null | undefined
 
-  // ── Check monthly usage counter ───────────────────────────────────
-  // Reads the api_usage table, auto-resets at month boundary, skips
-  // enrichment if we've hit our self-imposed monthly ceiling.
+  // ── Monthly usage counter ─────────────────────────────────────────
   const MONTHLY_LIMIT = 1000
   try {
-    const now       = new Date()
+    const now = new Date()
     const { data: usage } = await supabase
       .from('api_usage')
       .select('call_count, reset_at')
@@ -598,12 +598,10 @@ async function enrichPlaces(
       .single()
 
     if (usage) {
-      const resetAt = new Date(usage.reset_at)
+      const resetAt    = new Date(usage.reset_at)
       const needsReset = now.getFullYear() > resetAt.getFullYear() ||
                          now.getMonth()    > resetAt.getMonth()
-
       if (needsReset) {
-        // New month — reset the counter
         await supabase
           .from('api_usage')
           .update({ call_count: 0, reset_at: new Date(now.getFullYear(), now.getMonth(), 1).toISOString() })
@@ -614,17 +612,18 @@ async function enrichPlaces(
       }
     }
   } catch (err) {
-    // Counter failure is non-fatal — log and continue
     console.error('[enrichPlaces] usage counter error:', err)
   }
 
-  // ── Text Search (New) ─────────────────────────────────────────────
-  // One call per save. Fields requested: name, address, location,
-  // primaryType (cuisine), photos. All are Pro-tier (India) fields —
-  // 35,000 free per month.
-  const textQuery = locationHint ? `${title} in ${locationHint}` : title
+  // ── Text Search ───────────────────────────────────────────────────
+  // Append category hint to bias Google toward the right venue type.
+  // dine → "restaurant", visit → "landmark", do → omitted (too varied).
+  const categoryHint = category === 'dine' ? 'restaurant'
+    : category === 'visit'                  ? 'landmark or attraction'
+    : null
+  const textQuery = [title, categoryHint, locationHint].filter(Boolean).join(' in ')
 
-  console.log('[enrichPlaces] searching:', { textQuery, category: rec.category })
+  console.log('[enrichPlaces] searching:', { textQuery, category })
 
   let searchRes: Response
   try {
@@ -634,14 +633,10 @@ async function enrichPlaces(
         method:  'POST',
         headers: {
           'Content-Type':     'application/json',
-          'X-Goog-Api-Key':   apiKey,
+          'X-Goog-Api-Key':   googleKey,
           'X-Goog-FieldMask': 'places.displayName,places.formattedAddress,places.location,places.primaryType,places.photos',
         },
-        body: JSON.stringify({
-          textQuery,
-          maxResultCount: 3,
-          languageCode:   'en',
-        }),
+        body: JSON.stringify({ textQuery, maxResultCount: 3, languageCode: 'en' }),
       }
     )
   } catch (err) {
@@ -659,59 +654,176 @@ async function enrichPlaces(
   const places     = searchData.places ?? []
   console.log('[enrichPlaces] results:', places.map(p => p.displayName?.text))
 
+  // Zero results — mark so the UI can show a nudge
   if (places.length === 0) {
+    await supabase
+      .from('recommendations')
+      .update({ metadata: { ...meta, place_no_results: true } })
+      .eq('id', rec.id as string)
+      .eq('user_id', userId)
     return NextResponse.json({ message: 'No Google Places results' })
   }
 
-  const top        = places[0]
-  const topName    = top.displayName?.text ?? ''
-  const confidence = calculateConfidence(title, topName)
-  console.log('[enrichPlaces] top match:', topName, 'confidence:', confidence)
-
-  if (confidence < 55) {
-    console.log('[enrichPlaces] confidence too low, skipping')
-    return NextResponse.json({ message: 'Low confidence place match' })
-  }
-
-  // ── Fetch venue photo ─────────────────────────────────────────────
-  // The Text Search returns a photo reference; we fetch the image URL
-  // separately. This is the second SKU call — also Pro-tier, 35K free.
-  let photoUrl: string | null = null
-  const photoRef = top.photos?.[0]?.name
-  if (photoRef) {
+  // ── Fetch all candidate photos in parallel with LLM disambiguation ─
+  // We prefetch photos for all candidates so whichever one the LLM picks
+  // (or the user picks) already has its image ready — no extra round trip.
+  const fetchPhoto = async (place: GooglePlace): Promise<string | null> => {
+    const ref = place.photos?.[0]?.name
+    if (!ref) return null
     try {
-      const photoRes = await fetch(
-        `https://places.googleapis.com/v1/${photoRef}/media?maxWidthPx=800&skipHttpRedirect=true`,
-        { headers: { 'X-Goog-Api-Key': apiKey } }
+      const res = await fetch(
+        `https://places.googleapis.com/v1/${ref}/media?maxWidthPx=800&skipHttpRedirect=true`,
+        { headers: { 'X-Goog-Api-Key': googleKey } }
       )
-      if (photoRes.ok) {
-        const photoData = await photoRes.json() as { photoUri?: string }
-        photoUrl = photoData.photoUri ?? null
-      }
-    } catch { /* photo is best-effort — card shows motif if missing */ }
+      if (!res.ok) return null
+      const data = await res.json() as { photoUri?: string }
+      return data.photoUri ?? null
+    } catch { return null }
   }
 
-  // ── Increment usage counter ───────────────────────────────────────
-  // Count the Text Search call (photo is a second call but we count
-  // conservatively — one increment per save, not two).
-  try {
-    await supabase.rpc('increment_api_usage', { api_id: 'google_places' })
-  } catch { /* non-fatal */ }
+  // ── LLM disambiguation ────────────────────────────────────────────
+  // Run in parallel with photo fetches — LLM thinks while photos download.
+  const disambiguateWithLLM = async (): Promise<PlaceLLMResult> => {
+    if (!groqKey) return { match_type: 'possible', chosen_index: 0, reason: 'No LLM key' }
 
-  // ── Write to the recommendation ───────────────────────────────────
-  const address  = top.formattedAddress ?? null
-  // Derive locality from address: take the second-to-last comma segment
-  // e.g. "14 Brick Lane, Whitechapel, London E1 6RF" → "Whitechapel"
-  const locality = address
-    ? (address.split(',').slice(-3, -2)[0]?.trim() ?? null)
-    : (locationHint ?? null)
+    const candidateSummary = places.map((p, i) => ({
+      index:   i,
+      name:    p.displayName?.text ?? '',
+      address: p.formattedAddress ?? '',
+      type:    p.primaryType ?? '',
+    }))
 
-  // cuisine from primaryType — convert snake_case to Title Case
-  const cuisine = top.primaryType
-    ? top.primaryType.replace(/_/g, ' ').replace(/\w/g, c => c.toUpperCase())
+    const prompt = `You are helping match a user's saved recommendation to the correct venue from Google Places results.
+
+User saved:
+- Title: "${title}"
+- Category: ${category}
+- Location hint: ${locationHint ?? 'not provided'}
+
+Google Places returned these candidates:
+${JSON.stringify(candidateSummary, null, 2)}
+
+Your task: decide which candidate (if any) best matches what the user saved.
+
+Rules:
+1. Match on venue name — informal names are fine ("Gokul" matches "Gokul Bar & Restaurant")
+2. If the location hint is provided, the address should be in that area
+3. Never pick a result that is clearly a different business (different name, different type)
+4. If two candidates are plausible, prefer the one whose name is closer to the user's title
+
+Return ONLY this JSON, nothing else:
+{
+  "chosen_index": <0, 1, or 2 — index of the best match>,
+  "match_type": <"exact" | "likely" | "possible" | "none">,
+  "reason": <one short sentence explaining the choice>
+}
+
+match_type guide:
+- "exact": name matches closely and location is consistent
+- "likely": name matches but location is uncertain or address missing
+- "possible": partial match — user should confirm
+- "none": no candidate is a plausible match`
+
+    try {
+      const controller = new AbortController()
+      const timeout    = setTimeout(() => controller.abort(), 5000) // 5s hard timeout
+
+      const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${groqKey}` },
+        body: JSON.stringify({
+          model:       'llama-3.3-70b-versatile',
+          temperature: 0.0,
+          max_tokens:  120,
+          messages:    [{ role: 'user', content: prompt }],
+        }),
+        signal: controller.signal,
+      })
+
+      clearTimeout(timeout)
+      if (!res.ok) throw new Error(`Groq ${res.status}`)
+
+      const data    = await res.json() as { choices?: Array<{ message?: { content?: string } }> }
+      const content = data.choices?.[0]?.message?.content ?? ''
+      const parsed  = JSON.parse(content.replace(/```json|```/g, '').trim()) as PlaceLLMResult
+      console.log('[enrichPlaces] LLM:', parsed.match_type, '→ index', parsed.chosen_index, '|', parsed.reason)
+      return parsed
+    } catch (err) {
+      // LLM timed out or failed — fall back to string confidence
+      console.error('[enrichPlaces] LLM fallback:', err)
+      const bestIdx  = places.reduce((best, p, i) => {
+        const score = calculateConfidence(title, p.displayName?.text ?? '')
+        return score > best.score ? { idx: i, score } : best
+      }, { idx: 0, score: 0 })
+      const matchType = bestIdx.score >= 80 ? 'exact'
+        : bestIdx.score >= 65              ? 'likely'
+        : bestIdx.score >= 50              ? 'possible'
+        : 'none'
+      return { chosen_index: bestIdx.idx, match_type: matchType as PlaceLLMResult['match_type'], reason: 'LLM fallback: string confidence' }
+    }
+  }
+
+  // Run photo fetches + LLM in parallel
+  const [photoUrls, llmResult] = await Promise.all([
+    Promise.all(places.map(fetchPhoto)),
+    disambiguateWithLLM(),
+  ])
+
+  // ── Address contradiction check ───────────────────────────────────
+  // If the user gave a location hint, verify the chosen place's address
+  // contains the expected area. A mismatch demotes confidence to "possible".
+  let finalResult = { ...llmResult }
+  if (locationHint && llmResult.match_type !== 'none') {
+    const chosenAddress = (places[llmResult.chosen_index]?.formattedAddress ?? '').toLowerCase()
+    const hintLower     = locationHint.toLowerCase()
+    const hintWords     = hintLower.split(/[\s,]+/).filter(w => w.length > 2)
+    const addressMatch  = hintWords.some(w => chosenAddress.includes(w))
+    if (!addressMatch && llmResult.match_type === 'exact') {
+      console.log('[enrichPlaces] address contradiction — demoting exact → possible')
+      finalResult = { ...llmResult, match_type: 'possible', reason: `${llmResult.reason} (address contradicts location hint)` }
+    }
+  }
+
+  // ── Act on match_type ─────────────────────────────────────────────
+  const chosen = places[finalResult.chosen_index]
+
+  if (finalResult.match_type === 'none') {
+    // No match — show zero-result nudge
+    await supabase
+      .from('recommendations')
+      .update({ metadata: { ...meta, place_no_results: true } })
+      .eq('id', rec.id as string)
+      .eq('user_id', userId)
+    return NextResponse.json({ message: 'No confident place match' })
+  }
+
+  if (finalResult.match_type === 'possible') {
+    // Store candidates for the user to pick — same pattern as TMDB
+    const candidates = places.map((p, i) => ({
+      name:     p.displayName?.text ?? '',
+      address:  p.formattedAddress ?? null,
+      locality: deriveLocality(p.formattedAddress ?? null, locationHint),
+      cuisine:  p.primaryType ? p.primaryType.replace(/_/g, ' ').replace(/\w/g, (c: string) => c.toUpperCase()) : null,
+      photoUrl: photoUrls[i] ?? null,
+    }))
+    await supabase
+      .from('recommendations')
+      .update({ metadata: { ...meta, place_candidates: candidates } })
+      .eq('id', rec.id as string)
+      .eq('user_id', userId)
+    console.log('[enrichPlaces] stored candidates for user to pick')
+    return NextResponse.json({ success: true, candidates: true })
+  }
+
+  // exact or likely — auto-confirm
+  const photoUrl  = photoUrls[finalResult.chosen_index] ?? null
+  const address   = chosen.formattedAddress ?? null
+  const locality  = deriveLocality(address, locationHint)
+  const cuisine   = chosen.primaryType
+    ? chosen.primaryType.replace(/_/g, ' ').replace(/\w/g, (c: string) => c.toUpperCase())
     : null
 
-  console.log('[enrichPlaces] confirmed:', topName, '| photo:', !!photoUrl, '| locality:', locality)
+  console.log('[enrichPlaces] confirmed:', chosen.displayName?.text, '| photo:', !!photoUrl, '| locality:', locality)
 
   await supabase
     .from('recommendations')
@@ -719,18 +831,39 @@ async function enrichPlaces(
       image_url: photoUrl,
       metadata:  {
         ...meta,
-        venue_name:           topName,
+        venue_name:           chosen.displayName?.text ?? null,
         address,
         locality,
         cuisine,
-        foursquare_confirmed: true,   // reusing existing flag — means "place confirmed"
+        foursquare_confirmed: true,
+        place_candidates:     null,
       },
     })
     .eq('id', rec.id as string)
     .eq('user_id', userId)
 
+  // Increment counter after successful confirmation
+  try {
+    await supabase.rpc('increment_api_usage', { api_id: 'google_places' })
+  } catch { /* non-fatal */ }
+
   return NextResponse.json({ success: true })
 }
+
+// Derive a clean locality string from Google's formattedAddress.
+// "14 Brick Lane, Whitechapel, London E1 6RF, UK" → "Whitechapel"
+// Falls back to the user's location_hint when address is absent.
+function deriveLocality(address: string | null, locationHint: string | null | undefined): string | null {
+  if (!address) return locationHint ?? null
+  const parts = address.split(',').map(p => p.trim())
+  // Take the second-to-last non-postcode, non-country segment
+  // (last = country, second-last often = city+postcode, third-last = area)
+  const meaningful = parts.filter(p => !/^[A-Z]{1,2}\d/.test(p) && p.length > 1)
+  return meaningful.length >= 2
+    ? meaningful[meaningful.length - 2]
+    : (locationHint ?? null)
+}
+
 
 // ─────────────────────────────────────────────────────────────────────────────
 // enrichBook — books use a dedicated route (/api/enrich/book/[id])
@@ -836,12 +969,18 @@ interface SpotifyArtist {
   genres: string[]
 }
 
+interface PlaceLLMResult {
+  chosen_index: number
+  match_type:   'exact' | 'likely' | 'possible' | 'none'
+  reason:       string
+}
+
 interface GooglePlace {
-  displayName?:     { text: string; languageCode?: string }
+  displayName?:      { text: string; languageCode?: string }
   formattedAddress?: string
-  location?:        { latitude: number; longitude: number }
-  primaryType?:     string
-  photos?:          Array<{ name: string; widthPx?: number; heightPx?: number }>
+  location?:         { latitude: number; longitude: number }
+  primaryType?:      string
+  photos?:           Array<{ name: string; widthPx?: number; heightPx?: number }>
 }
 
 interface SpotifyShow {
