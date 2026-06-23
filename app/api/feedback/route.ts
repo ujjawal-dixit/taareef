@@ -3,6 +3,7 @@
 // Works without Resend key (logs to console) so UI never breaks.
 
 import { NextResponse } from 'next/server'
+import { createClient } from '@/lib/supabase/server'
 
 const MODE_DETAILS: Record<string, { emoji: string; colour: string }> = {
   'delighted':       { emoji: '✦', colour: '#1fce94' },
@@ -13,6 +14,11 @@ const MODE_DETAILS: Record<string, { emoji: string; colour: string }> = {
 
 export async function POST(request: Request) {
   try {
+    // Require auth — prevents open relay abuse of the Resend endpoint
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return NextResponse.json({ data: null, error: 'Unauthorized' }, { status: 401 })
+
     const body = await request.json()
     const { userEmail, userName, saveCount, topSource, mode, modeLabel, message } = body
 
