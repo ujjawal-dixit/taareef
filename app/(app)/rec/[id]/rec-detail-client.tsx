@@ -185,8 +185,8 @@ export function RecDetailClient({ recommendation: rec, categoryConfig: cfg }: Pr
   useEffect(() => {
     if (rec.category !== 'read') return
     if (liveImageUrl || bookCands.length > 0 || dismissedBookCands) return
-    const meta = (rec.metadata as Record<string,unknown>) ?? {}
-    if (meta.books_no_results) return
+    const recMeta = rec.metadata
+    if (recMeta.books_no_results) return
 
     // Fire enrichment then poll once for result
     fetch(`/api/enrich/book/${rec.id}`, { method: 'POST' })
@@ -397,7 +397,7 @@ export function RecDetailClient({ recommendation: rec, categoryConfig: cfg }: Pr
             address:              candidate.address,
             locality:             candidate.locality,
             cuisine:              candidate.cuisine,
-            foursquare_confirmed: true,
+            place_confirmed: true,
             place_candidates:     null,
           },
           image_url: candidate.photoUrl ?? undefined,
