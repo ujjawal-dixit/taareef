@@ -45,7 +45,7 @@ export function RecommendationCard({ recommendation, variant, categoryConfig: pr
   if (!config) return null
 
   const hasImage = hasValidImage(image_url)
-  const meta     = metadata as Record<string, unknown>
+  const meta     = metadata as import('@/lib/types').RecMetadata
   const metaLine = buildMetaLine(category as Category, meta, 3)
 
   if (variant === 'compact') {
@@ -132,9 +132,7 @@ function GridCard({ rec, config, metaLine, hasImage }: {
                 <CategoryMotif
                   category={rec.category as Category}
                   rgb={config.vividRgb}
-                  subtype={typeof (rec.metadata as Record<string, unknown>).subtype === 'string'
-                    ? ((rec.metadata as Record<string, unknown>).subtype as string)
-                    : null}
+                  subtype={(rec.metadata as import('@/lib/types').RecMetadata).subtype ?? null}
                   size={132}
                 />
                 {/* Title rendered in image zone for Criterion mode */}
@@ -309,7 +307,7 @@ function CompactRow({ rec, config, metaLine }: {
         )}
         {/* Visit urgency date */}
         {rec.category === 'visit' && (() => {
-          const meta    = rec.metadata as Record<string, unknown>
+          const meta    = rec.metadata as import('@/lib/types').RecMetadata
           const dateStr = typeof meta.dates === 'string' ? meta.dates : null
           const urgency = getDateUrgency(dateStr)
           if (!dateStr || urgency === 'none') return null
