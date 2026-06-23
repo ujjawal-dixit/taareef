@@ -262,8 +262,8 @@ export function CategoryListClient({ recommendations: serverRecs, categoryConfig
   const filtered = activeNudge === 'All'
     ? recs
     : recs.filter(r => {
-        const meta = r.metadata as Record<string, unknown>
-        const sub  = typeof meta.subtype === 'string' ? meta.subtype : ''
+        const meta = r.metadata as import('@/lib/types').RecMetadata
+        const sub  = meta.subtype ?? ''
         return sub.toLowerCase() === activeNudge.toLowerCase()
       })
 
