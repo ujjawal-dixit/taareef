@@ -13,9 +13,10 @@
 //   5. fetchWatchmodeStreaming: fixed response path (was reading data.platforms,
 //      watchmode route returns { data: { platforms } })
 
-import { NextRequest, NextResponse } from 'next/server'
-import { createClient }          from '@/lib/supabase/server'
-import { getStreamingPlatforms } from '@/lib/utils/watchmode-server'
+import { NextRequest, NextResponse }   from 'next/server'
+import { createClient }               from '@/lib/supabase/server'
+import { getStreamingPlatforms }      from '@/lib/utils/watchmode-server'
+import type { Recommendation, RecMetadata } from '@/lib/types'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // POST /api/enrich/[id]
@@ -48,11 +49,11 @@ export async function POST(
     // Skip if already enriched — prevents double-work when both save-time
     // enrichment and the detail-screen fallback trigger fire for the same record
     const meta = (rec.metadata as Record<string, unknown>) ?? {}
-    // For place categories, only check foursquare_confirmed — not image_url,
+    // For place categories, only check place_confirmed — not image_url,
     // because Foursquare is what SETS image_url and checking it would block itself
     const isPlaceCategory = rec.category === 'dine' || rec.category === 'visit' || rec.category === 'do'
     const alreadyEnriched = isPlaceCategory
-      ? !!meta.foursquare_confirmed
+      ? !!meta.place_confirmed
       : !!(meta.tmdb_confirmed || meta.spotify_id || rec.image_url)
     if (alreadyEnriched) {
       return NextResponse.json({ message: 'Already enriched' })
@@ -120,7 +121,7 @@ export async function PATCH(
       return NextResponse.json({ error: 'Not found' }, { status: 404 })
     }
 
-    const existingMeta = (rec.metadata as Record<string, unknown>) ?? {}
+    const existingMeta = rec.metadata
 
     // Subtype from body (sent by the candidate); fall back to what was captured
     // at save time; default to 'film' only as a last resort
@@ -229,7 +230,7 @@ export async function PATCH(
 // ─────────────────────────────────────────────────────────────────────────────
 async function enrichWatch(
   supabase:  Awaited<ReturnType<typeof createClient>>,
-  rec:       Record<string, unknown>,
+  rec:       Recommendation,
   userId:    string
 ) {
   const tmdbKey = process.env.TMDB_API_KEY
@@ -238,7 +239,7 @@ async function enrichWatch(
   }
 
   const title     = rec.title as string
-  const meta      = (rec.metadata as Record<string, unknown>) ?? {}
+  const meta      = rec.metadata
   const subtype   = (meta.subtype as string) ?? 'film'
   const year      = meta.release_year as number | null | undefined
   const mediaType = subtype === 'series' ? 'tv' : 'movie'
@@ -324,7 +325,7 @@ async function enrichWatch(
 // ─────────────────────────────────────────────────────────────────────────────
 async function autoConfirmWatch(
   supabase:    Awaited<ReturnType<typeof createClient>>,
-  rec:         Record<string, unknown>,
+  rec:       Recommendation,
   userId:      string,
   topResult:   TMDBSearchResult,
   subtype:     string,
@@ -403,7 +404,7 @@ async function autoConfirmWatch(
 // ─────────────────────────────────────────────────────────────────────────────
 async function enrichListen(
   supabase:  Awaited<ReturnType<typeof createClient>>,
-  rec:       Record<string, unknown>,
+  rec:       Recommendation,
   userId:    string
 ) {
   const clientId     = process.env.SPOTIFY_CLIENT_ID
@@ -427,7 +428,7 @@ async function enrichListen(
 
   const { access_token } = await tokenRes.json() as { access_token: string }
   const title   = rec.title as string
-  const meta    = (rec.metadata as Record<string, unknown>) ?? {}
+  const meta    = rec.metadata
   const subtype = (meta.subtype as string) ?? 'album'
 
   if (subtype === 'album')   return await enrichSpotifyAlbum(supabase, rec, userId, meta, title, access_token)
@@ -440,7 +441,7 @@ async function enrichListen(
 
 async function enrichSpotifyAlbum(
   supabase:     Awaited<ReturnType<typeof createClient>>,
-  rec:          Record<string, unknown>,
+  rec:       Recommendation,
   userId:       string,
   meta:         Record<string, unknown>,
   title:        string,
@@ -472,7 +473,6 @@ async function enrichSpotifyAlbum(
         artist:       album.artists?.[0]?.name ?? null,
         release_year: album.release_date ? parseInt(album.release_date.slice(0, 4)) : null,
         total_tracks: album.total_tracks ?? null,
-        artwork_url:  artworkUrl,
       },
     })
     .eq('id', rec.id as string)
@@ -483,7 +483,7 @@ async function enrichSpotifyAlbum(
 
 async function enrichSpotifyArtist(
   supabase:     Awaited<ReturnType<typeof createClient>>,
-  rec:          Record<string, unknown>,
+  rec:       Recommendation,
   userId:       string,
   meta:         Record<string, unknown>,
   title:        string,
@@ -513,7 +513,6 @@ async function enrichSpotifyArtist(
         ...meta,
         spotify_id:  artist.id,
         genres:      artist.genres ?? [],
-        artwork_url: artworkUrl,
       },
     })
     .eq('id', rec.id as string)
@@ -524,7 +523,7 @@ async function enrichSpotifyArtist(
 
 async function enrichSpotifyPodcast(
   supabase:     Awaited<ReturnType<typeof createClient>>,
-  rec:          Record<string, unknown>,
+  rec:       Recommendation,
   userId:       string,
   meta:         Record<string, unknown>,
   title:        string,
@@ -554,7 +553,6 @@ async function enrichSpotifyPodcast(
         ...meta,
         spotify_id:   show.id,
         publisher:    show.publisher ?? null,
-        artwork_url:  artworkUrl,
       },
     })
     .eq('id', rec.id as string)
@@ -572,7 +570,7 @@ async function enrichSpotifyPodcast(
 // ─────────────────────────────────────────────────────────────────────────────
 async function enrichPlaces(
   supabase:  Awaited<ReturnType<typeof createClient>>,
-  rec:       Record<string, unknown>,
+  rec:       Recommendation,
   userId:    string,
 ) {
   const googleKey = process.env.GOOGLE_PLACES_API_KEY
@@ -584,7 +582,7 @@ async function enrichPlaces(
 
   const title        = rec.title as string
   const category     = rec.category as string
-  const meta         = (rec.metadata as Record<string, unknown>) ?? {}
+  const meta         = rec.metadata
   const locationHint = meta.location_hint as string | null | undefined
 
   // ── Monthly usage counter ─────────────────────────────────────────
@@ -607,8 +605,7 @@ async function enrichPlaces(
           .update({ call_count: 0, reset_at: new Date(now.getFullYear(), now.getMonth(), 1).toISOString() })
           .eq('id', 'google_places')
       } else if (usage.call_count >= MONTHLY_LIMIT) {
-        console.log('[enrichPlaces] monthly limit reached:', usage.call_count, '/', MONTHLY_LIMIT)
-        return NextResponse.json({ message: 'Monthly Places API limit reached' })
+            return NextResponse.json({ message: 'Monthly Places API limit reached' })
       }
     }
   } catch (err) {
@@ -746,8 +743,7 @@ match_type guide:
       const data    = await res.json() as { choices?: Array<{ message?: { content?: string } }> }
       const content = data.choices?.[0]?.message?.content ?? ''
       const parsed  = JSON.parse(content.replace(/```json|```/g, '').trim()) as PlaceLLMResult
-      console.log('[enrichPlaces] LLM:', parsed.match_type, '→ index', parsed.chosen_index, '|', parsed.reason)
-      return parsed
+        return parsed
     } catch (err) {
       // LLM timed out or failed — fall back to string confidence
       console.error('[enrichPlaces] LLM fallback:', err)
@@ -779,8 +775,7 @@ match_type guide:
     const hintWords     = hintLower.split(/[\s,]+/).filter(w => w.length > 2)
     const addressMatch  = hintWords.some(w => chosenAddress.includes(w))
     if (!addressMatch && llmResult.match_type === 'exact') {
-      console.log('[enrichPlaces] address contradiction — demoting exact → possible')
-      finalResult = { ...llmResult, match_type: 'possible', reason: `${llmResult.reason} (address contradicts location hint)` }
+        finalResult = { ...llmResult, match_type: 'possible', reason: `${llmResult.reason} (address contradicts location hint)` }
     }
   }
 
@@ -811,7 +806,6 @@ match_type guide:
       .update({ metadata: { ...meta, place_candidates: candidates } })
       .eq('id', rec.id as string)
       .eq('user_id', userId)
-    console.log('[enrichPlaces] stored candidates for user to pick')
     return NextResponse.json({ success: true, candidates: true })
   }
 
@@ -835,7 +829,7 @@ match_type guide:
         address,
         locality,
         cuisine,
-        foursquare_confirmed: true,
+        place_confirmed: true,
         place_candidates:     null,
       },
     })
@@ -871,7 +865,7 @@ function deriveLocality(address: string | null, locationHint: string | null | un
 // ─────────────────────────────────────────────────────────────────────────────
 async function enrichBook(
   _supabase: Awaited<ReturnType<typeof createClient>>,
-  rec:       Record<string, unknown>,
+  rec:       Recommendation,
   _userId:   string
 ) {
   console.log('[enrich] book enrichment is handled by /api/enrich/book/', rec.id)
