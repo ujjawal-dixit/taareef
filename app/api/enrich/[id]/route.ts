@@ -718,9 +718,23 @@ async function enrichPlaces(
     hasNameOverlap(title, p.displayName?.text ?? '')
   )
 
-  // If the name filter removed everything, store candidates for the
-  // user to pick — don't show empty-handed
-  const places = plausiblePlaces.length > 0 ? plausiblePlaces : allPlaces
+  // If name filter removed all candidates → no plausible match exists.
+  // Return none immediately. Never pass allPlaces to the LLM —
+  // the filter already determined no name matches, so the LLM has
+  // nothing useful to work with and risks picking a wrong result.
+  if (plausiblePlaces.length === 0) {
+    await supabase
+      .from('recommendations')
+      .update({ metadata: { ...meta, place_no_results: true } })
+      .eq('id', rec.id)
+      .eq('user_id', userId)
+    return NextResponse.json({ message: 'No name match in Places results' })
+  }
+
+  // From here, work exclusively with plausiblePlaces.
+  // The LLM, photo fetches, and result indexing all use this same array
+  // so indices are always consistent.
+  const places = plausiblePlaces
 
   // ── LAYER 3: Structured locality extraction ───────────────────────
   // Read Google's addressComponents directly — each segment is already
@@ -774,13 +788,6 @@ async function enrichPlaces(
     // Default: if no LLM key, pick by string similarity
     if (!groqKey) {
       return stringFallback(places, title)
-    }
-
-    // Only pass plausible candidates to the LLM (post-filter)
-    // If we fell back to allPlaces because filter removed everything,
-    // skip LLM — it has nothing useful to work with
-    if (plausiblePlaces.length === 0) {
-      return { match_type: 'none', chosen_index: 0, reason: 'No plausible name match found' }
     }
 
     const candidateSummary = places.map((p, i) => ({
