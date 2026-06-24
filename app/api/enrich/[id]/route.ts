@@ -668,6 +668,17 @@ async function enrichPlaces(
   const searchData = await searchRes.json() as { places?: GooglePlace[] }
   const allPlaces  = searchData.places ?? []
 
+  // DIAGNOSTIC: what did Google actually return?
+  console.log('[enrichPlaces] query:', JSON.stringify({ textQuery, includedType }))
+  console.log('[enrichPlaces] raw results:', JSON.stringify(
+    allPlaces.map(p => ({
+      name:     p.displayName?.text,
+      type:     p.primaryType,
+      hasPhoto: !!p.photos?.[0]?.name,
+      photoRef: p.photos?.[0]?.name?.slice(0, 40),
+    }))
+  ))
+
   if (allPlaces.length === 0) {
     await supabase
       .from('recommendations')
@@ -735,6 +746,11 @@ async function enrichPlaces(
   // The LLM, photo fetches, and result indexing all use this same array
   // so indices are always consistent.
   const places = plausiblePlaces
+
+  // DIAGNOSTIC: which candidates survived the name filter?
+  console.log('[enrichPlaces] after name filter:', JSON.stringify(
+    places.map(p => p.displayName?.text)
+  ))
 
   // ── LAYER 3: Structured locality extraction ───────────────────────
   // Read Google's addressComponents directly — each segment is already
@@ -851,6 +867,8 @@ match_type:
       const content = data.choices?.[0]?.message?.content ?? ''
       const parsed  = JSON.parse(content.replace(/```json|```/g, '').trim()) as PlaceLLMResult
 
+      console.log('[enrichPlaces] LLM raw:', content.replace(/\n/g, ' ').slice(0, 200))
+
       // Sanity check: if LLM picked a winner but the name has no overlap
       // with the title, override to 'none' — the name test is a hard rule
       if (parsed.match_type !== 'none') {
@@ -930,6 +948,16 @@ match_type:
 
   // exact or likely — auto-confirm
   const photoUrl = photoUrls[finalResult.chosen_index] ?? null
+
+  // DIAGNOSTIC: final decision — whose name, whose photo?
+  console.log('[enrichPlaces] FINAL:', JSON.stringify({
+    match_type:   finalResult.match_type,
+    chosen_index: finalResult.chosen_index,
+    reason:       finalResult.reason,
+    venue_name:   chosen.displayName?.text,
+    photo_host:   photoUrl ? new URL(photoUrl).host : null,
+    photo_from:   places[finalResult.chosen_index]?.displayName?.text,
+  }))
   const locality = extractLocality(chosen.addressComponents, locationHint)
   const cuisine  = formatPrimaryType(chosen.primaryType)
 
