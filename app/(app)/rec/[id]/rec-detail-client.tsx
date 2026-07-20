@@ -33,6 +33,7 @@ import type { CategoryConfig } from '@/constants/categories'
 import type { Recommendation, Reaction, Category } from '@/lib/types'
 import { triggerEnrichment } from '@/lib/utils/enrich'
 import { buildMetaLine }      from '@/lib/card/derive'
+import { PlacePhotoPicker }   from '@/components/features/places/photo-picker'
 
 type Props = {
   recommendation: Recommendation
@@ -419,6 +420,26 @@ export function RecDetailClient({ recommendation: rec, categoryConfig: cfg }: Pr
       setError('Could not confirm place — try again?')
     } finally {
       setConfirmingPlace(false)
+    }
+  }
+
+  async function handleSelectPlacePhoto(url: string) {
+    try {
+      const res  = await fetch(`/api/recommendations/${rec.id}`, {
+        method:  'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({
+          image_url: url,
+          metadata:  { ...liveMeta, user_uploaded: false },
+        }),
+      })
+      const json = await res.json()
+      if (json.data) {
+        setLiveImageUrl(url)   // optimistic — card updates instantly
+        setLiveMeta(prev => ({ ...prev, user_uploaded: false }))
+      }
+    } catch {
+      setError('Could not update photo — try again?')
     }
   }
 
@@ -1007,6 +1028,23 @@ export function RecDetailClient({ recommendation: rec, categoryConfig: cfg }: Pr
             </button>
           </div>
         )}
+
+        {/* ── PLACE PHOTO PICKER (Build 2) ──────────────────────────────
+             Only for place categories with stored photo refs (Build 1 data).
+             Lazy: no photo API spend until the person opens it. */}
+        {(rec.category === 'dine' || rec.category === 'visit' || rec.category === 'do') && (() => {
+          const pickerRefs = (liveMeta as import('@/lib/types').RecMetadata).place_photo_refs
+          if (!Array.isArray(pickerRefs) || pickerRefs.length === 0) return null
+          return (
+            <PlacePhotoPicker
+              refs={pickerRefs}
+              currentUrl={liveImageUrl}
+              accentRgb={cfg.vividRgb}
+              onSelect={handleSelectPlacePhoto}
+              onUpload={() => posterInputRef.current?.click()}
+            />
+          )
+        })()}
 
         {/* Upload photo — universal trigger when no image exists yet */}
         {!liveImageUrl && (
