@@ -95,6 +95,7 @@ export type RecMetadata = {
   cuisine?:           string | null       // primaryType in Title Case
   place_candidates?:  PlaceCandidate[] | null
   place_no_results?:  boolean             // true when Places API found nothing
+  place_photo_refs?:  string[] | null     // chosen venue's top photo refs — feeds the photo picker
 
   // ── user ─────────────────────────────────────────────────────────
   user_uploaded?: boolean  // true when user uploaded their own photo
@@ -123,11 +124,12 @@ export type BookCandidate = {
 }
 
 export type PlaceCandidate = {
-  name:     string
-  address:  string | null
-  locality: string | null
-  cuisine:  string | null
-  photoUrl: string | null  // already-fetched image URL
+  name:       string
+  address:    string | null
+  locality:   string | null
+  cuisine:    string | null
+  photoUrl:   string | null  // already-fetched thumbnail URL (strip display)
+  photo_refs: string[]       // Google photo resource names — lazily resolvable
 }
 
 // ── RECOMMENDATION ────────────────────────────────────────────────
