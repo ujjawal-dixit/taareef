@@ -17,7 +17,7 @@ type PlacePhotoPickerProps = {
   currentUrl: string | null                     // the card's current image (highlighted)
   accentRgb:  string                            // category accent, e.g. cfg.vividRgb
   onSelect:   (url: string) => Promise<void> | void
-  onUpload:   () => void                        // opens the shared hidden file input
+  onUpload?:  () => void                        // optional — surfaces without upload machinery omit the tile
 }
 
 export function PlacePhotoPicker({
@@ -127,7 +127,8 @@ export function PlacePhotoPicker({
             )
           })}
 
-          {/* Upload tile — the user's own photo always wins over any API */}
+          {/* Upload tile — only where the parent provides upload machinery */}
+          {onUpload && (
           <button
             onClick={onUpload}
             disabled={!!saving}
@@ -145,6 +146,7 @@ export function PlacePhotoPicker({
           >
             your own photo
           </button>
+          )}
         </div>
       )}
 
