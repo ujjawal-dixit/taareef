@@ -398,8 +398,12 @@ export function RecDetailClient({ recommendation: rec, categoryConfig: cfg }: Pr
             address:              candidate.address,
             locality:             candidate.locality,
             cuisine:              candidate.cuisine,
-            place_confirmed: true,
+            place_confirmed:      true,
             place_candidates:     null,
+            // Carry the chosen venue's photo refs forward — this is what
+            // the photo picker renders from. Without it, strip-confirmed
+            // cards never show "change photo" (the Build 2/3 gap).
+            place_photo_refs:     (candidate.photo_refs as string[] | undefined) ?? null,
           },
           image_url: candidate.photoUrl ?? undefined,
         }),
@@ -414,6 +418,7 @@ export function RecDetailClient({ recommendation: rec, categoryConfig: cfg }: Pr
           locality:         candidate.locality as string | null,
           cuisine:          candidate.cuisine as string | null,
           place_candidates: null,
+          place_photo_refs: (candidate.photo_refs as string[] | undefined) ?? null,
         }))
       }
     } catch {
@@ -437,6 +442,7 @@ export function RecDetailClient({ recommendation: rec, categoryConfig: cfg }: Pr
       if (json.data) {
         setLiveImageUrl(url)   // optimistic — card updates instantly
         setLiveMeta(prev => ({ ...prev, user_uploaded: false }))
+        router.refresh()       // invalidate cached segments (list behind this screen)
       }
     } catch {
       setError('Could not update photo — try again?')
