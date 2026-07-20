@@ -176,6 +176,7 @@ export type CreateRecommendationInput = {
 // ── UPDATE INPUT ──────────────────────────────────────────────────
 export type UpdateRecommendationInput = {
   title?:       string
+  image_url?:   string | null  // sets the image_url DB column (photo picker / candidate confirm)
   source_name?: string
   source_type?: SourceType
   notes?:       string
