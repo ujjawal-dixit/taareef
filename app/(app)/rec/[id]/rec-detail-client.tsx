@@ -1,1713 +1,511 @@
 'use client'
 
-// app/(app)/rec/[id]/rec-detail-client.tsx
+// app/(app)/rec/[id]/edit/rec-edit-client.tsx
 // Session 9 redesign:
-// - Category badge removed from detail screen (back nav already names it)
-// - WATCHED/EXPERIENCED status badge: top-right only, category vivid
-// - Card border: 1px category vivid at 40% + outer glow at 8%
-// - Card/interaction separator: thin rule category vivid at 20%
-// - Interaction layer background: #1a1a1a — elevated from canvas
-// - Section headers: category vivid at 60% opacity
-// - Reactions: hidden entirely until experienced (not greyed out)
-// - Reaction pills: 1px category vivid border at 30% when unselected
-// - Duplicate note bug fixed: note field hidden when card already shows it; "Edit note" tap to expand
-// - Back nav: full-width neon pill every screen
-// - Source block: dedicated section with source type display
-// - Edit details: full-width pill, same style as back nav
-// - Share card: full-width neon pill (PNG export via html-to-image)
-// - Mark as experienced: full-width, category color, always visible when not experienced
-// - Tell source: "Tell them" instead of "SEND"
-// - Experienced status: structured label, not floating text
-// - Rotating micro-prompts on note field
+// - Full-width neon pill back nav (consistent with all screens)
+// - Source type: pill row (Person · Instagram · Website · WhatsApp · Other)
+//   — not a 2-col grid of 10 options
+// - Source name placeholder adapts to source type (@handle vs Name)
+// - Rotating micro-prompts on note field (category-aware)
+// - Canvas background: category-responsive radial gradient
+// - Category-vivid rule under heading
+// - Save button always neon
 
-import { useState, useRef, useCallback, useEffect } from 'react'
-import Link                               from 'next/link'
-import { useRouter }                      from 'next/navigation'
-import Image                              from 'next/image'
-import { CATEGORY_MAP, CATEGORIES } from '@/constants/categories'
-import { hasValidImage } from '@/lib/utils/fallback'
-import { CategoryMotif } from '@/components/features/cards/category-motif'
-import { PlatformLogo } from '@/components/features/cards/platform-logo'
-import { FullCard }     from '@/components/features/cards/full-card'
-import type { CategoryConfig } from '@/constants/categories'
-import type { Recommendation, Reaction, Category } from '@/lib/types'
-import { triggerEnrichment } from '@/lib/utils/enrich'
-import { buildMetaLine }      from '@/lib/card/derive'
-import { PlacePhotoPicker }   from '@/components/features/places/photo-picker'
+import { useState, useCallback, useEffect } from 'react'
+import { useRouter }   from 'next/navigation'
+import Link            from 'next/link'
+import { CATEGORIES }  from '@/constants/categories'
+import type { Recommendation, Category, SourceType, RecMetadata } from '@/lib/types'
+import { PlacePhotoPicker } from '@/components/features/places/photo-picker'
 
-type Props = {
-  recommendation: Recommendation
-  categoryConfig: CategoryConfig
-}
+type Props = { recommendation: Recommendation }
 
-const REACTIONS: { value: Reaction; label: string }[] = [
-  { value: 'loved', label: 'Loved' },
-  { value: 'good',  label: 'Good'  },
-  { value: 'okay',  label: 'Okay'  },
-  { value: 'skip',  label: 'Skip'  },
+// Source types — simplified to 5 buckets per session 9 decisions
+const SOURCE_BUCKETS: { value: SourceType; label: string }[] = [
+  { value: 'friend',    label: 'Person'    },
+  { value: 'instagram', label: 'Instagram' },
+  { value: 'article',   label: 'Website'   },
+  { value: 'newsletter',label: 'WhatsApp'  },
+  { value: 'self',      label: 'Other'     },
 ]
 
-// Source type → display prefix + glyph
-function formatSource(sourceType: string, sourceName: string): { display: string; type: string } {
-  switch (sourceType) {
-    case 'instagram':
-      return { display: `@${sourceName.replace(/^@/, '')}`, type: 'Instagram' }
-    case 'twitter':
-      return { display: `@${sourceName.replace(/^@/, '')}`, type: 'Twitter' }
-    case 'youtube':
-      return { display: `@${sourceName.replace(/^@/, '')}`, type: 'YouTube' }
-    case 'article':
-    case 'newsletter':
-      return { display: sourceName, type: 'Article' }
-    case 'podcast':
-      return { display: sourceName, type: 'Podcast' }
-    default:
-      return { display: sourceName, type: '' }
+// Map the stored source_type to our simplified bucket display
+function getBucket(sourceType: SourceType): SourceType {
+  const personTypes    = new Set(['friend', 'family', 'colleague'])
+  const instagramTypes = new Set(['instagram', 'twitter', 'youtube'])
+  const websiteTypes   = new Set(['article', 'podcast'])
+  const whatsappTypes  = new Set(['newsletter'])
+  if (personTypes.has(sourceType))    return 'friend'
+  if (instagramTypes.has(sourceType)) return 'instagram'
+  if (websiteTypes.has(sourceType))   return 'article'
+  if (whatsappTypes.has(sourceType))  return 'newsletter'
+  return 'self'
+}
+
+// Derive the actual stored source_type from our bucket + handle signal
+function resolveSourceType(bucket: SourceType, name: string): SourceType {
+  if (bucket === 'instagram') {
+    if (name.startsWith('@')) return 'instagram'
+    return 'instagram'
   }
+  return bucket
 }
 
-type TellConfig = { label: string; sub: string; action: 'share-message' | 'open-profile' | 'share-card' | 'none' }
-
-function getTellConfig(sourceType: string, sourceName: string, reaction: Reaction | null): TellConfig | null {
-  if (reaction !== 'loved' && reaction !== 'good') return null
-  switch (sourceType) {
-    case 'friend': case 'family': case 'colleague':
-      return { label: `Tell ${sourceName}?`, sub: 'Let them know their rec landed.', action: 'share-message' }
-    case 'instagram': case 'twitter': case 'youtube':
-      return { label: `Found via ${sourceName}`, sub: 'Visit their page?', action: 'open-profile' }
-    case 'article': case 'newsletter': case 'podcast':
-      return { label: 'Enjoyed it?', sub: 'Share this with a friend.', action: 'share-card' }
-    default: return null
-  }
+const labelStyle: React.CSSProperties = {
+  fontFamily:    'var(--f-ui)',
+  fontSize:      '9px',
+  fontWeight:    700,
+  letterSpacing: '2px',
+  textTransform: 'uppercase',
+  color:         'rgba(255,255,255,0.32)',
+  marginBottom:  '8px',
+  display:       'block',
 }
 
-function getDateUrgency(dateStr: string | null): 'none' | 'info' | 'soon' | 'urgent' | 'closed' {
-  if (!dateStr) return 'none'
-  const cleaned = dateStr.replace(/until|closes|closing|through/gi, '').trim()
-  const parsed  = new Date(cleaned)
-  if (isNaN(parsed.getTime())) return 'info'
-  const now  = new Date()
-  const days = Math.ceil((parsed.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
-  if (days < 0)   return 'closed'
-  if (days <= 7)  return 'urgent'
-  if (days <= 30) return 'soon'
-  return 'info'
-}
+export function RecEditClient({ recommendation: rec }: Props) {
+  const router = useRouter()
 
-const GRAIN = "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='400'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.68' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='400' height='400' filter='url(%23g)' opacity='1'/%3E%3C/svg%3E\")"
-
-export function RecDetailClient({ recommendation: rec, categoryConfig: cfg }: Props) {
-  const [reaction,     setReaction]     = useState<Reaction | null>(rec.reaction)
-  const noteDraftKey = `taareef-note-draft-${rec.id}`
-  const [note,         setNote]         = useState(rec.notes ?? '')
-  const [noteExpanded, setNoteExpanded] = useState(!rec.notes)
-  const [saving,       setSaving]       = useState(false)
-  const [showRemove,   setShowRemove]   = useState(false)
-  const [showDelete,   setShowDelete]   = useState(false)
-  const [deleting,     setDeleting]     = useState(false)
-  const [error,        setError]        = useState<string | null>(null)
-  const [promptIdx,    setPromptIdx]    = useState(0)
-  const [sharing,      setSharing]      = useState(false)
-  const cardRef = useRef<HTMLDivElement>(null)
-  const router   = useRouter()
-
-  // Live metadata state — updated when candidates arrive or poster confirmed
-  const [liveMeta,       setLiveMeta]       = useState<Record<string,unknown>>(
-    (rec.metadata as Record<string,unknown>) ?? {}
+  const [title,       setTitle]       = useState(rec.title)
+  const [category,    setCategory]    = useState<Category>(rec.category)
+  const [sourceBucket,setSourceBucket]= useState<SourceType>(getBucket(rec.source_type))
+  const [sourceName,  setSourceName]  = useState(rec.source_name)
+  const [note,        setNote]        = useState(rec.notes ?? '')
+  const [promptIdx,   setPromptIdx]   = useState(0)
+  const [whatToOrder, setWhatToOrder] = useState(
+    typeof (rec.metadata as Record<string,unknown>).what_to_order === 'string'
+      ? (rec.metadata as Record<string,unknown>).what_to_order as string : ''
   )
-  const [liveImageUrl,   setLiveImageUrl]   = useState<string | null>(rec.image_url)
-  const [confirmingId,   setConfirmingId]   = useState<number | null>(null)
-  const [dismissedCands, setDismissedCands] = useState(false)
-  const [platforms,      setPlatforms]      = useState<string[]>(
-    // Use cached platforms from metadata if available
-    Array.isArray((rec.metadata as Record<string,unknown>)?.streaming_platforms)
-      ? (rec.metadata as Record<string,unknown>).streaming_platforms as string[]
-      : []
+  const [dates, setDates] = useState(
+    typeof (rec.metadata as Record<string,unknown>).dates === 'string'
+      ? (rec.metadata as Record<string,unknown>).dates as string : ''
   )
-  const [loadingPlatforms, setLoadingPlatforms] = useState(false)
+  const [saving, setSaving] = useState(false)
+  // Photo picker (place categories) — selection persists immediately,
+  // independent of "Save changes", matching the detail screen's behaviour
+  const [liveImageUrl, setLiveImageUrl] = useState<string | null>(rec.image_url)
+  const [error,  setError]  = useState<string | null>(null)
 
-  // Book-specific candidate state
-  const [bookCands,         setBookCands]         = useState<Record<string,unknown>[]>(
-    Array.isArray((rec.metadata as Record<string,unknown>)?.books_candidates)
-      ? (rec.metadata as Record<string,unknown>).books_candidates as Record<string,unknown>[]
-      : []
-  )
-  const [dismissedBookCands,  setDismissedBookCands]  = useState(false)
-  const [dismissedPlaceCands, setDismissedPlaceCands] = useState(false)
-  const [confirmingPlace,     setConfirmingPlace]     = useState(false)
-  const [uploading,          setUploading]          = useState(false)
-  const posterInputRef = useRef<HTMLInputElement>(null)
-  const [confirmingBookId,   setConfirmingBookId]   = useState<string | null>(null)
+  const selectedCat = CATEGORIES.find(c => c.id === category)
 
-  // Retroactive enrichment — fires if Watch/Listen card has no image and no candidates.
-  // After firing, polls once after 2.5s to pick up candidates that just arrived.
+  // Rotate note placeholder every 4 seconds when note is empty
   useEffect(() => {
-    const hasCands   = Array.isArray(liveMeta.tmdb_candidates) && (liveMeta.tmdb_candidates as unknown[]).length > 0
-    const enrichable = rec.category === 'watch' || rec.category === 'listen'
-    if (!enrichable || liveImageUrl || hasCands || dismissedCands) return
+    if (note.length > 0) return
+    const prompts = selectedCat?.notePlaceholders ?? ['What made you save this?']
+    const interval = setInterval(() => {
+      setPromptIdx(i => (i + 1) % prompts.length)
+    }, 4000)
+    return () => clearInterval(interval)
+  }, [note, selectedCat])
 
-    // Fire enrichment then poll once after 2.5s for candidates
-    triggerEnrichment(rec.id)
-      .then(() => new Promise(r => setTimeout(r, 2500)))
-      .then(() => fetch(`/api/recommendations/${rec.id}`))
-      .then(r => r.json())
-      .then(({ data }) => {
-        if (!data) return
-        const freshMeta = (data.metadata as Record<string,unknown>) ?? {}
-        if (Array.isArray(freshMeta.tmdb_candidates) && (freshMeta.tmdb_candidates as unknown[]).length > 0) {
-          setLiveMeta(freshMeta)
-        }
-      })
-      .catch(() => {})
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rec.id, rec.category])
-
-  // Fetch Watchmode streaming platforms — fires on any Watch card open
-  useEffect(() => {
-    const cachedPlatforms = liveMeta.streaming_platforms
-    if (
-      rec.category !== 'watch' ||
-      platforms.length > 0 ||
-      Array.isArray(cachedPlatforms)
-    ) return
-
-    setLoadingPlatforms(true)
-    fetch(`/api/watchmode?recId=${rec.id}&title=${encodeURIComponent(rec.title)}`)
-      .then(r => r.json())
-      .then(({ data }) => {
-        if (data?.platforms?.length) setPlatforms(data.platforms)
-      })
-      .catch(() => {})
-      .finally(() => setLoadingPlatforms(false))
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rec.id, rec.category, rec.status])
-
-  // Retroactive book enrichment — fires if Read card has no image and no candidates
-  useEffect(() => {
-    if (rec.category !== 'read') return
-    if (liveImageUrl || bookCands.length > 0 || dismissedBookCands) return
-    const recMeta = rec.metadata
-    if (recMeta.books_no_results) return
-
-    // Fire enrichment then poll once for result
-    fetch(`/api/enrich/book/${rec.id}`, { method: 'POST' })
-      .then(() => new Promise(r => setTimeout(r, 2000)))
-      .then(() => fetch(`/api/recommendations/${rec.id}`))
-      .then(r => r.json())
-      .then(({ data }) => {
-        if (!data) return
-        const freshMeta = (data.metadata as Record<string,unknown>) ?? {}
-        // Auto-confirmed — update live image
-        if (data.image_url) {
-          setLiveImageUrl(data.image_url)
-          setLiveMeta(freshMeta)
-        } else if (Array.isArray(freshMeta.books_candidates) && (freshMeta.books_candidates as unknown[]).length > 0) {
-          setBookCands(freshMeta.books_candidates as Record<string,unknown>[])
-          setLiveMeta(freshMeta)
-        }
-      })
-      .catch(() => {})
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rec.id, rec.category])
-
-  // Restore note draft from localStorage on mount
-  useEffect(() => {
-    if (rec.notes) return
-    try {
-      const draft = localStorage.getItem(noteDraftKey)
-      if (draft && draft.trim()) setNote(draft)
-    } catch {}
-  }, [noteDraftKey, rec.notes])
-
-  // Persist note draft as user types
-  useEffect(() => {
-    if (rec.notes && note === rec.notes) return
-    try {
-      if (note.trim()) {
-        localStorage.setItem(noteDraftKey, note)
-      } else {
-        localStorage.removeItem(noteDraftKey)
-      }
-    } catch {}
-  }, [note, noteDraftKey, rec.notes])
-
-  const hasImage = hasValidImage(liveImageUrl)
-  const isExp    = rec.status !== 'saved'
-  // liveMeta reflects post-enrichment state; rec.metadata is the original.
-  // metaLine reads liveMeta so it shows enrichment data immediately.
-  // meta (stale) kept for JSX sections that haven't been updated yet.
-  const meta      = rec.metadata as import('@/lib/types').RecMetadata
-  const liveMeta2 = liveMeta     as import('@/lib/types').RecMetadata
-  const metaLine  = buildMetaLine(rec.category as Category, liveMeta2)
-  const tell     = getTellConfig(rec.source_type, rec.source_name, reaction)
-  const src      = formatSource(rec.source_type, rec.source_name)
-
-  // Note micro-prompts — rotating
-  const catCfg      = CATEGORIES.find(c => c.id === rec.category)
-  const prompts     = catCfg?.notePlaceholders ?? ['What made you save this?', 'One thing to remember…']
+  const prompts         = selectedCat?.notePlaceholders ?? ['What made you save this?']
   const notePlaceholder = prompts[promptIdx % prompts.length]
 
-  const rotatePrompt = useCallback(() => {
-    setPromptIdx(i => (i + 1) % prompts.length)
-  }, [prompts.length])
-
-  // Rotate prompt every 4s when note is empty
-  useState(() => {
-    if (note.length > 0) return
-    const interval = setInterval(rotatePrompt, 4000)
-    return () => clearInterval(interval)
-  })
-
-  async function patch(body: Record<string, unknown>) {
-    setSaving(true); setError(null)
-    try {
-      const res  = await fetch(`/api/recommendations/${rec.id}`, {
-        method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
-      })
-      const json = await res.json()
-      if (json.error) setError(json.error)
-      return json
-    } catch {
-      setError('Could not save — try again?')
-    } finally {
-      setSaving(false)
-    }
+  const inputStyle: React.CSSProperties = {
+    width:        '100%',
+    background:   'rgba(255,255,255,0.04)',
+    border:       `1px solid rgba(255,255,255,0.08)`,
+    borderRadius: '11px',
+    padding:      '13px 15px',
+    fontFamily:   'var(--f-body)',
+    fontSize:     '15px',
+    fontWeight:   400,
+    color:        'rgba(255,255,255,0.90)',
+    outline:      'none',
+    caretColor:   '#1fce94',
+    transition:   'border-color 160ms ease',
+    boxSizing:    'border-box',
   }
 
-  async function handleMarkExperienced() {
-    await patch({ status: cfg.statusOptions.find(s => s !== 'saved' && s !== 'dismissed') ?? 'experienced' })
-    window.location.reload()
-  }
-
-  async function handleReaction(v: Reaction) {
-    setReaction(v)
-    await patch({ reaction: v, status: 'experienced' })
-  }
-
-  async function handleRemove() {
-    const r = await patch({ reaction: null, status: 'saved' })
-    if (!r?.error) { setReaction(null); setShowRemove(false) }
-  }
-
-  async function handleDelete() {
-    setDeleting(true)
-    try {
-      // Hard delete via DELETE method — immediate, clean
-      const res  = await fetch(`/api/recommendations/${rec.id}`, { method: 'DELETE' })
-      const json = await res.json()
-      if (json.error) {
-        setError(json.error)
-        setDeleting(false)
-        return
-      }
-      // Clear note draft from localStorage
-      try { localStorage.removeItem(`taareef-note-draft-${rec.id}`) } catch {}
-      // Navigate back to category list
-      router.push(`/dashboard/${rec.category}`)
-      router.refresh()
-    } catch {
-      setError('Could not delete — try again?')
-      setDeleting(false)
-    }
-  }
-
-  // Confirm a TMDB candidate — sets poster, clears candidates
-  async function handleConfirmCandidate(candidate: Record<string,unknown>) {
-    setConfirmingId(candidate.tmdb_id as number)
-    try {
-      const res  = await fetch(`/api/enrich/${rec.id}`, {
-        method:  'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({
-          tmdb_id:      candidate.tmdb_id,
-          poster_url:   candidate.poster_url,
-          genre:        candidate.genre,
-          genre_hue:    candidate.genre_hue,
-          overview:     candidate.overview,
-          release_year: candidate.release_year,
-          runtime:      candidate.runtime,
-          vote_average: candidate.vote_average,
-          director:     candidate.director,
-          seasons:      candidate.seasons,
-          series_status:candidate.series_status,
-          subtype:      candidate.subtype,
-        }),
-      })
-      const json = await res.json()
-      if (json.data?.confirmed) {
-        setLiveImageUrl(candidate.poster_url as string)
-        setLiveMeta(prev => ({ ...prev, tmdb_candidates: null, ...candidate }))
-      }
-    } catch {
-      setError('Could not confirm poster — try again?')
-    } finally {
-      setConfirmingId(null)
-    }
-  }
-
-  // Confirm a Google Books candidate
-  async function handleConfirmBook(candidate: Record<string,unknown>) {
-    setConfirmingBookId(candidate.google_id as string)
-    try {
-      const res  = await fetch(`/api/enrich/book/${rec.id}`, {
-        method:  'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify(candidate),
-      })
-      const json = await res.json()
-      if (json.data?.confirmed) {
-        setLiveImageUrl(candidate.cover_url as string ?? null)
-        setBookCands([])
-        setLiveMeta(prev => ({
-          ...prev,
-          books_candidates: null,
-          author:           candidate.author,
-          published_year:   candidate.published_year,
-          pages:            candidate.pages,
-          genre:            candidate.genre,
-        }))
-      }
-    } catch {
-      setError('Could not confirm cover — try again?')
-    } finally {
-      setConfirmingBookId(null)
-    }
-  }
-
-  // Dismiss book candidates — Criterion mode stays
-  function handleDismissBookCands() {
-    setDismissedBookCands(true)
-    setBookCands([])
-    fetch(`/api/recommendations/${rec.id}`, {
-      method:  'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ metadata: { ...liveMeta, books_candidates: null } }),
-    }).catch(() => {})
-  }
-
-  async function handleConfirmPlace(candidate: Record<string, unknown>) {
-    setConfirmingPlace(true)
+  async function handleSelectPhoto(url: string) {
     try {
       const res  = await fetch(`/api/recommendations/${rec.id}`, {
         method:  'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({
-          metadata: {
-            ...liveMeta,
-            venue_name:           candidate.name,
-            address:              candidate.address,
-            locality:             candidate.locality,
-            cuisine:              candidate.cuisine,
-            place_confirmed: true,
-            place_candidates:     null,
-          },
-          image_url: candidate.photoUrl ?? undefined,
-        }),
+        body:    JSON.stringify({ image_url: url }),
       })
       const json = await res.json()
-      if (json.data) {
-        if (candidate.photoUrl) setLiveImageUrl(candidate.photoUrl as string)
-        setLiveMeta(prev => ({
-          ...prev,
-          venue_name:       candidate.name as string,
-          address:          candidate.address as string | null,
-          locality:         candidate.locality as string | null,
-          cuisine:          candidate.cuisine as string | null,
-          place_candidates: null,
-        }))
-      }
-    } catch {
-      setError('Could not confirm place — try again?')
-    } finally {
-      setConfirmingPlace(false)
-    }
-  }
-
-  async function handleSelectPlacePhoto(url: string) {
-    try {
-      const res  = await fetch(`/api/recommendations/${rec.id}`, {
-        method:  'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({
-          image_url: url,
-          metadata:  { ...liveMeta, user_uploaded: false },
-        }),
-      })
-      const json = await res.json()
-      if (json.data) {
-        setLiveImageUrl(url)   // optimistic — card updates instantly
-        setLiveMeta(prev => ({ ...prev, user_uploaded: false }))
-      }
+      if (json.data) setLiveImageUrl(url)
     } catch {
       setError('Could not update photo — try again?')
     }
   }
 
-  async function handleUploadPoster(file: File) {
-    if (!file.type.startsWith('image/')) { setError('Please choose an image file'); return }
-    if (file.size > 5 * 1024 * 1024)    { setError('Image must be under 5MB');      return }
-    setUploading(true); setError(null)
+  const handleSave = useCallback(async () => {
+    if (!title.trim()) { setError('Title cannot be empty.'); return }
+    if (!sourceName.trim()) { setError('Source name cannot be empty.'); return }
+    setSaving(true); setError(null)
     try {
-      const form = new FormData()
-      form.append('image', file)
-      const res  = await fetch(`/api/posters/${rec.id}`, { method: 'POST', body: form })
+      const res = await fetch(`/api/recommendations/${rec.id}`, {
+        method:  'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({
+          title:       title.trim(),
+          category,
+          source_type: resolveSourceType(sourceBucket, sourceName),
+          source_name: sourceName.trim(),
+          notes:       note.trim() || null,
+          metadata: {
+            ...((rec.metadata as Record<string,unknown>) ?? {}),
+            ...(category === 'dine' && whatToOrder.trim() ? { what_to_order: whatToOrder.trim() } : {}),
+            ...(category === 'visit' && dates.trim() ? { dates: dates.trim() } : {}),
+          },
+        }),
+      })
       const json = await res.json()
-      if (json.data?.url) {
-        setLiveImageUrl(json.data.url)
-        setLiveMeta(prev => ({ ...prev, tmdb_candidates: null, user_uploaded: true }))
-      } else {
-        setError(json.error ?? 'Upload failed — try again?')
-      }
+      if (json.error) { setError(json.error); return }
+      router.push(`/rec/${rec.id}`)
+      router.refresh()
     } catch {
-      setError('Upload failed — try again?')
+      setError('Could not save — please try again.')
     } finally {
-      setUploading(false)
+      setSaving(false)
     }
-  }
+  }, [title, category, sourceBucket, sourceName, note, whatToOrder, dates, rec.id, rec.metadata, router])
 
-  // Dismiss all TMDB candidates — keeps Criterion mode permanently
-  function handleDismissCandidates() {
-    setDismissedCands(true)
-    setLiveMeta(prev => ({ ...prev, tmdb_candidates: null }))
-    // Clear from database silently
-    fetch(`/api/recommendations/${rec.id}`, {
-      method:  'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ metadata: { ...liveMeta, tmdb_candidates: null } }),
-    }).catch(() => {})
-  }
-
-  async function handleShare() {
-    setSharing(true)
-    try {
-      // PNG export via html-to-image — waits for fonts before capture
-      if (!cardRef.current) return
-      await document.fonts.ready
-      const { toBlob } = await import('html-to-image')
-      const blob = await toBlob(cardRef.current, { pixelRatio: 2, cacheBust: true })
-      if (!blob) return
-      const file = new File([blob], `taareef-${rec.title.toLowerCase().replace(/\s+/g, '-')}.png`, { type: 'image/png' })
-      if (navigator.canShare?.({ files: [file] })) {
-        await navigator.share({ files: [file], title: rec.title })
-      } else {
-        // Fallback: share link
-        const url = `${window.location.origin}/rec/${rec.id}`
-        if (navigator.share) {
-          await navigator.share({ title: rec.title, url })
-        } else {
-          await navigator.clipboard.writeText(url)
-        }
-      }
-    } catch {
-      // User cancelled or browser unsupported — silent
-    } finally {
-      setSharing(false)
-    }
-  }
-
-  function handleTell() {
-    if (!tell) return
-    if (tell.action === 'share-message' || tell.action === 'share-card') {
-      const text = reaction === 'loved'
-        ? `Finally ${cfg.verbPast} ${rec.title} — you were so right. Thank you ♥`
-        : `${cfg.verbPast.charAt(0).toUpperCase() + cfg.verbPast.slice(1)} ${rec.title} — it was great! Thanks for the rec.`
-      if (navigator.share) navigator.share({ text }).catch(() => {})
-    } else if (tell.action === 'open-profile') {
-      const handle = rec.source_name.replace(/^@/, '')
-      const urls: Record<string, string> = {
-        instagram: `https://instagram.com/${handle}`,
-        twitter:   `https://twitter.com/${handle}`,
-        youtube:   `https://youtube.com/@${handle}`,
-      }
-      const url = urls[rec.source_type]
-      if (url) window.open(url, '_blank', 'noopener')
-    }
-  }
-
-  const neonPill: React.CSSProperties = {
-    display:                 'flex',
-    alignItems:              'center',
-    justifyContent:          'center',
-    gap:                     '8px',
-    height:                  '50px',
-    borderRadius:            '14px',
-    border:                  '1px solid rgba(31,206,148,0.38)',
-    background:              'rgba(31,206,148,0.06)',
-    fontFamily:              'var(--f-ui)',
-    fontSize:                '13px',
-    fontWeight:              700,
-    letterSpacing:           '0.08em',
-    textTransform:           'uppercase',
-    color:                   '#1fce94',
-    textDecoration:          'none',
-    textShadow:              '0 0 12px rgba(31,206,148,0.45)',
-    boxShadow:               '0 0 24px rgba(31,206,148,0.08)',
-    WebkitTapHighlightColor: 'transparent',
-    cursor:                  'pointer',
-    width:                   '100%',
-    transition:              'background 160ms ease',
-  }
-
-  const sectionLabel: React.CSSProperties = {
-    fontFamily:    'var(--f-ui)',
-    fontSize:      '9px',
-    fontWeight:    700,
-    letterSpacing: '2px',
-    textTransform: 'uppercase',
-    color:         `rgba(${cfg.vividRgb},0.60)`,
-    marginBottom:  '8px',
-    display:       'block',
-  }
+  const sourcePlaceholder = sourceBucket === 'instagram' ? '@handle or page name'
+    : sourceBucket === 'article' ? 'Website or publication name'
+    : sourceBucket === 'newsletter' ? 'Name or phone contact'
+    : sourceBucket === 'self' ? 'Where did you find it?'
+    : 'Their name'
 
   return (
-    <div style={{ minHeight: '100vh', background: '#111111' }}>
-
-      {/* FIXED CARD — sticky, always visible */}
-      <div style={{ position: 'sticky', top: 0, zIndex: 10, background: '#111111' }}>
+    <div style={{
+      minHeight:           '100dvh',
+      background:          '#0e0e0e',
+      // Category-responsive radial gradient — same as capture screen
+      backgroundImage:     selectedCat
+        ? `radial-gradient(ellipse at 50% 0%, rgba(${selectedCat.vividRgb},0.07) 0%, transparent 55%)`
+        : 'radial-gradient(ellipse at 50% 0%, rgba(31,206,148,0.04) 0%, transparent 55%)',
+      transition:          'background-image 400ms ease',
+    }}>
+      <div style={{ maxWidth: '430px', margin: '0 auto', padding: '0 0 100px' }}>
 
         {/* Back nav — full-width neon pill */}
         <div style={{ padding: '52px 16px 0' }}>
-          <Link
-            href={`/dashboard/${rec.category}`}
-            style={neonPill as React.CSSProperties}
-          >
+          <Link href={`/rec/${rec.id}`} style={{
+            display:                 'flex',
+            alignItems:              'center',
+            justifyContent:          'center',
+            gap:                     '8px',
+            height:                  '50px',
+            borderRadius:            '14px',
+            border:                  '1px solid rgba(31,206,148,0.38)',
+            background:              'rgba(31,206,148,0.06)',
+            fontFamily:              'var(--f-ui)',
+            fontSize:                '13px',
+            fontWeight:              700,
+            letterSpacing:           '0.08em',
+            textTransform:           'uppercase',
+            color:                   '#1fce94',
+            textDecoration:          'none',
+            textShadow:              '0 0 12px rgba(31,206,148,0.45)',
+            boxShadow:               '0 0 24px rgba(31,206,148,0.08)',
+            WebkitTapHighlightColor: 'transparent',
+          }}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
               stroke="currentColor" strokeWidth="2" strokeLinecap="round">
               <polyline points="15 18 9 12 15 6"/>
             </svg>
-            {cfg.label}
+            {selectedCat?.label ?? 'Back'}
           </Link>
         </div>
 
-        {/* Card — the exact locked design (taareef-decision-cards.html).
-            cardRef stays on the object for share/export capture. */}
-        {(() => {
-          const rgb       = cfg.vividRgb
-          // All card props from liveMeta2 — typed, post-enrichment
-          const dSubtype  = liveMeta2.subtype ?? meta.subtype ?? null
-          const subcatLbl = dSubtype ? dSubtype.charAt(0).toUpperCase() + dSubtype.slice(1) : null
-          const platforms = liveMeta2.streaming_platforms
-          const platform  = Array.isArray(platforms) && platforms.length > 0
-            ? platforms[0] ?? null : null
-          const castArr   = liveMeta2.cast ?? meta.cast
-          const castLine  = Array.isArray(castArr)
-            ? castArr.slice(0, 2).join(', ')
-            : typeof castArr === 'string' ? castArr : null
-          const isLoved   = rec.reaction === 'loved'
-          const vowText   = isExp ? cfg.participle : `to ${cfg.infinitive}`
-          const titleSize = rec.title.length > 34 ? 19 : rec.title.length > 22 ? 22 : 25
+        {/* Heading */}
+        <div style={{ padding: '24px 20px 0' }}>
+          <h1 style={{
+            fontFamily:    'var(--f-display)',
+            fontStyle:     'italic',
+            fontWeight:    400,
+            fontSize:      '30px',
+            color:         'rgba(255,255,255,0.95)',
+            margin:        0,
+            lineHeight:    1.15,
+          }}>
+            Edit details
+          </h1>
+          <p style={{
+            fontFamily: 'var(--f-body)',
+            fontSize:   '13px',
+            fontWeight: 300,
+            color:      'rgba(255,255,255,0.35)',
+            marginTop:  '6px',
+          }}>
+            Fix anything before it travels.
+          </p>
+          {/* Category-vivid rule */}
+          <div style={{
+            height:     '0.5px',
+            marginTop:  '16px',
+            background: selectedCat
+              ? `linear-gradient(to right, rgba(${selectedCat.vividRgb},0.50), transparent)`
+              : 'linear-gradient(to right, rgba(255,255,255,0.12), transparent)',
+            transition: 'background 400ms ease',
+          }} />
+        </div>
 
-          return (
-            <FullCard
-              cardRef={cardRef}
-              rec={rec}
-              cfg={cfg}
-              rgb={rgb}
-              hasImage={hasImage}
-              liveImageUrl={liveImageUrl}
-              dSubtype={dSubtype}
-              subcatLbl={subcatLbl}
-              platform={platform}
-              castLine={castLine}
-              metaLine={metaLine}
-              note={note}
-              isLoved={isLoved}
-              isExp={isExp}
-              vowText={vowText}
-              titleSize={titleSize}
-              srcDisplay={src.display}
+        {/* Fields */}
+        <div style={{ padding: '20px 20px 0', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+
+          {/* Title */}
+          <div>
+            <label style={labelStyle}>What is it?</label>
+            <input
+              type="text"
+              value={title}
+              onChange={e => setTitle(e.target.value)}
+              maxLength={500}
+              placeholder="Title"
+              style={inputStyle}
+              onFocus={e => {
+                e.target.style.borderColor = selectedCat
+                  ? `rgba(${selectedCat.vividRgb},0.45)`
+                  : 'rgba(31,206,148,0.45)'
+              }}
+              onBlur={e => { e.target.style.borderColor = 'rgba(255,255,255,0.08)' }}
             />
-          )
-        })()}
+          </div>
 
-        {/* Thin separator between card and interaction layer */}
-        <div style={{
-          height:     '1px',
-          margin:     '0 16px',
-          background: `rgba(${cfg.vividRgb},0.20)`,
-        }} />
-      </div>
-
-      {/* SCROLLABLE INTERACTION LAYER — elevated surface */}
-      <div style={{
-        background:    '#1a1a1a',
-        padding:       '20px 20px 100px',
-        borderTop:     'none',
-      }}>
-
-        {/* ── CANDIDATE STRIP ──────────────────────────────────────
-            Shows when TMDB enrichment has returned poster options.
-            The card was a sketch — now the user picks the poster
-            and it comes alive. The strip slides in naturally. */}
-        {(() => {
-          const cands = Array.isArray(liveMeta.tmdb_candidates) && !dismissedCands
-            ? liveMeta.tmdb_candidates as Record<string,unknown>[]
-            : []
-          if (!cands.length && !liveImageUrl && rec.category === 'watch') {
-            // Enrichment fired but candidates not yet back — show breathing rangoli
-            return (
-              <div style={{
-                textAlign:   'center',
-                padding:     '8px 0 20px',
-                fontFamily:  'var(--f-body)',
-                fontSize:    '11px',
-                fontWeight:  300,
-                color:       `rgba(${cfg.vividRgb},0.45)`,
-                letterSpacing:'0.04em',
-                animation:   'pulseOpacity 2.4s ease-in-out infinite',
-              }}>
-                finding the right poster…
-              </div>
-            )
-          }
-          if (!cands.length) return null
-          return (
-            <div style={{ marginBottom: '20px' }}>
-              <div style={{
-                fontFamily:    'var(--f-ui)',
-                fontSize:      '9px',
-                fontWeight:    700,
-                letterSpacing: '2px',
-                textTransform: 'uppercase',
-                color:         `rgba(${cfg.vividRgb},0.60)`,
-                marginBottom:  '10px',
-              }}>
-                Is this the right one?
-              </div>
-              <div style={{ display: 'flex', gap: '8px', overflowX: 'auto', paddingBottom: '4px' }}>
-                {cands.map((c, idx) => {
-                  const isConfirming = confirmingId === (c.tmdb_id as number)
-                  return (
-                    <button
-                      key={idx}
-                      onClick={() => handleConfirmCandidate(c)}
-                      disabled={confirmingId !== null}
-                      style={{
-                        flexShrink:              0,
-                        width:                   '88px',
-                        borderRadius:            '8px',
-                        overflow:                'hidden',
-                        border:                  `1px solid rgba(${cfg.vividRgb},0.30)`,
-                        background:              cfg.deepDark,
-                        cursor:                  confirmingId !== null ? 'not-allowed' : 'pointer',
-                        position:                'relative',
-                        transition:              'border-color 160ms ease, transform 120ms ease',
-                        WebkitTapHighlightColor: 'transparent',
-                        padding:                 0,
-                      }}
-                      onMouseEnter={e => {
-                        (e.currentTarget as HTMLElement).style.borderColor = `rgba(${cfg.vividRgb},0.70)`
-                        ;(e.currentTarget as HTMLElement).style.transform = 'scale(1.04)'
-                      }}
-                      onMouseLeave={e => {
-                        (e.currentTarget as HTMLElement).style.borderColor = `rgba(${cfg.vividRgb},0.30)`
-                        ;(e.currentTarget as HTMLElement).style.transform = 'scale(1)'
-                      }}
-                    >
-                      {/* Poster image */}
-                      <div style={{ width: '100%', paddingTop: '150%', position: 'relative', overflow: 'hidden' }}>
-                        {c.poster_url ? (
-                          <img
-                            src={c.poster_url as string}
-                            alt={c.title as string}
-                            style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }}
-                          />
-                        ) : (
-                          <div style={{
-                            position: 'absolute', inset: 0,
-                            background: `rgba(${cfg.vividRgb},0.20)`,
-                            display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          }}>
-                            <span style={{ fontFamily: 'var(--f-display)', fontStyle: 'italic', fontSize: '10px', color: cfg.vividColor, padding: '4px', textAlign: 'center' }}>
-                              {c.title as string}
-                            </span>
-                          </div>
-                        )}
-                        {isConfirming && (
-                          <div style={{
-                            position: 'absolute', inset: 0,
-                            background: 'rgba(0,0,0,0.70)',
-                            display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          }}>
-                            <div style={{ width: '18px', height: '18px', borderRadius: '50%', border: '2px solid rgba(255,255,255,0.20)', borderTopColor: cfg.vividColor, animation: 'spin 0.7s linear infinite' }} />
-                          </div>
-                        )}
-                      </div>
-                      {/* Title + year */}
-                      <div style={{ padding: '6px 6px 7px', background: cfg.deepDark }}>
-                        <div style={{
-                          fontFamily: 'var(--f-body)', fontSize: '9px', fontWeight: 500,
-                          color: 'rgba(255,255,255,0.80)', lineHeight: 1.3,
-                          display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
-                        } as React.CSSProperties}>
-                          {c.title as string}
-                        </div>
-                        <div style={{ fontFamily: 'var(--f-body)', fontSize: '8px', fontWeight: 300, color: `rgba(${cfg.vividRgb},0.55)`, marginTop: '2px' }}>
-                          {c.subtype === 'series' ? 'Series' : 'Film'} {c.release_year ? `· ${c.release_year}` : ''}
-                        </div>
-                      </div>
-                    </button>
-                  )
-                })}
-              </div>
-              {/* None of these */}
-              <button
-                onClick={handleDismissCandidates}
-                style={{
-                  marginTop:               '8px',
-                  background:              'none',
-                  border:                  'none',
-                  cursor:                  'pointer',
-                  fontFamily:              'var(--f-body)',
-                  fontSize:                '11px',
-                  fontWeight:              300,
-                  color:                   'rgba(255,255,255,0.28)',
-                  padding:                 '4px 0',
-                  WebkitTapHighlightColor: 'transparent',
-                  textDecoration:          'underline',
-                  textUnderlineOffset:     '3px',
-                  textDecorationColor:     'rgba(255,255,255,0.14)',
-                }}
-              >
-                None of these
-              </button>
-
-              {/* Upload your own — escape hatch when no candidate fits */}
-              <button
-                onClick={() => posterInputRef.current?.click()}
-                disabled={uploading}
-                style={{
-                  marginTop: '4px', background: 'none', border: 'none',
-                  cursor:    uploading ? 'not-allowed' : 'pointer',
-                  fontFamily: 'var(--f-body)', fontSize: '11px', fontWeight: 300,
-                  color:     `rgba(${cfg.vividRgb},0.55)`, padding: '4px 0',
-                  WebkitTapHighlightColor: 'transparent',
-                  textDecoration: 'underline', textUnderlineOffset: '3px',
-                  textDecorationColor: `rgba(${cfg.vividRgb},0.25)`,
-                }}
-              >
-                {uploading ? 'Uploading…' : 'Upload your own →'}
-              </button>
-            </div>
-          )
-        })()}
-
-        {/* ── PLACE CANDIDATE STRIP ──────────────────────────────────────
-             Shows when Google found results but the LLM wasn't fully confident.
-             Same pattern as TMDB strip — user picks the right venue.
-             Also shows "add a photo" nudge for zero-result place cards. */}
-        {(() => {
-          const isPlaceCat  = rec.category === 'dine' || rec.category === 'visit' || rec.category === 'do'
-          if (!isPlaceCat) return null
-
-          // Zero results nudge — venue wasn't found on Google
-          const noResults = (liveMeta as import('@/lib/types').RecMetadata).place_no_results
-          if (noResults && !liveImageUrl) {
-            return (
-              <div style={{ marginBottom: '16px' }}>
-                <div style={{
-                  fontFamily: 'var(--f-ui)', fontSize: '9px', fontWeight: 700,
-                  letterSpacing: '2px', textTransform: 'uppercase',
-                  color: `rgba(${cfg.vividRgb},0.45)`, marginBottom: '8px',
-                }}>
-                  We couldn't find this place automatically
-                </div>
-                <button
-                  onClick={() => posterInputRef.current?.click()}
-                  style={{
-                    background: 'none', border: `1px solid rgba(${cfg.vividRgb},0.25)`,
-                    borderRadius: '6px', padding: '8px 14px', cursor: 'pointer',
-                    fontFamily: 'var(--f-body)', fontSize: '11px', fontWeight: 300,
-                    color: `rgba(${cfg.vividRgb},0.65)`,
-                    WebkitTapHighlightColor: 'transparent',
-                  }}
-                >
-                  Add a photo →
-                </button>
-              </div>
-            )
-          }
-
-          // Place candidate strip
-          const placeCands = Array.isArray((liveMeta as import('@/lib/types').RecMetadata).place_candidates)
-            && !dismissedPlaceCands
-            ? (liveMeta as import('@/lib/types').RecMetadata).place_candidates as import('@/lib/types').PlaceCandidate[]
-            : []
-          if (!placeCands.length) return null
-
-          return (
-            <div style={{ marginBottom: '20px' }}>
-              <div style={{
-                fontFamily: 'var(--f-ui)', fontSize: '9px', fontWeight: 700,
-                letterSpacing: '2px', textTransform: 'uppercase',
-                color: `rgba(${cfg.vividRgb},0.60)`, marginBottom: '10px',
-              }}>
-                Is this the right place?
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                {placeCands.map((c, idx) => (
-                  <button
-                    key={idx}
-                    onClick={() => handleConfirmPlace(c as unknown as Record<string, unknown>)}
-                    disabled={confirmingPlace}
-                    style={{
-                      display: 'flex', alignItems: 'center', gap: '10px',
-                      border: `1px solid rgba(${cfg.vividRgb},0.25)`,
-                      borderRadius: '8px', background: cfg.deepDark,
-                      padding: '8px 10px', cursor: confirmingPlace ? 'not-allowed' : 'pointer',
-                      textAlign: 'left', WebkitTapHighlightColor: 'transparent',
-                    }}
-                  >
-                    {/* Venue thumbnail */}
-                    <div style={{
-                      width: '44px', height: '44px', borderRadius: '5px',
-                      overflow: 'hidden', flexShrink: 0,
-                      background: `rgba(${cfg.vividRgb},0.15)`,
-                    }}>
-                      {c.photoUrl ? (
-                        <img src={c.photoUrl} alt={c.name}
-                          style={{ width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center' }} />
-                      ) : (
-                        <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                          <span style={{ fontFamily: 'var(--f-ui)', fontSize: '8px', color: `rgba(${cfg.vividRgb},0.5)`, textAlign: 'center', padding: '2px' }}>
-                            {c.name.slice(0, 2).toUpperCase()}
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                    {/* Venue name + address */}
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{
-                        fontFamily: 'var(--f-body)', fontSize: '12px', fontWeight: 500,
-                        color: 'rgba(255,255,255,0.85)', lineHeight: 1.3,
-                        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                      }}>
-                        {c.name}
-                      </div>
-                      {(c.cuisine || c.locality) && (
-                        <div style={{
-                          fontFamily: 'var(--f-body)', fontSize: '10px', fontWeight: 300,
-                          color: `rgba(${cfg.vividRgb},0.55)`, marginTop: '2px',
-                        }}>
-                          {[c.cuisine, c.locality].filter(Boolean).join(' · ')}
-                        </div>
-                      )}
-                      {c.address && (
-                        <div style={{
-                          fontFamily: 'var(--f-body)', fontSize: '9px', fontWeight: 300,
-                          color: 'rgba(255,255,255,0.30)', marginTop: '2px',
-                          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                        }}>
-                          {c.address}
-                        </div>
-                      )}
-                    </div>
-                  </button>
-                ))}
-              </div>
-              <button
-                onClick={() => setDismissedPlaceCands(true)}
-                style={{
-                  marginTop: '8px', background: 'none', border: 'none',
-                  cursor: 'pointer', fontFamily: 'var(--f-body)', fontSize: '11px',
-                  fontWeight: 300, color: 'rgba(255,255,255,0.28)', padding: '4px 0',
-                  WebkitTapHighlightColor: 'transparent',
-                  textDecoration: 'underline', textUnderlineOffset: '3px',
-                  textDecorationColor: 'rgba(255,255,255,0.14)',
-                }}
-              >
-                None of these
-              </button>
-            </div>
-          )
-        })()}
-
-        {/* ── BOOK CANDIDATE STRIP ───────────────────────────────────
-            Shows when Google Books returned cover options for a Read card.
-            Same interaction pattern as TMDB strip — tap to confirm. */}
-        {rec.category === 'read' && bookCands.length > 0 && !dismissedBookCands && !liveImageUrl && (
-          <div style={{ marginBottom: '20px' }}>
-            <div style={{
-              fontFamily:    'var(--f-ui)',
-              fontSize:      '9px',
-              fontWeight:    700,
-              letterSpacing: '2px',
-              textTransform: 'uppercase',
-              color:         `rgba(${cfg.vividRgb},0.60)`,
-              marginBottom:  '10px',
-            }}>
-              Is this the right book?
-            </div>
-            <div style={{ display: 'flex', gap: '8px', overflowX: 'auto', paddingBottom: '4px' }}>
-              {bookCands.map((c, idx) => {
-                const isConfirming = confirmingBookId === (c.google_id as string)
+          {/* Category */}
+          <div>
+            <label style={labelStyle}>What kind?</label>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '6px' }}>
+              {CATEGORIES.map(cat => {
+                const sel = category === cat.id
                 return (
                   <button
-                    key={idx}
-                    onClick={() => handleConfirmBook(c)}
-                    disabled={confirmingBookId !== null}
+                    key={cat.id}
+                    type="button"
+                    onClick={() => { setCategory(cat.id as Category); setPromptIdx(0) }}
                     style={{
-                      flexShrink:              0,
-                      width:                   '88px',
-                      borderRadius:            '8px',
-                      overflow:                'hidden',
-                      border:                  `1px solid rgba(${cfg.vividRgb},0.30)`,
-                      background:              cfg.deepDark,
-                      cursor:                  confirmingBookId !== null ? 'not-allowed' : 'pointer',
-                      position:                'relative',
-                      transition:              'border-color 160ms ease, transform 120ms ease',
+                      padding:                 '11px 4px',
+                      borderRadius:            '9px',
+                      border:                  `1px solid ${sel ? cat.vividColor : 'rgba(255,255,255,0.09)'}`,
+                      background:              sel ? `rgba(${cat.vividRgb},0.14)` : 'rgba(255,255,255,0.03)',
+                      fontFamily:              'var(--f-ui)',
+                      fontSize:                '9px',
+                      fontWeight:              700,
+                      letterSpacing:           '0.06em',
+                      textTransform:           'uppercase',
+                      color:                   sel ? cat.vividColor : 'rgba(255,255,255,0.45)',
+                      cursor:                  'pointer',
+                      transition:              'all 140ms ease',
+                      boxShadow:               sel ? `0 0 10px rgba(${cat.vividRgb},0.22)` : 'none',
                       WebkitTapHighlightColor: 'transparent',
-                      padding:                 0,
-                    }}
-                    onMouseEnter={e => {
-                      (e.currentTarget as HTMLElement).style.borderColor = `rgba(${cfg.vividRgb},0.70)`
-                      ;(e.currentTarget as HTMLElement).style.transform = 'scale(1.04)'
-                    }}
-                    onMouseLeave={e => {
-                      (e.currentTarget as HTMLElement).style.borderColor = `rgba(${cfg.vividRgb},0.30)`
-                      ;(e.currentTarget as HTMLElement).style.transform = 'scale(1)'
                     }}
                   >
-                    <div style={{ width: '100%', paddingTop: '150%', position: 'relative', overflow: 'hidden' }}>
-                      {c.cover_url ? (
-                        <img
-                          src={c.cover_url as string}
-                          alt={c.title as string}
-                          style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }}
-                        />
-                      ) : (
-                        <div style={{
-                          position: 'absolute', inset: 0,
-                          background: `rgba(${cfg.vividRgb},0.20)`,
-                          display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '6px',
-                        }}>
-                          <span style={{ fontFamily: 'var(--f-display)', fontStyle: 'italic', fontSize: '9px', color: cfg.vividColor, textAlign: 'center', lineHeight: 1.3 }}>
-                            {c.title as string}
-                          </span>
-                        </div>
-                      )}
-                      {isConfirming && (
-                        <div style={{
-                          position: 'absolute', inset: 0,
-                          background: 'rgba(0,0,0,0.70)',
-                          display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        }}>
-                          <div style={{ width: '18px', height: '18px', borderRadius: '50%', border: '2px solid rgba(255,255,255,0.20)', borderTopColor: cfg.vividColor, animation: 'spin 0.7s linear infinite' }} />
-                        </div>
-                      )}
-                    </div>
-                    <div style={{ padding: '6px 6px 7px', background: cfg.deepDark }}>
-                      <div style={{
-                        fontFamily: 'var(--f-body)', fontSize: '9px', fontWeight: 500,
-                        color: 'rgba(255,255,255,0.80)', lineHeight: 1.3,
-                        display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
-                      } as React.CSSProperties}>
-                        {c.title as string}
-                      </div>
-                      <div style={{ fontFamily: 'var(--f-body)', fontSize: '8px', fontWeight: 300, color: `rgba(${cfg.vividRgb},0.55)`, marginTop: '2px' }}>
-                        {c.author as string} {c.published_year ? `· ${c.published_year}` : ''}
-                      </div>
-                    </div>
+                    {cat.label}
                   </button>
                 )
               })}
             </div>
-            <button
-              onClick={handleDismissBookCands}
-              style={{
-                marginTop:               '8px',
-                background:              'none', border: 'none', cursor: 'pointer',
-                fontFamily:              'var(--f-body)', fontSize: '11px', fontWeight: 300,
-                color:                   'rgba(255,255,255,0.28)', padding: '4px 0',
-                WebkitTapHighlightColor: 'transparent',
-                textDecoration:          'underline', textUnderlineOffset: '3px',
-                textDecorationColor:     'rgba(255,255,255,0.14)',
-              }}
-            >
-              None of these
-            </button>
           </div>
-        )}
 
-        {/* ── PLACE PHOTO PICKER (Build 2) ──────────────────────────────
-             Only for place categories with stored photo refs (Build 1 data).
-             Lazy: no photo API spend until the person opens it. */}
-        {(rec.category === 'dine' || rec.category === 'visit' || rec.category === 'do') && (() => {
-          const pickerRefs = (liveMeta as import('@/lib/types').RecMetadata).place_photo_refs
-          if (!Array.isArray(pickerRefs) || pickerRefs.length === 0) return null
-          return (
-            <PlacePhotoPicker
-              refs={pickerRefs}
-              currentUrl={liveImageUrl}
-              accentRgb={cfg.vividRgb}
-              onSelect={handleSelectPlacePhoto}
-              onUpload={() => posterInputRef.current?.click()}
+          {/* Source type — 5 pill buckets */}
+          <div>
+            <label style={labelStyle}>What is the source?</label>
+            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+              {SOURCE_BUCKETS.map(st => {
+                const sel = sourceBucket === st.value
+                return (
+                  <button
+                    key={st.value}
+                    type="button"
+                    onClick={() => setSourceBucket(st.value)}
+                    style={{
+                      padding:                 '7px 14px',
+                      borderRadius:            '20px',
+                      border:                  `1px solid ${sel
+                        ? (selectedCat?.vividColor ?? '#1fce94')
+                        : 'rgba(255,255,255,0.12)'}`,
+                      background:              sel
+                        ? `rgba(${selectedCat?.vividRgb ?? '31,206,148'},0.14)`
+                        : 'rgba(255,255,255,0.03)',
+                      fontFamily:              'var(--f-ui)',
+                      fontSize:                '10px',
+                      fontWeight:              700,
+                      letterSpacing:           '0.06em',
+                      textTransform:           'uppercase',
+                      color:                   sel
+                        ? (selectedCat?.vividColor ?? '#1fce94')
+                        : 'rgba(255,255,255,0.42)',
+                      cursor:                  'pointer',
+                      transition:              'all 140ms ease',
+                      boxShadow:               sel
+                        ? `0 0 10px rgba(${selectedCat?.vividRgb ?? '31,206,148'},0.20)`
+                        : 'none',
+                      WebkitTapHighlightColor: 'transparent',
+                    }}
+                  >
+                    {st.label}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+
+          {/* Source name */}
+          <div>
+            <label style={labelStyle}>
+              {sourceBucket === 'self' ? 'How did you find it?' : 'Name or handle'}
+            </label>
+            <input
+              type="text"
+              value={sourceName}
+              onChange={e => setSourceName(e.target.value)}
+              maxLength={200}
+              placeholder={sourcePlaceholder}
+              style={inputStyle}
+              onFocus={e => {
+                e.target.style.borderColor = selectedCat
+                  ? `rgba(${selectedCat.vividRgb},0.45)`
+                  : 'rgba(31,206,148,0.45)'
+              }}
+              onBlur={e => { e.target.style.borderColor = 'rgba(255,255,255,0.08)' }}
             />
-          )
-        })()}
-
-        {/* Upload photo — universal trigger when no image exists yet */}
-        {!liveImageUrl && (
-          <div style={{ marginBottom: '16px', textAlign: 'center' }}>
-            <button
-              onClick={() => posterInputRef.current?.click()}
-              disabled={uploading}
-              style={{
-                background: 'none', border: 'none',
-                cursor:     uploading ? 'not-allowed' : 'pointer',
-                fontFamily: 'var(--f-body)', fontSize: '11px', fontWeight: 300,
-                color:      'rgba(255,255,255,0.28)', padding: '4px 8px',
-                WebkitTapHighlightColor: 'transparent',
-                textDecoration: 'underline', textUnderlineOffset: '3px',
-                textDecorationColor: 'rgba(255,255,255,0.12)',
-              }}
-            >
-              {uploading ? 'Uploading…' : 'add a photo'}
-            </button>
           </div>
-        )}
 
-        {/* Hidden file input — shared by all upload triggers above */}
-        <input
-          ref={posterInputRef}
-          type="file"
-          accept="image/jpeg,image/png,image/webp"
-          style={{ display: 'none' }}
-          onChange={e => { const f = e.target.files?.[0]; if (f) handleUploadPoster(f); e.target.value = '' }}
-        />
+          {/* Dine — what to order */}
+          {category === 'dine' && (
+            <div>
+              <label style={labelStyle}>
+                What to order
+                <span style={{ color: 'rgba(255,255,255,0.20)', fontWeight: 400, textTransform: 'none', letterSpacing: 0, marginLeft: '6px' }}>
+                  optional
+                </span>
+              </label>
+              <input
+                type="text"
+                value={whatToOrder}
+                onChange={e => setWhatToOrder(e.target.value)}
+                maxLength={300}
+                placeholder="The dish, the drink, the thing everyone orders"
+                style={inputStyle}
+                onFocus={e => {
+                  e.target.style.borderColor = selectedCat
+                    ? `rgba(${selectedCat.vividRgb},0.45)`
+                    : 'rgba(31,206,148,0.45)'
+                }}
+                onBlur={e => { e.target.style.borderColor = 'rgba(255,255,255,0.08)' }}
+              />
+            </div>
+          )}
 
-        {/* Share card + Edit details — full-width pills */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '20px' }}>
+          {/* Visit — closing dates */}
+          {category === 'visit' && (
+            <div>
+              <label style={labelStyle}>
+                Dates
+                <span style={{ color: 'rgba(255,255,255,0.20)', fontWeight: 400, textTransform: 'none', letterSpacing: 0, marginLeft: '6px' }}>
+                  optional
+                </span>
+              </label>
+              <input
+                type="text"
+                value={dates}
+                onChange={e => setDates(e.target.value)}
+                maxLength={100}
+                placeholder="Until 15 Jun · Closes 12 June 2026"
+                style={inputStyle}
+                onFocus={e => {
+                  e.target.style.borderColor = selectedCat
+                    ? `rgba(${selectedCat.vividRgb},0.45)`
+                    : 'rgba(31,206,148,0.45)'
+                }}
+                onBlur={e => { e.target.style.borderColor = 'rgba(255,255,255,0.08)' }}
+              />
+            </div>
+          )}
+
+          {/* Note — with rotating micro-prompts */}
+          <div>
+            <label style={labelStyle}>
+              Your note
+              <span style={{ color: 'rgba(255,255,255,0.20)', fontWeight: 400, textTransform: 'none', letterSpacing: 0, marginLeft: '6px' }}>
+                optional
+              </span>
+            </label>
+            <textarea
+              value={note}
+              onChange={e => setNote(e.target.value)}
+              maxLength={500}
+              rows={3}
+              placeholder={notePlaceholder}
+              style={{
+                ...inputStyle,
+                resize:    'none',
+                lineHeight:1.6,
+                fontStyle: note.length === 0 ? 'italic' : 'normal',
+              }}
+              onFocus={e => {
+                e.target.style.borderColor = selectedCat
+                  ? `rgba(${selectedCat.vividRgb},0.45)`
+                  : 'rgba(31,206,148,0.45)'
+              }}
+              onBlur={e => { e.target.style.borderColor = 'rgba(255,255,255,0.08)' }}
+            />
+          </div>
+
+          {/* ── PLACE PHOTO PICKER (Build 3) — same component as detail */}
+          {(category === 'dine' || category === 'visit' || category === 'do') && (() => {
+            const refs = (rec.metadata as RecMetadata).place_photo_refs
+            if (!Array.isArray(refs) || refs.length === 0) return null
+            return (
+              <div>
+                <label style={{
+                  fontFamily: 'var(--f-ui)', fontSize: '10px', fontWeight: 700,
+                  letterSpacing: '2px', textTransform: 'uppercase',
+                  color: 'rgba(255,255,255,0.40)', display: 'block', marginBottom: '8px',
+                }}>
+                  Card photo
+                </label>
+                <PlacePhotoPicker
+                  refs={refs}
+                  currentUrl={liveImageUrl}
+                  accentRgb={selectedCat?.vividRgb ?? '31,206,148'}
+                  onSelect={handleSelectPhoto}
+                />
+              </div>
+            )
+          })()}
+
+          {error && (
+            <div style={{
+              fontFamily: 'var(--f-body)',
+              fontSize:   '12px',
+              color:      '#f43f5e',
+              textAlign:  'center',
+            }}>
+              {error}
+            </div>
+          )}
+
+          {/* Save — always neon */}
           <button
-            onClick={handleShare}
-            disabled={sharing}
-            style={{
-              ...neonPill as React.CSSProperties,
-              opacity: sharing ? 0.6 : 1,
-            }}
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
-              stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-              <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/>
-              <polyline points="16 6 12 2 8 6"/>
-              <line x1="12" y1="2" x2="12" y2="15"/>
-            </svg>
-            {sharing ? 'Preparing…' : 'Share this card'}
-          </button>
-
-          <Link
-            href={`/rec/${rec.id}/edit`}
-            style={neonPill as React.CSSProperties}
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
-              stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
-              <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
-            </svg>
-            Edit details
-          </Link>
-        </div>
-
-        <div style={{ height: '0.5px', background: `rgba(${cfg.vividRgb},0.12)`, marginBottom: '20px' }} />
-
-        {/* Mark as experienced — always visible when not experienced */}
-        {!isExp && (
-          <button
-            onClick={handleMarkExperienced}
+            onClick={handleSave}
             disabled={saving}
             style={{
               width:                   '100%',
-              height:                  '52px',
+              height:                  '54px',
               borderRadius:            '14px',
+              background:              saving ? 'rgba(31,206,148,0.55)' : '#1fce94',
               border:                  'none',
-              background:              `rgba(${cfg.vividRgb},0.90)`,
-              color:                   '#111111',
               fontFamily:              'var(--f-ui)',
-              fontSize:                '13px',
               fontWeight:              700,
-              letterSpacing:           '0.08em',
+              fontSize:                '13px',
+              letterSpacing:           '0.10em',
               textTransform:           'uppercase',
+              color:                   '#080f0a',
               cursor:                  saving ? 'not-allowed' : 'pointer',
+              boxShadow:               saving ? 'none' : '0 0 28px rgba(31,206,148,0.30)',
               transition:              'all 160ms ease',
               WebkitTapHighlightColor: 'transparent',
-              marginBottom:            '20px',
-              boxShadow:               `0 4px 20px rgba(${cfg.vividRgb},0.35)`,
             }}
           >
-            Mark as {cfg.participle}
+            {saving ? 'Saving…' : 'Save changes'}
           </button>
-        )}
 
-        {/* Experienced status — structured */}
-        {isExp && (
-          <div style={{ marginBottom: '16px' }}>
-            <span style={sectionLabel}>Experienced</span>
-            <div style={{
-              display:    'flex',
-              alignItems: 'center',
-              justifyContent:'space-between',
-            }}>
-              <span style={{
-                fontFamily: 'var(--f-body)',
-                fontSize:   '13px',
-                fontWeight: 400,
-                color:      'rgba(255,255,255,0.60)',
-                textTransform:'capitalize',
-              }}>
-                {rec.status}
-              </span>
-              {isExp && (
-                <button
-                  onClick={() => setShowRemove(true)}
-                  style={{
-                    background:   'none',
-                    border:       'none',
-                    cursor:       'pointer',
-                    fontFamily:   'var(--f-body)',
-                    fontSize:     '11px',
-                    fontWeight:   300,
-                    color:        'rgba(255,255,255,0.24)',
-                    padding:      '4px 0',
-                  }}
-                >
-                  Remove log
-                </button>
-              )}
-            </div>
-            <div style={{ height: '0.5px', background: `rgba(${cfg.vividRgb},0.12)`, marginTop: '14px', marginBottom: '20px' }} />
-          </div>
-        )}
-
-        {/* Streaming platforms — Watch cards only */}
-        {rec.category === 'watch' && (
-          <div style={{ marginBottom: '20px' }}>
-            <span style={sectionLabel}>Stream on</span>
-            {loadingPlatforms ? (
-              <div style={{ fontFamily: 'var(--f-body)', fontSize: '12px', color: `rgba(${cfg.vividRgb},0.40)`, fontStyle: 'italic' }}>
-                Checking availability…
-              </div>
-            ) : platforms.length > 0 ? (
-              <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                {platforms.map(p => (
-                  <span key={p} style={{
-                    fontFamily:    'var(--f-ui)',
-                    fontSize:      '10px',
-                    fontWeight:    700,
-                    letterSpacing: '0.8px',
-                    textTransform: 'uppercase',
-                    color:         `rgba(${cfg.vividRgb},0.85)`,
-                    background:    `rgba(${cfg.vividRgb},0.10)`,
-                    border:        `1px solid rgba(${cfg.vividRgb},0.28)`,
-                    borderRadius:  '6px',
-                    padding:       '4px 10px',
-                  }}>
-                    {p}
-                  </span>
-                ))}
-              </div>
-            ) : (
-              <div style={{ fontFamily: 'var(--f-body)', fontSize: '12px', color: 'rgba(255,255,255,0.22)', fontWeight: 300 }}>
-                Not available on major platforms
-              </div>
-            )}
-            <div style={{ height: '0.5px', background: `rgba(${cfg.vividRgb},0.12)`, marginTop: '16px' }} />
-          </div>
-        )}
-
-        {/* Source block */}
-        <div style={{ marginBottom: '20px' }}>
-          <span style={sectionLabel}>Source</span>
-          <div style={{
-            display:        'flex',
-            alignItems:     'center',
-            justifyContent: 'space-between',
-            background:     'rgba(255,255,255,0.03)',
-            border:         '1px solid rgba(255,255,255,0.06)',
-            borderRadius:   '10px',
-            padding:        '12px 14px',
-          }}>
-            <div>
-              <div style={{
-                fontFamily: 'var(--f-body)',
-                fontSize:   '13px',
-                fontWeight: 500,
-                color:      'rgba(255,255,255,0.82)',
-              }}>
-                {src.display}
-              </div>
-              {src.type && (
-                <div style={{
-                  fontFamily: 'var(--f-body)',
-                  fontSize:   '11px',
-                  fontWeight: 300,
-                  color:      'rgba(255,255,255,0.32)',
-                  marginTop:  '2px',
-                }}>
-                  {src.type}
-                </div>
-              )}
-            </div>
-            <Link
-              href={`/rec/${rec.id}/edit`}
-              style={{
-                fontFamily:    'var(--f-ui)',
-                fontSize:      '9px',
-                fontWeight:    700,
-                letterSpacing: '0.08em',
-                textTransform: 'uppercase',
-                color:         `rgba(${cfg.vividRgb},0.65)`,
-                textDecoration:'none',
-                padding:       '6px 10px',
-                border:        `1px solid rgba(${cfg.vividRgb},0.20)`,
-                borderRadius:  '8px',
-              }}
-            >
-              Edit
-            </Link>
-          </div>
         </div>
-
-        <div style={{ height: '0.5px', background: `rgba(${cfg.vividRgb},0.12)`, marginBottom: '20px' }} />
-
-        {/* Tell source block */}
-        {isExp && tell && tell.action !== 'none' && (
-          <div style={{
-            background:    'rgba(31,206,148,0.05)',
-            border:        '1px solid rgba(31,206,148,0.14)',
-            borderRadius:  '13px',
-            padding:       '14px 16px',
-            display:       'flex',
-            justifyContent:'space-between',
-            alignItems:    'center',
-            marginBottom:  '20px',
-          }}>
-            <div>
-              <div style={{
-                fontFamily:   'var(--f-body)',
-                fontSize:     '14px',
-                fontWeight:   500,
-                color:        'rgba(255,255,255,0.88)',
-                marginBottom: '3px',
-              }}>
-                {tell.label}
-              </div>
-              <div style={{
-                fontFamily: 'var(--f-body)',
-                fontSize:   '11px',
-                fontWeight: 300,
-                color:      'rgba(255,255,255,0.40)',
-              }}>
-                {tell.sub}
-              </div>
-            </div>
-            <button
-              onClick={handleTell}
-              style={{
-                background:    '#1fce94',
-                color:         '#111111',
-                fontFamily:    'var(--f-ui)',
-                fontWeight:    700,
-                fontSize:      '11px',
-                letterSpacing: '1px',
-                padding:       '8px 16px',
-                borderRadius:  '20px',
-                border:        'none',
-                cursor:        'pointer',
-                flexShrink:    0,
-                textTransform: 'uppercase',
-              }}
-            >
-              Tell them
-            </button>
-          </div>
-        )}
-
-        {/* Visit urgency date */}
-        {rec.category === 'visit' && (() => {
-          const dateStr = typeof meta.dates === 'string' ? meta.dates : null
-          const urgency = getDateUrgency(dateStr)
-          if (!dateStr || urgency === 'none') return null
-          const styleMap: Record<string, React.CSSProperties> = {
-            info:   { color: 'rgba(30,159,235,0.55)' },
-            soon:   { color: 'rgba(30,159,235,0.80)' },
-            urgent: { color: 'rgba(30,159,235,1.0)', fontWeight: 500, display: 'flex', alignItems: 'center', gap: '5px' },
-            closed: { color: 'rgba(255,255,255,0.22)', textDecoration: 'line-through' },
-          }
-          return (
-            <div style={{ fontFamily: 'var(--f-body)', fontSize: '12px', fontWeight: 300, marginBottom: '16px', ...styleMap[urgency] }}>
-              {urgency === 'urgent' && <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: 'rgba(30,159,235,1)', flexShrink: 0, display: 'inline-block' }} />}
-              {dateStr}
-            </div>
-          )
-        })()}
-
-        {/* Dine — what to order */}
-        {rec.category === 'dine' && typeof meta.what_to_order === 'string' && meta.what_to_order.trim() !== '' && (
-          <div style={{ marginBottom: '20px', display: 'flex', alignItems: 'baseline', gap: '8px' }}>
-            <span style={{ ...sectionLabel, marginBottom: 0, flexShrink: 0 }}>Order</span>
-            <span style={{ fontFamily: 'var(--f-body)', fontSize: '13px', fontWeight: 400, color: 'rgba(255,255,255,0.72)' }}>
-              {meta.what_to_order as string}
-            </span>
-          </div>
-        )}
-
-        <div style={{ height: '0.5px', background: `rgba(${cfg.vividRgb},0.12)`, marginBottom: '20px' }} />
-
-        {/* Note — collapsed when note exists, expandable */}
-        <div style={{ marginBottom: '20px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-            <span style={sectionLabel}>
-              {rec.notes ? 'Your note' : 'Add a note'}
-            </span>
-            {rec.notes && !noteExpanded && (
-              <button
-                onClick={() => setNoteExpanded(true)}
-                style={{
-                  background:   'none',
-                  border:       'none',
-                  cursor:       'pointer',
-                  fontFamily:   'var(--f-ui)',
-                  fontSize:     '9px',
-                  fontWeight:   700,
-                  letterSpacing:'0.08em',
-                  textTransform:'uppercase',
-                  color:        `rgba(${cfg.vividRgb},0.55)`,
-                  padding:      '2px 0',
-                }}
-              >
-                Edit
-              </button>
-            )}
-          </div>
-          {noteExpanded || !rec.notes ? (
-            <textarea
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
-              onBlur={() => {
-                if (note !== rec.notes) {
-                  patch({ notes: note })
-                  try { localStorage.removeItem(noteDraftKey) } catch {}
-                }
-              }}
-              placeholder={notePlaceholder}
-              maxLength={500}
-              rows={3}
-              style={{
-                width:        '100%',
-                background:   'rgba(255,255,255,0.03)',
-                border:       `1px solid rgba(${cfg.vividRgb},0.18)`,
-                borderRadius: '11px',
-                padding:      '12px 14px',
-                fontFamily:   'var(--f-body)',
-                fontSize:     '13px',
-                fontWeight:   300,
-                fontStyle:    note.length === 0 ? 'italic' : 'normal',
-                color:        'rgba(255,255,255,0.75)',
-                resize:       'none',
-                outline:      'none',
-                caretColor:   '#1fce94',
-                boxSizing:    'border-box',
-                lineHeight:   1.6,
-                transition:   'border-color 160ms ease',
-              }}
-              onFocus={e => { e.target.style.borderColor = `rgba(${cfg.vividRgb},0.45)` }}
-              onBlurCapture={e => { e.target.style.borderColor = `rgba(${cfg.vividRgb},0.18)` }}
-            />
-          ) : (
-            // Collapsed note preview
-            <div style={{
-              fontFamily:  'var(--f-body)',
-              fontSize:    '13px',
-              fontWeight:  300,
-              fontStyle:   'italic',
-              color:       'rgba(255,255,255,0.60)',
-              lineHeight:  1.6,
-              paddingLeft: '10px',
-              borderLeft:  `1.5px solid rgba(${cfg.vividRgb},0.25)`,
-            }}>
-              {rec.notes}
-            </div>
-          )}
-        </div>
-
-        <div style={{ height: '0.5px', background: `rgba(${cfg.vividRgb},0.12)`, marginBottom: '20px' }} />
-
-        {/* Reactions — only shown when experienced */}
-        {isExp && (
-          <div>
-            <span style={sectionLabel}>How was it?</span>
-            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-              {REACTIONS.map(r => {
-                const on = reaction === r.value
-                return (
-                  <button
-                    key={r.value}
-                    onClick={() => handleReaction(r.value)}
-                    disabled={saving}
-                    style={{
-                      fontFamily:              'var(--f-ui)',
-                      fontSize:                '11px',
-                      fontWeight:              700,
-                      letterSpacing:           '1.5px',
-                      textTransform:           'uppercase',
-                      padding:                 '10px 20px',
-                      borderRadius:            '8px',
-                      cursor:                  'pointer',
-                      transition:              'all 150ms ease',
-                      background:              on ? `rgba(${cfg.vividRgb},0.18)` : 'rgba(255,255,255,0.04)',
-                      // Unselected: 1px category vivid border at 30%
-                      border:                  `1px solid rgba(${cfg.vividRgb},${on ? '0.55' : '0.30'})`,
-                      color:                   on ? cfg.vividColor : `rgba(${cfg.vividRgb},0.55)`,
-                      boxShadow:               on ? `0 0 12px rgba(${cfg.vividRgb},0.22)` : 'none',
-                      WebkitTapHighlightColor: 'transparent',
-                    }}
-                  >
-                    {r.label}
-                  </button>
-                )
-              })}
-            </div>
-          </div>
-        )}
-
-        {error && (
-          <div style={{
-            marginTop:  '16px',
-            fontFamily: 'var(--f-body)',
-            fontSize:   '12px',
-            color:      '#f43f5e',
-            textAlign:  'center',
-          }}>
-            {error}
-          </div>
-        )}
-
-        {/* Footer */}
-        <div style={{
-          marginTop:      '24px',
-          display:        'flex',
-          justifyContent: 'space-between',
-          fontFamily:     'var(--f-body)',
-          fontSize:       '11px',
-          fontWeight:     300,
-          color:          'rgba(255,255,255,0.20)',
-        }}>
-          <span>
-            Saved {new Date(rec.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
-          </span>
-          <span style={{ textTransform: 'capitalize' }}>
-            {rec.source_type}
-          </span>
-        </div>
-
-        {/* Delete card — inside interaction layer, not floating below */}
-        <button
-          onClick={() => setShowDelete(true)}
-          style={{
-            width:                   '100%',
-            height:                  '44px',
-            borderRadius:            '12px',
-            background:              'transparent',
-            border:                  '1px solid rgba(244,63,94,0.18)',
-            color:                   'rgba(244,63,94,0.55)',
-            fontFamily:              'var(--f-ui)',
-            fontSize:                '11px',
-            fontWeight:              700,
-            letterSpacing:           '1.5px',
-            textTransform:           'uppercase',
-            cursor:                  'pointer',
-            transition:              'all 160ms ease',
-            WebkitTapHighlightColor: 'transparent',
-            marginTop:               '16px',
-          }}
-          onMouseEnter={e => {
-            (e.currentTarget as HTMLElement).style.background = 'rgba(244,63,94,0.06)'
-            ;(e.currentTarget as HTMLElement).style.borderColor = 'rgba(244,63,94,0.35)'
-            ;(e.currentTarget as HTMLElement).style.color = 'rgba(244,63,94,0.80)'
-          }}
-          onMouseLeave={e => {
-            (e.currentTarget as HTMLElement).style.background = 'transparent'
-            ;(e.currentTarget as HTMLElement).style.borderColor = 'rgba(244,63,94,0.18)'
-            ;(e.currentTarget as HTMLElement).style.color = 'rgba(244,63,94,0.55)'
-          }}
-        >
-          Delete card
-        </button>
       </div>
-
-
-
-      {/* Remove experience sheet */}
-      {showRemove && (
-        <div
-          style={{
-            position:  'fixed', inset: 0,
-            background:'rgba(0,0,0,0.88)',
-            display:   'flex', alignItems: 'flex-end',
-            zIndex:    100,
-          }}
-          onClick={() => setShowRemove(false)}
-        >
-          <div
-            style={{
-              width:         '100%',
-              background:    '#161616',
-              borderRadius:  '22px 22px 0 0',
-              padding:       '28px 24px 40px',
-              border:        '1px solid rgba(255,255,255,0.06)',
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div style={{
-              fontFamily:   'var(--f-display)',
-              fontStyle:    'italic',
-              fontSize:     '22px',
-              color:        'rgba(255,255,255,0.92)',
-              marginBottom: '8px',
-            }}>
-              Remove experience log?
-            </div>
-            <div style={{
-              fontFamily:   'var(--f-body)',
-              fontSize:     '14px',
-              fontWeight:   300,
-              color:        'rgba(255,255,255,0.45)',
-              marginBottom: '28px',
-              lineHeight:   1.6,
-            }}>
-              This moves {rec.title} back to saved and clears your reaction.
-            </div>
-            <button
-              onClick={handleRemove}
-              disabled={saving}
-              style={{
-                width:         '100%',
-                background:    'rgba(244,63,94,0.10)',
-                border:        '1px solid rgba(244,63,94,0.30)',
-                color:         '#f43f5e',
-                fontFamily:    'var(--f-ui)',
-                fontWeight:    700,
-                fontSize:      '12px',
-                letterSpacing: '1.5px',
-                padding:       '14px',
-                borderRadius:  '13px',
-                cursor:        'pointer',
-                marginBottom:  '10px',
-                textTransform: 'uppercase',
-              }}
-            >
-              Yes, remove
-            </button>
-            <button
-              onClick={() => setShowRemove(false)}
-              style={{
-                width:         '100%',
-                background:    'transparent',
-                border:        'none',
-                color:         'rgba(255,255,255,0.35)',
-                fontFamily:    'var(--f-ui)',
-                fontSize:      '11px',
-                letterSpacing: '1px',
-                padding:       '10px',
-                cursor:        'pointer',
-                textTransform: 'uppercase',
-              }}
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Delete confirmation sheet */}
-      {showDelete && (
-        <div
-          style={{
-            position:   'fixed', inset: 0,
-            background: 'rgba(0,0,0,0.90)',
-            display:    'flex', alignItems: 'flex-end',
-            zIndex:     100,
-          }}
-          onClick={() => !deleting && setShowDelete(false)}
-        >
-          <div
-            style={{
-              width:         '100%',
-              maxWidth:      '430px',
-              margin:        '0 auto',
-              background:    '#161616',
-              borderRadius:  '22px 22px 0 0',
-              padding:       '28px 24px 40px',
-              border:        '1px solid rgba(255,255,255,0.06)',
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Drag handle */}
-            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '24px' }}>
-              <div style={{ width: '36px', height: '4px', borderRadius: '2px', background: 'rgba(255,255,255,0.14)' }} />
-            </div>
-            <div style={{
-              fontFamily:   'var(--f-display)',
-              fontStyle:    'italic',
-              fontSize:     '22px',
-              color:        'rgba(255,255,255,0.92)',
-              marginBottom: '8px',
-            }}>
-              Delete this card?
-            </div>
-            <div style={{
-              fontFamily:   'var(--f-body)',
-              fontSize:     '14px',
-              fontWeight:   300,
-              color:        'rgba(255,255,255,0.42)',
-              marginBottom: '28px',
-              lineHeight:   1.6,
-            }}>
-              {rec.title} will be permanently removed from your vault. This cannot be undone.
-            </div>
-            <button
-              onClick={handleDelete}
-              disabled={deleting}
-              style={{
-                width:         '100%',
-                background:    'rgba(244,63,94,0.12)',
-                border:        '1px solid rgba(244,63,94,0.35)',
-                color:         '#f43f5e',
-                fontFamily:    'var(--f-ui)',
-                fontWeight:    700,
-                fontSize:      '12px',
-                letterSpacing: '1.5px',
-                padding:       '15px',
-                borderRadius:  '13px',
-                cursor:        deleting ? 'not-allowed' : 'pointer',
-                marginBottom:  '10px',
-                textTransform: 'uppercase',
-                transition:    'all 160ms ease',
-              }}
-            >
-              {deleting ? 'Deleting…' : 'Yes, delete'}
-            </button>
-            <button
-              onClick={() => setShowDelete(false)}
-              disabled={deleting}
-              style={{
-                width:         '100%',
-                background:    'transparent',
-                border:        'none',
-                color:         'rgba(255,255,255,0.32)',
-                fontFamily:    'var(--f-ui)',
-                fontSize:      '11px',
-                letterSpacing: '1px',
-                padding:       '10px',
-                cursor:        'pointer',
-                textTransform: 'uppercase',
-              }}
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   )
 }
