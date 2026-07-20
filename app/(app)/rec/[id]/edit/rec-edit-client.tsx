@@ -124,7 +124,14 @@ export function RecEditClient({ recommendation: rec }: Props) {
         body:    JSON.stringify({ image_url: url }),
       })
       const json = await res.json()
-      if (json.data) setLiveImageUrl(url)
+      if (json.data) {
+        setLiveImageUrl(url)
+        // Invalidate the client router cache — without this, navigating
+        // back serves the cached detail page with the OLD photo even
+        // though the DB is already updated. (Next.js App Router caches
+        // server-rendered segments on the client.)
+        router.refresh()
+      }
     } catch {
       setError('Could not update photo — try again?')
     }
