@@ -725,6 +725,46 @@ async function enrichPlaces(
     return calculateConfidence(userTitle, candidateName) >= 55
   }
 
+  // ── Strict exactness (Solution 2) ────────────────────────────────
+  // A different job from hasNameOverlap, so a different word set.
+  // Overlap asks "is this plausibly related?" — 'bar' is noise there,
+  // because 'Gokul Bite' IS plausible for 'Gokul Bar'.
+  // Exactness asks "is every significant word accounted for?" — 'bar'
+  // is significant there, because it's what distinguishes Bar from Bite.
+  // Plausible ≠ exact. That distinction is the Gokul Bite lesson.
+  const ARTICLES = new Set(['the', 'and', 'or', 'of', 'at', 'in', 'by', 'a', 'an'])
+
+  function normalise(w: string): string {
+    // Strip diacritics so Café === Cafe (protects real matches, e.g. Leopold)
+    return w.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+  }
+
+  function significantTokens(name: string): string[] {
+    return normalise(name.toLowerCase())
+      .replace(/[^a-z0-9\s]/g, ' ')
+      .split(/\s+/)
+      .filter(w => w.length >= 2 && !ARTICLES.has(w))
+  }
+
+  function isStrictExact(userTitle: string, candidateName: string): boolean {
+    const titleTokens = significantTokens(userTitle)
+    const candTokens  = significantTokens(candidateName)
+    if (titleTokens.length === 0) return false
+    // Every significant title word must appear in the candidate name —
+    // exactly, or as a close variant (≥80% similarity handles plurals
+    // and spellings; 'bar' vs 'bite' scores ~33% and correctly fails).
+    return titleTokens.every(t =>
+      candTokens.some(c => c === t || c.includes(t) || t.includes(c) ||
+        calculateConfidence(t, c) >= 80)
+    )
+  }
+
+  // Top photo references for a place — free, already in the search
+  // response. Stored as refs (stable), resolved to URLs lazily later.
+  function photoRefs(place: GooglePlace): string[] {
+    return (place.photos ?? []).slice(0, 3).map(ph => ph.name)
+  }
+
   const plausiblePlaces = allPlaces.filter(p =>
     hasNameOverlap(title, p.displayName?.text ?? '')
   )
@@ -892,15 +932,33 @@ match_type:
     disambiguateWithLLM(),
   ])
 
+  // ── LAYER 5a: Strict exactness discipline (hard rule) ─────────────
+  // The LLM may call 'Gokul Bite' exact for 'Gokul Bar' — names are
+  // similar and the model is trained to be decisive. This rule is
+  // applied after the LLM and cannot be overridden by it: a match is
+  // only 'exact' when every significant word in the user's title is
+  // accounted for in the venue name. Otherwise → 'possible' → the
+  // user decides via the candidate strip. Machine unsure → human picks.
+  let finalResult = { ...llmResult }
+  if (finalResult.match_type === 'exact' || finalResult.match_type === 'likely') {
+    const chosenName = places[finalResult.chosen_index]?.displayName?.text ?? ''
+    if (!isStrictExact(title, chosenName)) {
+      finalResult = {
+        ...finalResult,
+        match_type: 'possible',
+        reason: `${finalResult.reason} (demoted: '${chosenName}' does not account for every word of '${title}')`,
+      }
+    }
+  }
+
   // ── LAYER 5b: Geographic consistency (hard rule) ──────────────────
   // If the user gave a location hint, verify the chosen place's
   // structured locality (from addressComponents) contains hint words.
   // This is a hard rule: mismatch → "possible", always.
   // We use the structured locality here, not the raw formattedAddress,
   // so "Colaba" is compared to "Colaba" not "Mumbai, Maharashtra 400001".
-  let finalResult = { ...llmResult }
-  if (locationHint && llmResult.match_type !== 'none' && llmResult.match_type !== 'possible') {
-    const chosen       = places[llmResult.chosen_index]
+  if (locationHint && finalResult.match_type !== 'none' && finalResult.match_type !== 'possible') {
+    const chosen       = places[finalResult.chosen_index]
     const chosenLocale = extractLocality(chosen?.addressComponents, null)
     if (chosenLocale) {
       const hintWords   = locationHint.toLowerCase().split(/[\s,]+/).filter(w => w.length > 2)
@@ -910,9 +968,9 @@ match_type:
       )
       if (!localeMatch) {
         finalResult = {
-          ...llmResult,
+          ...finalResult,
           match_type: 'possible',
-          reason: `${llmResult.reason} (locality '${chosenLocale}' doesn't match hint '${locationHint}')`,
+          reason: `${finalResult.reason} (locality '${chosenLocale}' doesn't match hint '${locationHint}')`,
         }
       }
     }
@@ -932,11 +990,12 @@ match_type:
 
   if (finalResult.match_type === 'possible') {
     const candidates = places.map((p, i) => ({
-      name:     p.displayName?.text ?? '',
-      address:  p.formattedAddress  ?? null,
-      locality: extractLocality(p.addressComponents, locationHint),
-      cuisine:  formatPrimaryType(p.primaryType),
-      photoUrl: photoUrls[i] ?? null,
+      name:       p.displayName?.text ?? '',
+      address:    p.formattedAddress  ?? null,
+      locality:   extractLocality(p.addressComponents, locationHint),
+      cuisine:    formatPrimaryType(p.primaryType),
+      photoUrl:   photoUrls[i] ?? null,
+      photo_refs: photoRefs(p),
     }))
     await supabase
       .from('recommendations')
@@ -973,6 +1032,7 @@ match_type:
         cuisine,
         place_confirmed:  true,
         place_candidates: null,
+        place_photo_refs: photoRefs(chosen),
       },
     })
     .eq('id', rec.id)
