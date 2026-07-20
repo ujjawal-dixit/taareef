@@ -15,7 +15,8 @@ import { useState, useCallback, useEffect } from 'react'
 import { useRouter }   from 'next/navigation'
 import Link            from 'next/link'
 import { CATEGORIES }  from '@/constants/categories'
-import type { Recommendation, Category, SourceType } from '@/lib/types'
+import type { Recommendation, Category, SourceType, RecMetadata } from '@/lib/types'
+import { PlacePhotoPicker } from '@/components/features/places/photo-picker'
 
 type Props = { recommendation: Recommendation }
 
@@ -79,6 +80,9 @@ export function RecEditClient({ recommendation: rec }: Props) {
       ? (rec.metadata as Record<string,unknown>).dates as string : ''
   )
   const [saving, setSaving] = useState(false)
+  // Photo picker (place categories) — selection persists immediately,
+  // independent of "Save changes", matching the detail screen's behaviour
+  const [liveImageUrl, setLiveImageUrl] = useState<string | null>(rec.image_url)
   const [error,  setError]  = useState<string | null>(null)
 
   const selectedCat = CATEGORIES.find(c => c.id === category)
@@ -110,6 +114,20 @@ export function RecEditClient({ recommendation: rec }: Props) {
     caretColor:   '#1fce94',
     transition:   'border-color 160ms ease',
     boxSizing:    'border-box',
+  }
+
+  async function handleSelectPhoto(url: string) {
+    try {
+      const res  = await fetch(`/api/recommendations/${rec.id}`, {
+        method:  'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ image_url: url }),
+      })
+      const json = await res.json()
+      if (json.data) setLiveImageUrl(url)
+    } catch {
+      setError('Could not update photo — try again?')
+    }
   }
 
   const handleSave = useCallback(async () => {
@@ -426,6 +444,29 @@ export function RecEditClient({ recommendation: rec }: Props) {
               onBlur={e => { e.target.style.borderColor = 'rgba(255,255,255,0.08)' }}
             />
           </div>
+
+          {/* ── PLACE PHOTO PICKER (Build 3) — same component as detail */}
+          {(category === 'dine' || category === 'visit' || category === 'do') && (() => {
+            const refs = (rec.metadata as RecMetadata).place_photo_refs
+            if (!Array.isArray(refs) || refs.length === 0) return null
+            return (
+              <div>
+                <label style={{
+                  fontFamily: 'var(--f-ui)', fontSize: '10px', fontWeight: 700,
+                  letterSpacing: '2px', textTransform: 'uppercase',
+                  color: 'rgba(255,255,255,0.40)', display: 'block', marginBottom: '8px',
+                }}>
+                  Card photo
+                </label>
+                <PlacePhotoPicker
+                  refs={refs}
+                  currentUrl={liveImageUrl}
+                  accentRgb={selectedCat?.vividRgb ?? '31,206,148'}
+                  onSelect={handleSelectPhoto}
+                />
+              </div>
+            )
+          })()}
 
           {error && (
             <div style={{
