@@ -32,6 +32,7 @@ export async function PATCH(request: Request, { params }: Params) {
     if (body.reaction    !== undefined) payload.reaction    = body.reaction
     if (body.priority    !== undefined) payload.priority    = body.priority
     if (body.location    !== undefined) payload.location    = body.location
+    if (body.image_url   !== undefined) payload.image_url   = body.image_url
     if (body.metadata    !== undefined) payload.metadata    = body.metadata
     const { data, error } = await supabase.from('recommendations').update(payload).eq('id', id).eq('user_id', user.id).select().single()
     if (error || !data) return NextResponse.json<ApiResponse<null>>({ data: null, error: 'Recommendation not found' }, { status: 404 })
