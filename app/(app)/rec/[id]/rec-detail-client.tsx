@@ -210,6 +210,33 @@ export function RecDetailClient({ recommendation: rec, categoryConfig: cfg }: Pr
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rec.id, rec.category])
 
+  // Place enrichment arrives while you watch: if this place card has no
+  // enrichment outcome yet (fresh save, opened fast), re-fetch once at
+  // 2.5s so the photo, strip, or nudge appears without a manual refresh.
+  // Mirrors the book-enrichment pattern above.
+  useEffect(() => {
+    const isPlace = rec.category === 'dine' || rec.category === 'visit' || rec.category === 'do'
+    if (!isPlace) return
+    const m = rec.metadata
+    if (m.place_confirmed || m.place_candidates || m.place_no_results) return
+
+    const timer = setTimeout(() => {
+      fetch(`/api/recommendations/${rec.id}`)
+        .then(r => r.json())
+        .then(({ data }) => {
+          if (!data) return
+          const freshMeta = (data.metadata ?? {}) as import('@/lib/types').RecMetadata
+          const settled = freshMeta.place_confirmed || freshMeta.place_candidates || freshMeta.place_no_results
+          if (!settled) return
+          setLiveMeta(freshMeta as Record<string, unknown>)
+          if (data.image_url) setLiveImageUrl(data.image_url)
+        })
+        .catch(() => {})
+    }, 2500)
+    return () => clearTimeout(timer)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rec.id, rec.category])
+
   // Restore note draft from localStorage on mount
   useEffect(() => {
     if (rec.notes) return
