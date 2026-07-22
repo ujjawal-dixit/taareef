@@ -17,6 +17,11 @@ import { NextRequest, NextResponse }   from 'next/server'
 import { createClient }               from '@/lib/supabase/server'
 import { getStreamingPlatforms }      from '@/lib/utils/watchmode-server'
 import type { Recommendation, RecMetadata } from '@/lib/types'
+import {
+  calculateConfidence, hasNameOverlap, isStrictExact,
+  extractLocality, hintMatchesAddress, formatPrimaryType,
+  type GoogleAddressComponent,
+} from '@/lib/places/matching'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // POST /api/enrich/[id]
@@ -627,46 +632,61 @@ async function enrichPlaces(
     :                  category === 'visit' ? 'tourist_attraction'
     :                  null
 
-  let searchRes: Response
-  try {
-    searchRes = await fetch(
-      'https://places.googleapis.com/v1/places:searchText',
-      {
-        method:  'POST',
-        headers: {
-          'Content-Type':     'application/json',
-          'X-Goog-Api-Key':   googleKey,
-          // addressComponents gives us labelled address segments —
-          // no string parsing required to extract locality
-          'X-Goog-FieldMask': [
-            'places.displayName',
-            'places.formattedAddress',
-            'places.addressComponents',
-            'places.primaryType',
-            'places.photos',
-          ].join(','),
-        },
-        body: JSON.stringify({
-          textQuery,
-          maxResultCount: 3,
-          languageCode:   'en',
-          ...(includedType ? { includedType } : {}),
-        }),
+  // Two-pass search: pass 1 filters by venue type (precision); if that
+  // returns nothing, pass 2 drops the filter (recall). Google's primary
+  // types are narrower than our categories — a theme park is
+  // 'amusement_park', not 'tourist_attraction'; a pure bar is 'bar',
+  // not 'restaurant'. The filter that cleans results for common venues
+  // silently EXCLUDED these. One extra API call, spent only on misses.
+  // (This was the Imagicaa Khopoli lesson.)
+  async function searchPlaces(withType: boolean): Promise<GooglePlace[] | null> {
+    try {
+      const res = await fetch(
+        'https://places.googleapis.com/v1/places:searchText',
+        {
+          method:  'POST',
+          headers: {
+            'Content-Type':     'application/json',
+            'X-Goog-Api-Key':   googleKey as string,
+            // addressComponents gives us labelled address segments —
+            // no string parsing required to extract locality
+            'X-Goog-FieldMask': [
+              'places.displayName',
+              'places.formattedAddress',
+              'places.addressComponents',
+              'places.primaryType',
+              'places.photos',
+            ].join(','),
+          },
+          body: JSON.stringify({
+            textQuery,
+            maxResultCount: 3,
+            languageCode:   'en',
+            ...(withType && includedType ? { includedType } : {}),
+          }),
+        }
+      )
+      if (!res.ok) {
+        const errText = await res.text().catch(() => '')
+        console.error('[enrichPlaces] Google search failed:', res.status, errText)
+        return null
       }
-    )
-  } catch (err) {
-    console.error('[enrichPlaces] network error:', err)
-    return NextResponse.json({ error: 'Places search network error' }, { status: 502 })
+      const data = await res.json() as { places?: GooglePlace[] }
+      return data.places ?? []
+    } catch (err) {
+      console.error('[enrichPlaces] network error:', err)
+      return null
+    }
   }
 
-  if (!searchRes.ok) {
-    const errText = await searchRes.text().catch(() => '')
-    console.error('[enrichPlaces] Google search failed:', searchRes.status, errText)
+  let allPlaces = await searchPlaces(true)
+  if (allPlaces === null) {
     return NextResponse.json({ error: 'Google Places search failed' }, { status: 502 })
   }
-
-  const searchData = await searchRes.json() as { places?: GooglePlace[] }
-  const allPlaces  = searchData.places ?? []
+  if (allPlaces.length === 0 && includedType) {
+    console.log('[enrichPlaces] type-filtered pass empty — retrying without filter')
+    allPlaces = (await searchPlaces(false)) ?? []
+  }
 
   // DIAGNOSTIC: what did Google actually return?
   console.log('[enrichPlaces] query:', JSON.stringify({ textQuery, includedType }))
@@ -696,69 +716,6 @@ async function enrichPlaces(
   // Logic: tokenise both names into words of 3+ characters, excluding
   // noise words. If word overlap is zero AND string similarity < 55%,
   // the candidate is not a plausible match. Filtered out entirely.
-  const NOISE_WORDS = new Set([
-    'bar', 'restaurant', 'cafe', 'café', 'hotel', 'house',
-    'the', 'and', 'or', 'of', 'at', 'in', 'by', 'new',
-  ])
-
-  function tokenise(name: string): Set<string> {
-    return new Set(
-      name.toLowerCase()
-        .replace(/[^a-z0-9\s]/g, ' ')
-        .split(/\s+/)
-        .filter(w => w.length >= 3 && !NOISE_WORDS.has(w))
-    )
-  }
-
-  function hasNameOverlap(userTitle: string, candidateName: string): boolean {
-    const titleTokens     = tokenise(userTitle)
-    const candidateTokens = tokenise(candidateName)
-    // Check word overlap
-    for (const word of titleTokens) {
-      if (candidateTokens.has(word)) return true
-    }
-    // Check partial match — "Gokul" inside "Gokul Bar & Restaurant"
-    const titleLower     = userTitle.toLowerCase()
-    const candidateLower = candidateName.toLowerCase()
-    if (candidateLower.includes(titleLower) || titleLower.includes(candidateLower)) return true
-    // Fall back to string similarity
-    return calculateConfidence(userTitle, candidateName) >= 55
-  }
-
-  // ── Strict exactness (Solution 2) ────────────────────────────────
-  // A different job from hasNameOverlap, so a different word set.
-  // Overlap asks "is this plausibly related?" — 'bar' is noise there,
-  // because 'Gokul Bite' IS plausible for 'Gokul Bar'.
-  // Exactness asks "is every significant word accounted for?" — 'bar'
-  // is significant there, because it's what distinguishes Bar from Bite.
-  // Plausible ≠ exact. That distinction is the Gokul Bite lesson.
-  const ARTICLES = new Set(['the', 'and', 'or', 'of', 'at', 'in', 'by', 'a', 'an'])
-
-  function normalise(w: string): string {
-    // Strip diacritics so Café === Cafe (protects real matches, e.g. Leopold)
-    return w.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-  }
-
-  function significantTokens(name: string): string[] {
-    return normalise(name.toLowerCase())
-      .replace(/[^a-z0-9\s]/g, ' ')
-      .split(/\s+/)
-      .filter(w => w.length >= 2 && !ARTICLES.has(w))
-  }
-
-  function isStrictExact(userTitle: string, candidateName: string): boolean {
-    const titleTokens = significantTokens(userTitle)
-    const candTokens  = significantTokens(candidateName)
-    if (titleTokens.length === 0) return false
-    // Every significant title word must appear in the candidate name —
-    // exactly, or as a close variant (≥80% similarity handles plurals
-    // and spellings; 'bar' vs 'bite' scores ~33% and correctly fails).
-    return titleTokens.every(t =>
-      candTokens.some(c => c === t || c.includes(t) || t.includes(c) ||
-        calculateConfidence(t, c) >= 80)
-    )
-  }
-
   // Top photo references for a place — free, already in the search
   // response. Stored as refs (stable), resolved to URLs lazily later.
   function photoRefs(place: GooglePlace): string[] {
@@ -796,30 +753,6 @@ async function enrichPlaces(
   // Read Google's addressComponents directly — each segment is already
   // labelled with its type. No comma-counting, no regex fragility,
   // no "Maharashtra 400001" leaking into the locality field.
-  function extractLocality(
-    components: GoogleAddressComponent[] | undefined,
-    fallback:   string | null,
-  ): string | null {
-    if (!components?.length) return fallback
-
-    // Priority order: sublocality_level_1 (neighbourhood) → locality (city)
-    // This gives "Colaba" over "Mumbai" when both are present.
-    const priority = [
-      'sublocality_level_1',
-      'sublocality_level_2',
-      'sublocality',
-      'neighborhood',
-      'locality',
-    ]
-
-    for (const type of priority) {
-      const match = components.find(c => c.types.includes(type))
-      if (match) return match.longText
-    }
-
-    return fallback
-  }
-
   // ── LAYER 4: Fetch photos in parallel with LLM ───────────────────
   const fetchPhoto = async (place: GooglePlace): Promise<string | null> => {
     const ref = place.photos?.[0]?.name
@@ -892,7 +825,7 @@ match_type:
         method:  'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${groqKey}` },
         body: JSON.stringify({
-          model:       'llama-3.3-70b-versatile',
+          model:       'llama-3.1-8b-instant',   // constrained classification — ~5x faster, same accuracy for this task
           temperature: 0.0,
           max_tokens:  100,
           messages:    [{ role: 'user', content: prompt }],
@@ -941,8 +874,12 @@ match_type:
   // user decides via the candidate strip. Machine unsure → human picks.
   let finalResult = { ...llmResult }
   if (finalResult.match_type === 'exact' || finalResult.match_type === 'likely') {
-    const chosenName = places[finalResult.chosen_index]?.displayName?.text ?? ''
-    if (!isStrictExact(title, chosenName)) {
+    const chosenPlace = places[finalResult.chosen_index]
+    const chosenName  = chosenPlace?.displayName?.text ?? ''
+    // Address passed as a secondary accounting source: location words
+    // the user appends ('Khopoli') are absorbed by the address, while
+    // distinguishing words ('Bar') can never be — exact-token rule.
+    if (!isStrictExact(title, chosenName, chosenPlace?.formattedAddress ?? null)) {
       finalResult = {
         ...finalResult,
         match_type: 'possible',
@@ -958,20 +895,17 @@ match_type:
   // We use the structured locality here, not the raw formattedAddress,
   // so "Colaba" is compared to "Colaba" not "Mumbai, Maharashtra 400001".
   if (locationHint && finalResult.match_type !== 'none' && finalResult.match_type !== 'possible') {
-    const chosen       = places[finalResult.chosen_index]
-    const chosenLocale = extractLocality(chosen?.addressComponents, null)
-    if (chosenLocale) {
-      const hintWords   = locationHint.toLowerCase().split(/[\s,]+/).filter(w => w.length > 2)
-      const localeMatch = hintWords.some(w =>
-        chosenLocale.toLowerCase().includes(w) ||
-        w.includes(chosenLocale.toLowerCase().slice(0, 4))
-      )
-      if (!localeMatch) {
-        finalResult = {
-          ...finalResult,
-          match_type: 'possible',
-          reason: `${finalResult.reason} (locality '${chosenLocale}' doesn't match hint '${locationHint}')`,
-        }
+    const chosen = places[finalResult.chosen_index]
+    // Users think in cities; Google answers in neighbourhoods. Test the
+    // hint against the WHOLE address (every component + formatted string),
+    // not just the finest-grained locality — 'Mumbai' must match Gateway
+    // of India even though its locality is 'Apollo Bandar'.
+    // (This was the Gateway of India lesson.)
+    if (!hintMatchesAddress(locationHint, chosen?.addressComponents, chosen?.formattedAddress)) {
+      finalResult = {
+        ...finalResult,
+        match_type: 'possible',
+        reason: `${finalResult.reason} (address doesn't contain hint '${locationHint}')`,
       }
     }
   }
@@ -1047,15 +981,6 @@ match_type:
 
 // ── Helpers ───────────────────────────────────────────────────────
 
-// Convert Google's snake_case primaryType to readable Title Case.
-// "indian_restaurant" → "Indian Restaurant"
-function formatPrimaryType(primaryType: string | undefined): string | null {
-  if (!primaryType) return null
-  return primaryType
-    .replace(/_/g, ' ')
-    .replace(/\b\w/g, c => c.toUpperCase())
-}
-
 // String-similarity fallback when LLM is unavailable.
 // Uses calculateConfidence (Levenshtein) as a last resort.
 function stringFallback(candidates: GooglePlace[], userTitle: string): PlaceLLMResult {
@@ -1093,34 +1018,6 @@ async function enrichBook(
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Confidence scoring — Levenshtein-based similarity ratio (0–100)
-// ─────────────────────────────────────────────────────────────────────────────
-function calculateConfidence(query: string, result: string): number {
-  const a = query.toLowerCase().trim()
-  const b = result.toLowerCase().trim()
-  if (a === b) return 100
-
-  const maxLen = Math.max(a.length, b.length)
-  if (maxLen === 0) return 100
-
-  const distance = levenshtein(a, b)
-  return Math.round((1 - distance / maxLen) * 100)
-}
-
-function levenshtein(a: string, b: string): number {
-  const m = a.length
-  const n = b.length
-  const dp: number[][] = Array.from({ length: m + 1 }, (_, i) =>
-    Array.from({ length: n + 1 }, (_, j) => (i === 0 ? j : j === 0 ? i : 0))
-  )
-  for (let i = 1; i <= m; i++) {
-    for (let j = 1; j <= n; j++) {
-      dp[i][j] = a[i - 1] === b[j - 1]
-        ? dp[i - 1][j - 1]
-        : 1 + Math.min(dp[i - 1][j], dp[i][j - 1], dp[i - 1][j - 1])
-    }
-  }
-  return dp[m][n]
-}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Type definitions
@@ -1185,12 +1082,6 @@ interface PlaceLLMResult {
   chosen_index: number
   match_type:   'exact' | 'likely' | 'possible' | 'none'
   reason:       string
-}
-
-interface GoogleAddressComponent {
-  longText:  string
-  shortText: string
-  types:     string[]
 }
 
 interface GooglePlace {
