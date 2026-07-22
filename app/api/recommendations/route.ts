@@ -79,7 +79,8 @@ export async function POST(request: NextRequest) {
       if (appUrl) {
         waitUntil(
           // Small delay lets the database write fully commit before enrichment reads the record
-          new Promise<void>(resolve => setTimeout(resolve, 800))
+          // (300ms is sufficient — the enrich route re-reads the row itself)
+          new Promise<void>(resolve => setTimeout(resolve, 300))
             .then(() => fetch(`${appUrl}/api/enrich/${data.id}`, {
               method:  'POST',
               headers: { cookie: request.headers.get('cookie') ?? '' },
