@@ -35,6 +35,21 @@ export const MODEL_TRANSCRIBE = 'whisper-large-v3-turbo'
 /** Groq chat completions endpoint. */
 export const GROQ_CHAT_URL = 'https://api.groq.com/openai/v1/chat/completions'
 
+/** Groq's model catalogue. Used by the health check to detect retired models. */
+export const GROQ_MODELS_URL = 'https://api.groq.com/openai/v1/models'
+
+/**
+ * Every model this app depends on, with the user-facing feature it powers.
+ * The health check iterates this list — adding a model here is enough to
+ * bring it under monitoring.
+ */
+export const CONFIGURED_MODELS: ReadonlyArray<{ id: string; powers: string }> = [
+  { id: MODEL_VISION,       powers: 'screenshot scanning' },
+  { id: MODEL_EXTRACT,      powers: 'capture extraction (all three capture methods)' },
+  { id: MODEL_DISAMBIGUATE, powers: 'place matching for Dine / Visit / Experience' },
+  { id: MODEL_TRANSCRIBE,   powers: 'voice capture' },
+]
+
 /**
  * Hard ceiling Groq enforces on a request containing an image (20MB).
  * We target well below it after client-side compression.
