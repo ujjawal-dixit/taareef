@@ -5,6 +5,8 @@ import type { UnderstandResult }      from '../understand/route'
 import {
   MODEL_VISION,
   GROQ_CHAT_URL,
+  QWEN_REASONING_EFFORT,
+  TOKENS_VISION,
   stripReasoning,
 }                                     from '@/lib/constants/models'
 
@@ -53,8 +55,10 @@ async function callVision(
     },
     body: JSON.stringify({
       model:                 MODEL_VISION,
-      max_completion_tokens: 500,
+      max_completion_tokens: TOKENS_VISION,
       temperature:           0.0,
+      // Qwen3 reasons by default; 'none' keeps the whole budget for the answer.
+      reasoning_effort:      QWEN_REASONING_EFFORT,
       messages: [
         {
           role:    'user',
@@ -148,9 +152,15 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const visionJson = await visionRes.json()
-    const rawText    = (visionJson.choices?.[0]?.message?.content ?? '') as string
-    const ocrText    = stripReasoning(rawText)
+    const visionJson   = await visionRes.json()
+    const visionChoice = visionJson.choices?.[0]
+    const rawText      = (visionChoice?.message?.content ?? '') as string
+    const finishReason = visionChoice?.finish_reason ?? 'unknown'
+    const ocrText      = stripReasoning(rawText)
+
+    if (finishReason === 'length') {
+      console.warn(`[ocr/vision] truncated — budget exhausted, len=${rawText.length}`)
+    }
 
     // Explicit failure signals from the vision model.
     if (ocrText === 'UNCLEAR_IMAGE') {
