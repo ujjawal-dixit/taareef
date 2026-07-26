@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient }              from '@/lib/supabase/server'
 import { isValidCategory }           from '@/lib/types'
 import type { ApiResponse, Category, SourceType } from '@/lib/types'
+import { MODEL_EXTRACT, stripReasoning } from '@/lib/constants/models'
 
 // ── TYPES ─────────────────────────────────────────────────────────
 
@@ -452,7 +453,7 @@ export async function POST(request: NextRequest) {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model:       'llama-3.3-70b-versatile',
+        model:       MODEL_EXTRACT,
         max_tokens:  600,
         temperature: 0.0,  // Zero temperature — deterministic, no creativity
         messages: [
@@ -471,7 +472,8 @@ export async function POST(request: NextRequest) {
     }
 
     const llmJson    = await llmRes.json()
-    const rawContent = llmJson.choices?.[0]?.message?.content ?? ''
+    // stripReasoning: some current models emit <think> traces before the JSON.
+    const rawContent = stripReasoning(llmJson.choices?.[0]?.message?.content ?? '')
 
     // Parse — strip any accidental markdown fences
     let rawExtracted: Record<string, unknown>
