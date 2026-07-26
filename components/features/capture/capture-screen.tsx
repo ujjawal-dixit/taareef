@@ -24,6 +24,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import type { CreateRecommendationInput, Category, SourceType } from '@/lib/types'
 import type { UnderstandResult } from '@/app/api/capture/understand/route'
 import { CATEGORIES } from '@/constants/categories'
+import { compressImage } from '@/lib/utils/compress-image'
 
 // ── TYPES ─────────────────────────────────────────────────────────
 
@@ -426,8 +427,10 @@ function ScanInput({ onUnderstood, onError, error }: {
     setPreview(URL.createObjectURL(file))
     setProcessing(true)
     try {
+      // Shrink before upload — fails open, returns the original on any error.
+      const upload = await compressImage(file)
       const form = new FormData()
-      form.append('image', file)
+      form.append('image', upload)
       const res  = await fetch('/api/capture/ocr', { method: 'POST', body: form })
       const data = await res.json()
       if (!res.ok || !data.data) {
