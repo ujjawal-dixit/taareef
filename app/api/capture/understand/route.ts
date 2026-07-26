@@ -2,7 +2,12 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient }              from '@/lib/supabase/server'
 import { isValidCategory }           from '@/lib/types'
 import type { ApiResponse, Category, SourceType } from '@/lib/types'
-import { MODEL_EXTRACT, stripReasoning } from '@/lib/constants/models'
+import {
+  MODEL_EXTRACT,
+  GPT_OSS_REASONING_EFFORT,
+  TOKENS_EXTRACT,
+  extractJson,
+} from '@/lib/constants/models'
 
 // ── TYPES ─────────────────────────────────────────────────────────
 
@@ -453,9 +458,12 @@ export async function POST(request: NextRequest) {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model:       MODEL_EXTRACT,
-        max_tokens:  600,
-        temperature: 0.0,  // Zero temperature — deterministic, no creativity
+        model:             MODEL_EXTRACT,
+        max_tokens:        TOKENS_EXTRACT,
+        temperature:       0.0,  // Zero temperature — deterministic, no creativity
+        reasoning_effort:  GPT_OSS_REASONING_EFFORT,
+        include_reasoning: false,
+        response_format:   { type: 'json_object' },
         messages: [
           { role: 'system', content: SYSTEM_PROMPT },
           { role: 'user',   content: formattedMsg  },
@@ -471,18 +479,33 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const llmJson    = await llmRes.json()
-    // stripReasoning: some current models emit <think> traces before the JSON.
-    const rawContent = stripReasoning(llmJson.choices?.[0]?.message?.content ?? '')
+    const llmJson      = await llmRes.json()
+    const choice       = llmJson.choices?.[0]
+    const rawContent   = (choice?.message?.content ?? '') as string
+    const finishReason = choice?.finish_reason ?? 'unknown'
 
-    // Parse — strip any accidental markdown fences
+    // finish_reason === 'length' means the token budget was exhausted — usually
+    // by reasoning tokens. That is a config problem, not a bad-input problem.
+    const jsonText = extractJson(rawContent)
+
     let rawExtracted: Record<string, unknown>
     try {
-      rawExtracted = JSON.parse(rawContent.replace(/```json|```/g, '').trim())
-    } catch {
-      console.error('[understand] JSON parse failed:', rawContent)
+      if (!jsonText) throw new Error('no JSON object found in completion')
+      rawExtracted = JSON.parse(jsonText) as Record<string, unknown>
+    } catch (parseErr) {
+      console.error(
+        `[understand] parse failed model=${MODEL_EXTRACT} finish_reason=${finishReason} ` +
+        `len=${rawContent.length} err=${String(parseErr)} raw="${rawContent.slice(0, 400)}"`
+      )
+      const truncated = finishReason === 'length'
       return NextResponse.json<ApiResponse<null>>(
-        { data: null, error: 'Could not understand input — please try again' }, { status: 422 }
+        {
+          data:  null,
+          error: truncated
+            ? 'That was a lot to read — try a shorter or cropped screenshot'
+            : 'Could not understand input — please try again',
+        },
+        { status: truncated ? 413 : 422 }
       )
     }
 
