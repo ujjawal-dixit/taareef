@@ -158,8 +158,15 @@ export async function POST(request: NextRequest) {
     const finishReason = visionChoice?.finish_reason ?? 'unknown'
     const ocrText      = stripReasoning(rawText)
 
+    // Always log the budget outcome, not just failures. This is how we learn
+    // whether TOKENS_VISION is actually sufficient for dense, multi-frame
+    // screenshots — a silent truncation would otherwise look like a model
+    // that simply "missed" part of the image.
     if (finishReason === 'length') {
-      console.warn(`[ocr/vision] truncated — budget exhausted, len=${rawText.length}`)
+      console.warn(
+        `[ocr/vision] TRUNCATED — budget exhausted at ${TOKENS_VISION} tokens, ` +
+        `chars=${rawText.length}. Raise TOKENS_VISION in lib/constants/models.ts.`
+      )
     }
 
     // Explicit failure signals from the vision model.
@@ -181,7 +188,11 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    console.log(`[ocr] model=${MODEL_VISION} extracted="${ocrText.slice(0, 80)}…"`)
+    console.log(
+      `[ocr] model=${MODEL_VISION} finish_reason=${finishReason} ` +
+      `budget=${TOKENS_VISION} chars=${ocrText.length} ` +
+      `extracted="${ocrText.slice(0, 80)}…"`
+    )
 
     // ── STEP 2: UNDERSTAND ────────────────────────────────────────
     const understandRes = await fetch(
