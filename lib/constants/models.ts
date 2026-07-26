@@ -42,8 +42,53 @@ export const GROQ_CHAT_URL = 'https://api.groq.com/openai/v1/chat/completions'
 export const VISION_MAX_REQUEST_BYTES = 20 * 1024 * 1024
 
 /**
- * Strips reasoning traces from models that emit them (Qwen 3.6 has a
- * thinking mode). Safe to run on any completion — a no-op when absent.
+ * Reasoning controls.
+ *
+ * GPT-OSS models reason before answering, and those reasoning tokens are
+ * drawn from the SAME max_tokens budget as the answer. With a small budget
+ * the model can spend everything thinking and return empty or truncated
+ * content — which is what broke extraction on 2026-07-26.
+ *
+ * Groq does not support `reasoning_format` on GPT-OSS; use these instead.
+ */
+export const GPT_OSS_REASONING_EFFORT = 'low'   // gpt-oss: 'low' | 'medium' | 'high'
+export const QWEN_REASONING_EFFORT    = 'none'  // qwen3:   'none' | 'default'
+
+/**
+ * Token budgets. Deliberately generous: reasoning tokens are billed against
+ * these, so a budget sized only for the answer will starve the answer.
+ */
+export const TOKENS_VISION       = 2000
+export const TOKENS_EXTRACT      = 3000
+export const TOKENS_DISAMBIGUATE = 1500
+
+/**
+ * Pulls a JSON object out of a model completion.
+ *
+ * Handles, in order: reasoning traces (<think>), markdown fences, and any
+ * conversational preamble or trailing commentary around the object. Returns
+ * null when no plausible JSON object is present, so callers can log the raw
+ * text rather than throwing on a parse.
+ */
+export function extractJson(text: string): string | null {
+  if (!text) return null
+
+  const cleaned = text
+    .replace(/<think>[\s\S]*?<\/think>/gi, '')
+    .replace(/```json/gi, '')
+    .replace(/```/g, '')
+    .trim()
+
+  const start = cleaned.indexOf('{')
+  const end   = cleaned.lastIndexOf('}')
+  if (start === -1 || end === -1 || end <= start) return null
+
+  return cleaned.slice(start, end + 1)
+}
+
+/**
+ * Strips reasoning traces from prose (non-JSON) completions.
+ * Safe on any completion — a no-op when no trace is present.
  */
 export function stripReasoning(text: string): string {
   return text.replace(/<think>[\s\S]*?<\/think>/gi, '').trim()
