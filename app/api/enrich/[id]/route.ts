@@ -17,6 +17,7 @@ import { NextRequest, NextResponse }   from 'next/server'
 import { createClient }               from '@/lib/supabase/server'
 import { getStreamingPlatforms }      from '@/lib/utils/watchmode-server'
 import type { Recommendation, RecMetadata } from '@/lib/types'
+import { MODEL_DISAMBIGUATE, GROQ_CHAT_URL, stripReasoning } from '@/lib/constants/models'
 import {
   calculateConfidence, hasNameOverlap, isStrictExact,
   extractLocality, hintMatchesAddress, formatPrimaryType,
@@ -821,11 +822,11 @@ match_type:
       const controller = new AbortController()
       const timeout    = setTimeout(() => controller.abort(), 5000)
 
-      const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      const res = await fetch(GROQ_CHAT_URL, {
         method:  'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${groqKey}` },
         body: JSON.stringify({
-          model:       'llama-3.1-8b-instant',   // constrained classification — ~5x faster, same accuracy for this task
+          model:       MODEL_DISAMBIGUATE,   // constrained classification — favours speed over reasoning depth
           temperature: 0.0,
           max_tokens:  100,
           messages:    [{ role: 'user', content: prompt }],
@@ -837,7 +838,7 @@ match_type:
       if (!res.ok) throw new Error(`Groq ${res.status}`)
 
       const data    = await res.json() as { choices?: Array<{ message?: { content?: string } }> }
-      const content = data.choices?.[0]?.message?.content ?? ''
+      const content = stripReasoning(data.choices?.[0]?.message?.content ?? '')
       const parsed  = JSON.parse(content.replace(/```json|```/g, '').trim()) as PlaceLLMResult
 
       console.log('[enrichPlaces] LLM raw:', content.replace(/\n/g, ' ').slice(0, 200))
