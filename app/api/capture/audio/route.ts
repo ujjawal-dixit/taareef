@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient }              from '@/lib/supabase/server'
 import type { ApiResponse }          from '@/lib/types'
 import type { UnderstandResult }     from '../understand/route'
+import { MODEL_TRANSCRIBE }          from '@/lib/constants/models'
 
 // app/api/capture/audio/route.ts
 // Step 1: Transcribe voice via Groq Whisper (fast, accurate, handles Indian accents)
@@ -36,7 +37,7 @@ export async function POST(request: NextRequest) {
     // ── STEP 1: TRANSCRIBE ────────────────────────────────────────
     const whisperForm = new FormData()
     whisperForm.append('file', audioFile, 'audio.webm')
-    whisperForm.append('model', 'whisper-large-v3-turbo')
+    whisperForm.append('model', MODEL_TRANSCRIBE)
     whisperForm.append('response_format', 'verbose_json') // verbose gives us word-level confidence
     whisperForm.append('language', 'en') // Hint English primary — still handles Hinglish well
 
