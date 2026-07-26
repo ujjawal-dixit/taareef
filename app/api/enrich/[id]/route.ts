@@ -17,7 +17,13 @@ import { NextRequest, NextResponse }   from 'next/server'
 import { createClient }               from '@/lib/supabase/server'
 import { getStreamingPlatforms }      from '@/lib/utils/watchmode-server'
 import type { Recommendation, RecMetadata } from '@/lib/types'
-import { MODEL_DISAMBIGUATE, GROQ_CHAT_URL, stripReasoning } from '@/lib/constants/models'
+import {
+  MODEL_DISAMBIGUATE,
+  GROQ_CHAT_URL,
+  GPT_OSS_REASONING_EFFORT,
+  TOKENS_DISAMBIGUATE,
+  extractJson,
+} from '@/lib/constants/models'
 import {
   calculateConfidence, hasNameOverlap, isStrictExact,
   extractLocality, hintMatchesAddress, formatPrimaryType,
@@ -826,9 +832,12 @@ match_type:
         method:  'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${groqKey}` },
         body: JSON.stringify({
-          model:       MODEL_DISAMBIGUATE,   // constrained classification — favours speed over reasoning depth
-          temperature: 0.0,
-          max_tokens:  100,
+          model:             MODEL_DISAMBIGUATE,   // constrained classification — favours speed
+          temperature:       0.0,
+          max_tokens:        TOKENS_DISAMBIGUATE,   // reasoning tokens draw from this budget too
+          reasoning_effort:  GPT_OSS_REASONING_EFFORT,
+          include_reasoning: false,
+          response_format:   { type: 'json_object' },
           messages:    [{ role: 'user', content: prompt }],
         }),
         signal: controller.signal,
@@ -838,8 +847,10 @@ match_type:
       if (!res.ok) throw new Error(`Groq ${res.status}`)
 
       const data    = await res.json() as { choices?: Array<{ message?: { content?: string } }> }
-      const content = stripReasoning(data.choices?.[0]?.message?.content ?? '')
-      const parsed  = JSON.parse(content.replace(/```json|```/g, '').trim()) as PlaceLLMResult
+      const content  = (data.choices?.[0]?.message?.content ?? '') as string
+      const jsonText = extractJson(content)
+      if (!jsonText) throw new Error(`no JSON in completion: "${content.slice(0, 200)}"`)
+      const parsed   = JSON.parse(jsonText) as PlaceLLMResult
 
       console.log('[enrichPlaces] LLM raw:', content.replace(/\n/g, ' ').slice(0, 200))
 
