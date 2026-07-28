@@ -8,6 +8,7 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { EXAMPLE_CARDS, type ExampleCard } from '@/constants/example-cards'
 import { CategoryMotif } from '@/components/features/cards/category-motif'
+import { ensureSession } from '@/lib/supabase/anon'
 
 // Self-contained category config — does not depend on constants/categories.ts export shape
 const CAT_CONFIG: Record<string, { label: string; vividHex: string; vividRgb: string; verb: string }> = {
@@ -177,11 +178,47 @@ function ExampleCardFull({ card }: { card: ExampleCard }) {
 }
 
 function DemoSaveSheet({ onClose }: { onClose: () => void }) {
-  const [title, setTitle] = useState('')
+  const [title, setTitle]       = useState('')
   const [category, setCategory] = useState<string>('')
-  const [source, setSource] = useState('')
-  const [saved, setSaved] = useState(false)
-  const canSave = title.trim().length > 0 && category.length > 0
+  const [source, setSource]     = useState('')
+  const [saved, setSaved]       = useState(false)
+  const [saving, setSaving]     = useState(false)
+  const [error, setError]       = useState<string | null>(null)
+  const canSave = title.trim().length > 0 && category.length > 0 && !saving
+
+  // Creates an anonymous session (if there isn't one) and writes a real
+  // row. Enrichment runs server-side exactly as it does for a signed-in
+  // user, so the card fills in with a poster or photo moments later.
+  async function handleSave() {
+    if (!canSave) return
+    setSaving(true)
+    setError(null)
+    try {
+      const userId = await ensureSession()
+      if (!userId) throw new Error('no-session')
+
+      const res = await fetch('/api/recommendations', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title:       title.trim(),
+          category,
+          source_type: 'friend',
+          source_name: source.trim() || 'Someone',
+        }),
+      })
+
+      const json = await res.json() as { data?: unknown; error?: string | null }
+      if (!res.ok || json.error) throw new Error(json.error ?? 'save-failed')
+
+      setSaved(true)
+    } catch (err) {
+      console.error('[demo] save failed:', err)
+      setError("Couldn't save that — please try again")
+    } finally {
+      setSaving(false)
+    }
+  }
 
   return (
     <>
@@ -212,9 +249,10 @@ function DemoSaveSheet({ onClose }: { onClose: () => void }) {
               <label style={labelStyle}>Who told you about it?</label>
               <input type="text" value={source} onChange={(e) => setSource(e.target.value)} placeholder="Arjun, that newsletter, a friend..." style={inputStyle} />
             </div>
-            <button onClick={() => canSave && setSaved(true)} disabled={!canSave} style={{ width: '100%', padding: '15px 0', borderRadius: 12, border: 'none', background: canSave ? '#1fce94' : 'rgba(255,255,255,0.08)', fontFamily: 'var(--f-ui)', fontWeight: 700, fontSize: 14, letterSpacing: '0.06em', textTransform: 'uppercase', color: canSave ? '#0a0a0a' : 'rgba(244,243,238,0.25)', cursor: canSave ? 'pointer' : 'default', transition: 'all 0.15s ease' }}>
-              Save it
+            <button onClick={handleSave} disabled={!canSave} style={{ width: '100%', padding: '15px 0', borderRadius: 12, border: 'none', background: canSave ? '#1fce94' : 'rgba(255,255,255,0.08)', fontFamily: 'var(--f-ui)', fontWeight: 700, fontSize: 14, letterSpacing: '0.06em', textTransform: 'uppercase', color: canSave ? '#0a0a0a' : 'rgba(244,243,238,0.25)', cursor: canSave ? 'pointer' : 'default', transition: 'all 0.15s ease' }}>
+              {saving ? 'Saving…' : 'Save it'}
             </button>
+            {error && <p role="alert" style={{ fontFamily: 'var(--f-body)', fontSize: 12, color: '#c8151e', textAlign: 'center', margin: '12px 0 0' }}>{error}</p>}
           </>
         ) : (
           <SigninPrompt title={title} />
