@@ -1,7 +1,7 @@
 'use client'
 import { useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { isAnonymous } from '@/lib/supabase/anon'
+import { markSessionForClaim } from '@/lib/supabase/anon'
 
 export function GoogleSignInButton() {
   const [loading, setLoading] = useState(false)
@@ -11,32 +11,20 @@ export function GoogleSignInButton() {
     setLoading(true); setError(null)
     try {
       const supabase = createClient()
-      const options  = {
-        redirectTo:  `${window.location.origin}/api/auth/callback`,
-        queryParams: { access_type: 'offline', prompt: 'consent' },
-      }
 
-      // If the visitor came through the onboarding demo, they already have
-      // an anonymous session holding their first save. Linking attaches
-      // their Google identity to that SAME user id, so the save carries
-      // over with nothing to migrate — the step that used to lose it.
-      if (await isAnonymous()) {
-        const { error: linkError } = await supabase.auth.linkIdentity({
-          provider: 'google',
-          options,
-        })
-        if (!linkError) return
-
-        // Linking fails when that Google account already has a Taareef
-        // vault. Signing them into their existing account is the right
-        // outcome — their real vault matters more than one demo save.
-        // The orphaned anonymous user is removed by the cleanup job.
-        console.warn('[signin] link failed, falling back to sign-in:', linkError.message)
-      }
+      // If the visitor came through the onboarding demo they hold an
+      // anonymous session containing their first save. Leave its id in a
+      // cookie; the OAuth callback moves those rows to whichever account
+      // signs in. This replaces linkIdentity(), which silently never
+      // worked and could not work at all for an existing account.
+      await markSessionForClaim()
 
       const { error: authError } = await supabase.auth.signInWithOAuth({
         provider: 'google',
-        options,
+        options: {
+          redirectTo:  `${window.location.origin}/api/auth/callback`,
+          queryParams: { access_type: 'offline', prompt: 'consent' },
+        },
       })
       if (authError) throw authError
     } catch { setError("Couldn't sign in — please try again"); setLoading(false) }
