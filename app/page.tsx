@@ -23,8 +23,8 @@ export default function LandingPage() {
 
   return (
     <main style={{ minHeight: '100dvh', background: '#0a0a0a', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'space-between', padding: '0 24px', overflowX: 'hidden' }}>
-      <header style={{ width: '100%', maxWidth: 390, paddingTop: 'clamp(28px, 6dvh, 56px)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 'clamp(14px, 2.5dvh, 24px)' }}>
-        <span style={{ fontFamily: 'var(--f-display)', fontStyle: 'italic', fontWeight: 300, fontSize: 'clamp(2.5rem, 1.6rem + 4.5vw, 3.5rem)', color: '#1fce94', letterSpacing: '-0.01em', textShadow: '0 0 20px rgba(31,206,148,0.60), 0 0 48px rgba(31,206,148,0.25)' }}>
+      <header style={{ width: '100%', maxWidth: 390, paddingTop: 'clamp(28px, 6dvh, 56px)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 'clamp(10px, 1.8dvh, 18px)' }}>
+        <span style={{ fontFamily: 'var(--f-display)', fontStyle: 'italic', fontWeight: 300, fontSize: 'clamp(3.5rem, 2.1rem + 7vw, 5.25rem)', color: '#1fce94', letterSpacing: '-0.01em', textShadow: '0 0 24px rgba(31,206,148,0.55), 0 0 64px rgba(31,206,148,0.28), 0 0 120px rgba(31,206,148,0.12)' }}>
           taareef
         </span>
         <h1 style={{ fontFamily: 'var(--f-display)', fontStyle: 'italic', fontWeight: 500, fontSize: 'clamp(1.75rem, 1.1rem + 3.2vw, 2.375rem)', lineHeight: 1.18, color: '#F4F3EE', margin: 0, letterSpacing: '-0.01em', textAlign: 'center', textWrap: 'balance' }}>
@@ -55,72 +55,105 @@ export default function LandingPage() {
 }
 
 function ShelfIllustration() {
-  const spokeAngles = [0, 60, 120, 180, 240, 300]
-  const sprocketAngles = [30, 90, 150, 210, 270, 330]
-  const dustDots: [number, number][] = [[30,90],[70,75],[110,65],[155,58],[200,70],[250,85],[45,145],[180,50],[230,140]]
-
+  // Rebuilt Session 15 (2026-07-28).
+  //
+  // Every object carries its category's own colour, so the shelf quietly
+  // teaches the palette before the dashboard is ever seen: book = Read
+  // amber, reel = Watch cobalt, map = Visit sky, glass = Dine burnt
+  // orange, headphones = Listen rose. Nobody notices consciously; the
+  // dashboard simply feels already familiar.
+  //
+  // Depth comes from contrast, not shadow — the brief is minimalism as a
+  // deliberate choice, so strokes are confident and saturated against
+  // pure black rather than softly lit.
+  //
+  // Stroke hierarchy is the difference between drawing and clipart:
+  // outer contours 2.4px, interior detail 1.1px. Fills sit low so the
+  // line does the work.
+  //
+  // Sized to be read at 320px wide, not scaled down from desktop.
   return (
-    <svg width="280" height="220" viewBox="0 0 280 220" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ display: 'block' }}>
-      <ellipse cx="140" cy="160" rx="120" ry="40" fill="rgba(31,206,148,0.04)" />
-      <rect x="20" y="168" width="240" height="6" rx="3" fill="#1e1e1c" />
-      <rect x="20" y="174" width="240" height="2" rx="1" fill="rgba(255,255,255,0.04)" />
-      {/* Book */}
-      <rect x="38" y="110" width="22" height="58" rx="3" fill="#C4603A" />
-      <rect x="40" y="112" width="18" height="54" rx="2" fill="#D4724A" />
-      <line x1="42" y1="122" x2="56" y2="122" stroke="rgba(255,255,255,0.18)" strokeWidth="1" />
-      <line x1="42" y1="126" x2="56" y2="126" stroke="rgba(255,255,255,0.10)" strokeWidth="0.8" />
-      <line x1="42" y1="130" x2="56" y2="130" stroke="rgba(255,255,255,0.10)" strokeWidth="0.8" />
-      <circle cx="49" cy="148" r="4" fill="rgba(255,255,255,0.12)" />
-      <circle cx="49" cy="148" r="2" fill="rgba(255,255,255,0.20)" />
-      <circle cx="49" cy="148" r="0.8" fill="rgba(255,255,255,0.35)" />
-      {/* Film reel */}
-      <circle cx="95" cy="138" r="26" fill="#1a1a18" stroke="#2e2e2a" strokeWidth="1.5" />
-      <circle cx="95" cy="138" r="20" fill="none" stroke="#3C82FF" strokeWidth="1" strokeOpacity="0.5" />
-      <circle cx="95" cy="138" r="8" fill="#0a0a0a" stroke="#3C82FF" strokeWidth="1.5" strokeOpacity="0.7" />
-      <circle cx="95" cy="138" r="3" fill="#3C82FF" fillOpacity="0.6" />
-      {spokeAngles.map((deg, i) => {
-        const r = Math.PI * deg / 180
-        return <line key={i} x1={95 + Math.cos(r)*9} y1={138 + Math.sin(r)*9} x2={95 + Math.cos(r)*18} y2={138 + Math.sin(r)*18} stroke="#3C82FF" strokeWidth="1.2" strokeOpacity="0.45" />
-      })}
-      {sprocketAngles.map((deg, i) => {
-        const r = Math.PI * deg / 180
-        return <circle key={i} cx={95 + Math.cos(r)*14} cy={138 + Math.sin(r)*14} r="1.8" fill="#3C82FF" fillOpacity="0.3" />
-      })}
-      {/* Map */}
-      <g transform="translate(128, 118) rotate(-4)">
-        <rect width="42" height="50" rx="2" fill="#2a2822" />
-        <rect x="1" y="1" width="40" height="48" rx="1.5" fill="#1E1C18" />
-        <line x1="14" y1="1" x2="14" y2="49" stroke="rgba(255,255,255,0.07)" strokeWidth="0.8" />
-        <line x1="28" y1="1" x2="28" y2="49" stroke="rgba(255,255,255,0.07)" strokeWidth="0.8" />
-        <line x1="1" y1="17" x2="41" y2="17" stroke="rgba(255,255,255,0.07)" strokeWidth="0.8" />
-        <line x1="1" y1="33" x2="41" y2="33" stroke="rgba(255,255,255,0.07)" strokeWidth="0.8" />
-        <circle cx="21" cy="25" r="3.5" fill="none" stroke="#1991E1" strokeWidth="1" strokeOpacity="0.6" />
-        <circle cx="21" cy="25" r="1.5" fill="#1991E1" fillOpacity="0.5" />
-        <path d="M8 40 Q14 30 21 25 Q28 20 34 12" stroke="#1991E1" strokeWidth="1" strokeOpacity="0.35" fill="none" strokeDasharray="2 2" />
+    <svg
+      viewBox="0 0 340 250"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      style={{ display: 'block', width: 'min(88vw, 340px)', height: 'auto' }}
+    >
+      <defs>
+        <radialGradient id="shelfGlow" cx="38%" cy="34%" r="72%">
+          <stop offset="0%"   stopColor="#F09114" stopOpacity="0.13" />
+          <stop offset="55%"  stopColor="#DA5526" stopOpacity="0.05" />
+          <stop offset="100%" stopColor="#0a0a0a" stopOpacity="0" />
+        </radialGradient>
+        <linearGradient id="shelfLine" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0%"   stopColor="#F4F3EE" stopOpacity="0.02" />
+          <stop offset="50%"  stopColor="#F4F3EE" stopOpacity="0.22" />
+          <stop offset="100%" stopColor="#F4F3EE" stopOpacity="0.02" />
+        </linearGradient>
+      </defs>
+
+      <ellipse cx="150" cy="112" rx="185" ry="128" fill="url(#shelfGlow)" />
+
+      {/* BOOK — Read, amber */}
+      <g>
+        <ellipse cx="44" cy="196" rx="26" ry="4.5" fill="#F09114" fillOpacity="0.16" />
+        <rect x="28" y="96" width="30" height="98" rx="3"
+              fill="#F09114" fillOpacity="0.14" stroke="#F09114" strokeWidth="2.4" />
+        <line x1="50" y1="98" x2="50" y2="192" stroke="#F09114" strokeWidth="1.1" strokeOpacity="0.75" />
+        <line x1="34" y1="116" x2="45" y2="116" stroke="#F09114" strokeWidth="1.1" strokeOpacity="0.85" />
+        <line x1="34" y1="126" x2="45" y2="126" stroke="#F09114" strokeWidth="1.1" strokeOpacity="0.85" />
+        <line x1="34" y1="136" x2="41" y2="136" stroke="#F09114" strokeWidth="1.1" strokeOpacity="0.6" />
       </g>
-      {/* Wine glass */}
-      <g transform="translate(185, 105)">
-        <path d="M6 0 Q0 18 4 32 Q10 40 16 40 Q22 40 28 32 Q32 18 26 0 Z" fill="rgba(220,60,130,0.08)" stroke="rgba(220,60,130,0.25)" strokeWidth="1" />
-        <path d="M7 22 Q10 30 16 31 Q22 30 25 22" fill="rgba(220,60,130,0.18)" />
-        <line x1="16" y1="40" x2="16" y2="58" stroke="rgba(220,60,130,0.22)" strokeWidth="1.5" />
-        <line x1="8" y1="58" x2="24" y2="58" stroke="rgba(220,60,130,0.22)" strokeWidth="2" />
-        <path d="M10 6 Q8 14 9 22" stroke="rgba(255,255,255,0.12)" strokeWidth="1" fill="none" />
+
+      {/* FILM REEL — Watch, cobalt */}
+      <g>
+        <ellipse cx="106" cy="196" rx="34" ry="5" fill="#3C82FF" fillOpacity="0.16" />
+        <circle cx="106" cy="156" r="36" fill="#3C82FF" fillOpacity="0.11" stroke="#3C82FF" strokeWidth="2.4" />
+        <circle cx="106" cy="156" r="9"  fill="#0a0a0a" stroke="#3C82FF" strokeWidth="1.6" />
+        <circle cx="106" cy="135" r="6.5" fill="#3C82FF" fillOpacity="0.42" stroke="#3C82FF" strokeWidth="1.1" />
+        <circle cx="125" cy="149" r="6.5" fill="#3C82FF" fillOpacity="0.42" stroke="#3C82FF" strokeWidth="1.1" />
+        <circle cx="118" cy="172" r="6.5" fill="#3C82FF" fillOpacity="0.42" stroke="#3C82FF" strokeWidth="1.1" />
+        <circle cx="94"  cy="172" r="6.5" fill="#3C82FF" fillOpacity="0.42" stroke="#3C82FF" strokeWidth="1.1" />
+        <circle cx="87"  cy="149" r="6.5" fill="#3C82FF" fillOpacity="0.42" stroke="#3C82FF" strokeWidth="1.1" />
       </g>
-      {/* Headphones */}
-      <g transform="translate(222, 115)">
-        <path d="M4 30 Q4 5 20 5 Q36 5 36 30" stroke="#F09114" strokeWidth="2.5" fill="none" strokeLinecap="round" strokeOpacity="0.7" />
-        <rect x="0" y="27" width="8" height="14" rx="4" fill="#F09114" fillOpacity="0.55" />
-        <rect x="32" y="27" width="8" height="14" rx="4" fill="#F09114" fillOpacity="0.55" />
-        <circle cx="4" cy="34" r="1.5" fill="rgba(255,255,255,0.3)" />
-        <circle cx="36" cy="34" r="1.5" fill="rgba(255,255,255,0.3)" />
+
+      {/* FOLDED MAP — Visit, sky */}
+      <g>
+        <ellipse cx="184" cy="196" rx="36" ry="4.5" fill="#1991E1" fillOpacity="0.14" />
+        <path d="M152 128 L173 121 L195 128 L216 121 L216 186 L195 193 L173 186 L152 193 Z"
+              fill="#1991E1" fillOpacity="0.10" stroke="#1991E1" strokeWidth="2.4" strokeLinejoin="round" />
+        <line x1="173" y1="121" x2="173" y2="186" stroke="#1991E1" strokeWidth="1.1" strokeOpacity="0.7" />
+        <line x1="195" y1="128" x2="195" y2="193" stroke="#1991E1" strokeWidth="1.1" strokeOpacity="0.7" />
+        <path d="M160 168 Q180 150 209 158" fill="none" stroke="#1991E1" strokeWidth="1.3"
+              strokeOpacity="0.85" strokeDasharray="4 4" strokeLinecap="round" />
+        <circle cx="209" cy="158" r="3.4" fill="#1991E1" fillOpacity="0.9" />
       </g>
-      {/* Shadows */}
-      <ellipse cx="49" cy="172" rx="14" ry="3" fill="rgba(0,0,0,0.4)" />
-      <ellipse cx="95" cy="172" rx="20" ry="4" fill="rgba(0,0,0,0.35)" />
-      <ellipse cx="149" cy="172" rx="18" ry="3.5" fill="rgba(0,0,0,0.3)" />
-      <ellipse cx="201" cy="172" rx="10" ry="2.5" fill="rgba(0,0,0,0.3)" />
-      <ellipse cx="240" cy="172" rx="16" ry="3" fill="rgba(0,0,0,0.35)" />
-      {dustDots.map(([x, y], i) => <circle key={i} cx={x} cy={y} r="0.8" fill="rgba(244,243,238,0.08)" />)}
+
+      {/* WINE GLASS — Dine, burnt orange */}
+      <g>
+        <ellipse cx="253" cy="196" rx="22" ry="4" fill="#DA5526" fillOpacity="0.16" />
+        <path d="M236 112 L270 112 L263 146 Q253 156 243 146 Z"
+              fill="#DA5526" fillOpacity="0.17" stroke="#DA5526" strokeWidth="2.4" strokeLinejoin="round" />
+        <path d="M238 121 L268 121" stroke="#DA5526" strokeWidth="1.1" strokeOpacity="0.8" />
+        <line x1="253" y1="153" x2="253" y2="188" stroke="#DA5526" strokeWidth="2.4" strokeLinecap="round" />
+        <line x1="239" y1="190" x2="267" y2="190" stroke="#DA5526" strokeWidth="2.4" strokeLinecap="round" />
+      </g>
+
+      {/* HEADPHONES — Listen, rose */}
+      <g>
+        <ellipse cx="303" cy="196" rx="24" ry="4" fill="#DC3C82" fillOpacity="0.14" />
+        <path d="M282 168 A22 22 0 0 1 324 168" fill="none" stroke="#DC3C82"
+              strokeWidth="2.4" strokeLinecap="round" />
+        <rect x="276" y="164" width="13" height="26" rx="6.5"
+              fill="#DC3C82" fillOpacity="0.20" stroke="#DC3C82" strokeWidth="2" />
+        <rect x="317" y="164" width="13" height="26" rx="6.5"
+              fill="#DC3C82" fillOpacity="0.20" stroke="#DC3C82" strokeWidth="2" />
+        <line x1="282" y1="170" x2="282" y2="184" stroke="#DC3C82" strokeWidth="1.1" strokeOpacity="0.7" />
+        <line x1="324" y1="170" x2="324" y2="184" stroke="#DC3C82" strokeWidth="1.1" strokeOpacity="0.7" />
+      </g>
+
+      {/* Shelf line — grounds the objects without a literal surface */}
+      <line x1="14" y1="200" x2="326" y2="200" stroke="url(#shelfLine)" strokeWidth="1.2" />
     </svg>
   )
 }
