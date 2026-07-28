@@ -23,30 +23,31 @@ export default function LandingPage() {
 
   return (
     <main style={{ minHeight: '100dvh', background: '#0a0a0a', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'space-between', padding: '0 24px', overflowX: 'hidden' }}>
-      <header style={{ width: '100%', maxWidth: 390, paddingTop: 52, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 22 }}>
-        <span style={{ fontFamily: 'var(--f-display)', fontStyle: 'italic', fontWeight: 300, fontSize: 48, color: '#1fce94', letterSpacing: '-0.01em', textShadow: '0 0 20px rgba(31,206,148,0.60), 0 0 48px rgba(31,206,148,0.25)' }}>
+      <header style={{ width: '100%', maxWidth: 390, paddingTop: 'clamp(28px, 6dvh, 56px)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 'clamp(14px, 2.5dvh, 24px)' }}>
+        <span style={{ fontFamily: 'var(--f-display)', fontStyle: 'italic', fontWeight: 300, fontSize: 'clamp(2.5rem, 1.6rem + 4.5vw, 3.5rem)', color: '#1fce94', letterSpacing: '-0.01em', textShadow: '0 0 20px rgba(31,206,148,0.60), 0 0 48px rgba(31,206,148,0.25)' }}>
           taareef
         </span>
-        <h1 style={{ fontFamily: 'var(--f-display)', fontStyle: 'italic', fontWeight: 500, fontSize: 30, lineHeight: 1.22, color: '#F4F3EE', margin: 0, letterSpacing: '-0.01em', textAlign: 'center' }}>
-          Your recommendations &mdash; collected and enriched.
+        <h1 style={{ fontFamily: 'var(--f-display)', fontStyle: 'italic', fontWeight: 500, fontSize: 'clamp(1.75rem, 1.1rem + 3.2vw, 2.375rem)', lineHeight: 1.18, color: '#F4F3EE', margin: 0, letterSpacing: '-0.01em', textAlign: 'center', textWrap: 'balance' }}>
+          Your recommendation journal.
         </h1>
       </header>
 
-      <section style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 36, paddingTop: 24, paddingBottom: 24, width: '100%', maxWidth: 390 }}>
+      <section style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 'clamp(20px, 4dvh, 40px)', paddingTop: 'clamp(12px, 2dvh, 24px)', paddingBottom: 'clamp(12px, 2dvh, 24px)', width: '100%', maxWidth: 390 }}>
         <div ref={illustrationRef} style={{ transition: 'transform 0.12s ease-out', willChange: 'transform' }} aria-hidden="true">
           <ShelfIllustration />
         </div>
-        <p style={{ fontFamily: 'var(--f-display)', fontStyle: 'italic', fontWeight: 400, fontSize: 21, color: 'rgba(244,243,238,0.60)', margin: 0, lineHeight: 1.3, textAlign: 'center', letterSpacing: '-0.005em' }}>
+        <p style={{ fontFamily: 'var(--f-display)', fontStyle: 'italic', fontWeight: 400, fontSize: 'clamp(1.125rem, 0.85rem + 1.4vw, 1.375rem)', color: 'rgba(244,243,238,0.60)', margin: 0, lineHeight: 1.3, textAlign: 'center', letterSpacing: '-0.005em' }}>
           Save what you trust.<br />Share what you love.
         </p>
       </section>
 
-      <footer style={{ width: '100%', maxWidth: 390, paddingBottom: 48, display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <footer style={{ width: '100%', maxWidth: 390, paddingBottom: 'clamp(24px, 5dvh, 48px)', display: 'flex', flexDirection: 'column', gap: 'clamp(6px, 1dvh, 12px)' }}>
         <Link href="/onboarding/demo" style={{ display: 'block', width: '100%', padding: '15px 0', background: '#1fce94', borderRadius: 12, textAlign: 'center', fontFamily: 'var(--f-ui)', fontWeight: 700, fontSize: 15, letterSpacing: '0.06em', textTransform: 'uppercase', color: '#0a0a0a', textDecoration: 'none' }}>
           Check it out
         </Link>
-        <Link href="/login" style={{ display: 'block', width: '100%', padding: '15px 0', textAlign: 'center', fontFamily: 'var(--f-body)', fontSize: 14, color: 'rgba(244,243,238,0.40)', textDecoration: 'none' }}>
-          Already have an account? Sign in
+        <Link href="/login" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, width: '100%', minHeight: 48, textAlign: 'center', textDecoration: 'none' }}>
+          <span style={{ fontFamily: 'var(--f-body)', fontSize: 14, color: 'rgba(244,243,238,0.55)' }}>Already have an account?</span>
+          <span style={{ fontFamily: 'var(--f-ui)', fontWeight: 700, fontSize: 12, letterSpacing: '0.06em', textTransform: 'uppercase', color: '#1fce94' }}>Sign in</span>
         </Link>
       </footer>
     </main>
