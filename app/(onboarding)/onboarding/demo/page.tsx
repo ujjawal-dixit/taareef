@@ -93,9 +93,7 @@ export default function DemoVaultPage() {
         <div style={{ opacity: 0.3 }}>
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="18" height="18" rx="3" stroke="#F4F3EE" strokeWidth="1.5" /><path d="M3 9h18" stroke="#F4F3EE" strokeWidth="1.5" /></svg>
         </div>
-        <button onClick={() => setSaveSheetOpen(true)} style={{ width: 48, height: 48, borderRadius: '50%', background: '#1fce94', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 0 0 4px rgba(31,206,148,0.15)' }}>
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="#0a0a0a" strokeWidth="2.2" strokeLinecap="round" /></svg>
-        </button>
+        <div style={{ width: 48 }} />
         <div style={{ opacity: 0.3 }}>
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="8" r="4" stroke="#F4F3EE" strokeWidth="1.5" /><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" stroke="#F4F3EE" strokeWidth="1.5" strokeLinecap="round" /></svg>
         </div>
@@ -282,30 +280,30 @@ function DemoSaveSheet({ onClose }: { onClose: () => void }) {
                 </p>
 
                 <label style={{ display: 'flex', alignItems: 'center', gap: 14, width: '100%', padding: '16px 18px', marginBottom: 10, borderRadius: 14, border: '0.5px solid rgba(31,206,148,0.35)', background: 'rgba(31,206,148,0.06)', cursor: scanning ? 'default' : 'pointer' }}>
-                  <span style={{ fontSize: 20, lineHeight: 1 }}>&#128247;</span>
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0 }}><rect x="2.5" y="6" width="19" height="14" rx="2.5" stroke="#1fce94" strokeWidth="1.5"/><path d="M8.5 6l1.4-2.4h4.2L15.5 6" stroke="#1fce94" strokeWidth="1.5" strokeLinejoin="round"/><circle cx="12" cy="13" r="4" stroke="#1fce94" strokeWidth="1.5"/></svg>
                   <span style={{ flex: 1, textAlign: 'left' }}>
                     <span style={{ display: 'block', fontFamily: 'var(--f-display)', fontStyle: 'italic', fontWeight: 500, fontSize: 18, color: '#F4F3EE' }}>
-                      {scanning ? 'Reading it\u2026' : 'Scan it'}
+                      {scanning ? 'reading it\u2026' : 'scan it'}
                     </span>
                     <span style={{ display: 'block', fontFamily: 'var(--f-body)', fontSize: 12, color: 'rgba(244,243,238,0.42)', marginTop: 3 }}>
-                      A screenshot from anywhere &mdash; we&rsquo;ll read it
+                      Upload a screenshot and we&rsquo;ll read it
                     </span>
                   </span>
                   <input type="file" accept="image/*" disabled={scanning} onChange={(e) => { const f = e.target.files?.[0]; if (f) void handleScan(f) }} style={{ display: 'none' }} />
                 </label>
 
                 <button onClick={() => setMode('form')} style={{ display: 'flex', alignItems: 'center', gap: 14, width: '100%', padding: '16px 18px', marginBottom: 10, borderRadius: 14, border: '0.5px solid rgba(255,255,255,0.12)', background: 'transparent', cursor: 'pointer' }}>
-                  <span style={{ fontSize: 20, lineHeight: 1 }}>&#9998;</span>
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0 }}><path d="M4 20h4.2L19 9.2a2.1 2.1 0 0 0-3-3L5.2 17V20z" stroke="rgba(244,243,238,0.62)" strokeWidth="1.5" strokeLinejoin="round"/><path d="M14.5 7.5l2.9 2.9" stroke="rgba(244,243,238,0.62)" strokeWidth="1.5"/></svg>
                   <span style={{ flex: 1, textAlign: 'left' }}>
-                    <span style={{ display: 'block', fontFamily: 'var(--f-display)', fontStyle: 'italic', fontWeight: 500, fontSize: 18, color: '#F4F3EE' }}>Type it</span>
+                    <span style={{ display: 'block', fontFamily: 'var(--f-display)', fontStyle: 'italic', fontWeight: 500, fontSize: 18, color: '#F4F3EE' }}>type it</span>
                     <span style={{ display: 'block', fontFamily: 'var(--f-body)', fontSize: 12, color: 'rgba(244,243,238,0.42)', marginTop: 3 }}>Just the name is enough</span>
                   </span>
                 </button>
 
                 <button onClick={() => setVoiceNote(true)} style={{ display: 'flex', alignItems: 'center', gap: 14, width: '100%', padding: '16px 18px', borderRadius: 14, border: '0.5px solid rgba(255,255,255,0.07)', background: 'transparent', cursor: 'pointer' }}>
-                  <span style={{ fontSize: 20, lineHeight: 1, opacity: 0.4 }}>&#127908;</span>
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0, opacity: 0.45 }}><rect x="9" y="2.5" width="6" height="11" rx="3" stroke="rgba(244,243,238,0.55)" strokeWidth="1.5"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0" stroke="rgba(244,243,238,0.55)" strokeWidth="1.5" strokeLinecap="round"/><path d="M12 17.5V21" stroke="rgba(244,243,238,0.55)" strokeWidth="1.5" strokeLinecap="round"/></svg>
                   <span style={{ flex: 1, textAlign: 'left' }}>
-                    <span style={{ display: 'block', fontFamily: 'var(--f-display)', fontStyle: 'italic', fontWeight: 500, fontSize: 18, color: 'rgba(244,243,238,0.40)' }}>Speak it</span>
+                    <span style={{ display: 'block', fontFamily: 'var(--f-display)', fontStyle: 'italic', fontWeight: 500, fontSize: 18, color: 'rgba(244,243,238,0.40)' }}>speak it</span>
                     <span style={{ display: 'block', fontFamily: 'var(--f-body)', fontSize: 12, color: 'rgba(244,243,238,0.28)', marginTop: 3 }}>Needs an account</span>
                   </span>
                 </button>
