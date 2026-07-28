@@ -19,9 +19,9 @@ export default function LoginPage() {
         <p style={{
           fontFamily: 'var(--f-body)',
           fontSize: '14px', fontWeight: 300, color: 'rgba(240,230,200,0.42)',
-          lineHeight: 1.6, textAlign: 'center', maxWidth: '240px', margin: '0 auto',
+          lineHeight: 1.65, textAlign: 'center', maxWidth: '280px', margin: '0 auto',
         }}>
-          Save what you trust. Share what you love.
+          Save what you trust.<br />Share what you love.
         </p>
       </div>
       <div style={{
