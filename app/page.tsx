@@ -55,105 +55,132 @@ export default function LandingPage() {
 }
 
 function ShelfIllustration() {
-  // Rebuilt Session 15 (2026-07-28).
+  // Rebuilt again, Session 15 (2026-07-28), after the first attempt read
+  // as clipart. Three things were wrong and are fixed here:
   //
-  // Every object carries its category's own colour, so the shelf quietly
-  // teaches the palette before the dashboard is ever seen: book = Read
-  // amber, reel = Watch cobalt, map = Visit sky, glass = Dine burnt
-  // orange, headphones = Listen rose. Nobody notices consciously; the
-  // dashboard simply feels already familiar.
+  // 1. THE GLOW WAS A STAIN. A radial gradient behind the objects looked
+  //    like a brown smudge, not light. Removed entirely. Light direction
+  //    is now implied by stroke opacity — brighter on upper-left edges,
+  //    dimmer on lower-right — which is how illustrators actually do it.
   //
-  // Depth comes from contrast, not shadow — the brief is minimalism as a
-  // deliberate choice, so strokes are confident and saturated against
-  // pure black rather than softly lit.
+  // 2. EVERYTHING WAS THE SAME HEIGHT, evenly spaced, in a straight row.
+  //    That is an icon set, not a shelf. Heights now vary substantially
+  //    and objects overlap slightly, which is what creates depth.
   //
-  // Stroke hierarchy is the difference between drawing and clipart:
-  // outer contours 2.4px, interior detail 1.1px. Fills sit low so the
-  // line does the work.
+  // 3. NO INTERIOR DETAIL. Each object is now built in three tiers:
+  //    silhouette (reads at 100px), primary detail (reads at 200px),
+  //    texture (rewards a closer look) — pages in the book, a film strip
+  //    curling off the reel, contour lines and a route on the map, the
+  //    liquid line in the glass, the cable on the headphones.
   //
-  // Sized to be read at 320px wide, not scaled down from desktop.
+  // Colour still maps to category: book = Read amber, reel = Watch
+  // cobalt, map = Visit sky, glass = Dine burnt orange, headphones =
+  // Listen rose. Nobody notices consciously; the dashboard simply feels
+  // already familiar.
   return (
     <svg
-      viewBox="0 0 340 250"
+      viewBox="0 0 340 230"
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
-      style={{ display: 'block', width: 'min(88vw, 340px)', height: 'auto' }}
+      style={{ display: 'block', width: 'min(92vw, 360px)', height: 'auto' }}
     >
       <defs>
-        <radialGradient id="shelfGlow" cx="38%" cy="34%" r="72%">
-          <stop offset="0%"   stopColor="#F09114" stopOpacity="0.13" />
-          <stop offset="55%"  stopColor="#DA5526" stopOpacity="0.05" />
-          <stop offset="100%" stopColor="#0a0a0a" stopOpacity="0" />
-        </radialGradient>
-        <linearGradient id="shelfLine" x1="0" y1="0" x2="1" y2="0">
-          <stop offset="0%"   stopColor="#F4F3EE" stopOpacity="0.02" />
-          <stop offset="50%"  stopColor="#F4F3EE" stopOpacity="0.22" />
-          <stop offset="100%" stopColor="#F4F3EE" stopOpacity="0.02" />
+        <linearGradient id="shelfEdge" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0%"   stopColor="#F4F3EE" stopOpacity="0" />
+          <stop offset="18%"  stopColor="#F4F3EE" stopOpacity="0.16" />
+          <stop offset="82%"  stopColor="#F4F3EE" stopOpacity="0.16" />
+          <stop offset="100%" stopColor="#F4F3EE" stopOpacity="0" />
         </linearGradient>
       </defs>
 
-      <ellipse cx="150" cy="112" rx="185" ry="128" fill="url(#shelfGlow)" />
-
-      {/* BOOK — Read, amber */}
+      {/* ── BOOK — Read, amber. Tallest object, anchors the left. ── */}
       <g>
-        <ellipse cx="44" cy="196" rx="26" ry="4.5" fill="#F09114" fillOpacity="0.16" />
-        <rect x="28" y="96" width="30" height="98" rx="3"
-              fill="#F09114" fillOpacity="0.14" stroke="#F09114" strokeWidth="2.4" />
-        <line x1="50" y1="98" x2="50" y2="192" stroke="#F09114" strokeWidth="1.1" strokeOpacity="0.75" />
-        <line x1="34" y1="116" x2="45" y2="116" stroke="#F09114" strokeWidth="1.1" strokeOpacity="0.85" />
-        <line x1="34" y1="126" x2="45" y2="126" stroke="#F09114" strokeWidth="1.1" strokeOpacity="0.85" />
-        <line x1="34" y1="136" x2="41" y2="136" stroke="#F09114" strokeWidth="1.1" strokeOpacity="0.6" />
+        <ellipse cx="46" cy="192" rx="27" ry="4" fill="#F09114" fillOpacity="0.10" />
+        {/* spine block */}
+        <path d="M30 62 L52 56 L52 188 L30 188 Z" fill="#F09114" fillOpacity="0.13"
+              stroke="#F09114" strokeWidth="2.3" strokeLinejoin="round" />
+        {/* page block — the detail that makes it a book, not a rectangle */}
+        <path d="M52 56 L64 60 L64 184 L52 188 Z" fill="#F09114" fillOpacity="0.05"
+              stroke="#F09114" strokeWidth="1.7" strokeOpacity="0.6" strokeLinejoin="round" />
+        <line x1="55" y1="66"  x2="61" y2="68"  stroke="#F09114" strokeWidth="0.9" strokeOpacity="0.4" />
+        <line x1="55" y1="76"  x2="61" y2="78"  stroke="#F09114" strokeWidth="0.9" strokeOpacity="0.4" />
+        <line x1="55" y1="86"  x2="61" y2="88"  stroke="#F09114" strokeWidth="0.9" strokeOpacity="0.4" />
+        {/* title bands on the spine */}
+        <line x1="35" y1="84"  x2="47" y2="81"  stroke="#F09114" strokeWidth="1.3" strokeOpacity="0.85" />
+        <line x1="35" y1="93"  x2="44" y2="91"  stroke="#F09114" strokeWidth="1.3" strokeOpacity="0.6" />
+        <rect x="35" y="150" width="12" height="16" rx="1"
+              stroke="#F09114" strokeWidth="1.1" strokeOpacity="0.5" />
       </g>
 
-      {/* FILM REEL — Watch, cobalt */}
+      {/* ── FILM REEL — Watch, cobalt. Overlaps the book slightly. ── */}
       <g>
-        <ellipse cx="106" cy="196" rx="34" ry="5" fill="#3C82FF" fillOpacity="0.16" />
-        <circle cx="106" cy="156" r="36" fill="#3C82FF" fillOpacity="0.11" stroke="#3C82FF" strokeWidth="2.4" />
-        <circle cx="106" cy="156" r="9"  fill="#0a0a0a" stroke="#3C82FF" strokeWidth="1.6" />
-        <circle cx="106" cy="135" r="6.5" fill="#3C82FF" fillOpacity="0.42" stroke="#3C82FF" strokeWidth="1.1" />
-        <circle cx="125" cy="149" r="6.5" fill="#3C82FF" fillOpacity="0.42" stroke="#3C82FF" strokeWidth="1.1" />
-        <circle cx="118" cy="172" r="6.5" fill="#3C82FF" fillOpacity="0.42" stroke="#3C82FF" strokeWidth="1.1" />
-        <circle cx="94"  cy="172" r="6.5" fill="#3C82FF" fillOpacity="0.42" stroke="#3C82FF" strokeWidth="1.1" />
-        <circle cx="87"  cy="149" r="6.5" fill="#3C82FF" fillOpacity="0.42" stroke="#3C82FF" strokeWidth="1.1" />
+        <ellipse cx="106" cy="192" rx="33" ry="4.5" fill="#3C82FF" fillOpacity="0.10" />
+        {/* strip curling away — the tier-3 detail */}
+        <path d="M132 150 C150 144 154 162 144 172 C136 180 122 178 118 170"
+              fill="none" stroke="#3C82FF" strokeWidth="1.4" strokeOpacity="0.45" />
+        <path d="M134 152 C149 147 152 161 144 169" fill="none"
+              stroke="#3C82FF" strokeWidth="0.9" strokeOpacity="0.28" />
+        <circle cx="106" cy="152" r="37" fill="#3C82FF" fillOpacity="0.09"
+                stroke="#3C82FF" strokeWidth="2.3" />
+        <circle cx="106" cy="152" r="30" stroke="#3C82FF" strokeWidth="0.9" strokeOpacity="0.35" />
+        <circle cx="106" cy="152" r="8.5" fill="#0a0a0a" stroke="#3C82FF" strokeWidth="1.7" />
+        {/* spokes, lit from upper-left */}
+        <circle cx="106" cy="131" r="6.2" fill="#0a0a0a" stroke="#3C82FF" strokeWidth="1.5" strokeOpacity="0.95" />
+        <circle cx="126" cy="145" r="6.2" fill="#0a0a0a" stroke="#3C82FF" strokeWidth="1.5" strokeOpacity="0.7" />
+        <circle cx="118" cy="169" r="6.2" fill="#0a0a0a" stroke="#3C82FF" strokeWidth="1.5" strokeOpacity="0.55" />
+        <circle cx="94"  cy="169" r="6.2" fill="#0a0a0a" stroke="#3C82FF" strokeWidth="1.5" strokeOpacity="0.6" />
+        <circle cx="86"  cy="145" r="6.2" fill="#0a0a0a" stroke="#3C82FF" strokeWidth="1.5" strokeOpacity="0.85" />
       </g>
 
-      {/* FOLDED MAP — Visit, sky */}
+      {/* ── MAP — Visit, sky. Lowest object; creates the dip. ── */}
       <g>
-        <ellipse cx="184" cy="196" rx="36" ry="4.5" fill="#1991E1" fillOpacity="0.14" />
-        <path d="M152 128 L173 121 L195 128 L216 121 L216 186 L195 193 L173 186 L152 193 Z"
-              fill="#1991E1" fillOpacity="0.10" stroke="#1991E1" strokeWidth="2.4" strokeLinejoin="round" />
-        <line x1="173" y1="121" x2="173" y2="186" stroke="#1991E1" strokeWidth="1.1" strokeOpacity="0.7" />
-        <line x1="195" y1="128" x2="195" y2="193" stroke="#1991E1" strokeWidth="1.1" strokeOpacity="0.7" />
-        <path d="M160 168 Q180 150 209 158" fill="none" stroke="#1991E1" strokeWidth="1.3"
-              strokeOpacity="0.85" strokeDasharray="4 4" strokeLinecap="round" />
-        <circle cx="209" cy="158" r="3.4" fill="#1991E1" fillOpacity="0.9" />
+        <ellipse cx="188" cy="192" rx="38" ry="4" fill="#1991E1" fillOpacity="0.09" />
+        <path d="M154 140 L176 132 L200 140 L222 132 L222 184 L200 192 L176 184 L154 192 Z"
+              fill="#1991E1" fillOpacity="0.08" stroke="#1991E1" strokeWidth="2.3" strokeLinejoin="round" />
+        <path d="M176 132 L176 184" stroke="#1991E1" strokeWidth="1.5" strokeOpacity="0.75" />
+        <path d="M200 140 L200 192" stroke="#1991E1" strokeWidth="1.5" strokeOpacity="0.55" />
+        {/* contour lines */}
+        <path d="M158 168 Q168 162 174 166" fill="none" stroke="#1991E1" strokeWidth="0.8" strokeOpacity="0.32" />
+        <path d="M204 158 Q212 152 219 156" fill="none" stroke="#1991E1" strokeWidth="0.8" strokeOpacity="0.32" />
+        {/* the route and its destination */}
+        <path d="M162 178 Q182 158 206 150" fill="none" stroke="#1991E1" strokeWidth="1.5"
+              strokeOpacity="0.9" strokeDasharray="4 4" strokeLinecap="round" />
+        <circle cx="206" cy="150" r="3.6" fill="#1991E1" fillOpacity="0.95" />
+        <circle cx="206" cy="150" r="7"   stroke="#1991E1" strokeWidth="1" strokeOpacity="0.4" />
       </g>
 
-      {/* WINE GLASS — Dine, burnt orange */}
+      {/* ── WINE GLASS — Dine, burnt orange. Tall, slim, breaks the line. ── */}
       <g>
-        <ellipse cx="253" cy="196" rx="22" ry="4" fill="#DA5526" fillOpacity="0.16" />
-        <path d="M236 112 L270 112 L263 146 Q253 156 243 146 Z"
-              fill="#DA5526" fillOpacity="0.17" stroke="#DA5526" strokeWidth="2.4" strokeLinejoin="round" />
-        <path d="M238 121 L268 121" stroke="#DA5526" strokeWidth="1.1" strokeOpacity="0.8" />
-        <line x1="253" y1="153" x2="253" y2="188" stroke="#DA5526" strokeWidth="2.4" strokeLinecap="round" />
-        <line x1="239" y1="190" x2="267" y2="190" stroke="#DA5526" strokeWidth="2.4" strokeLinecap="round" />
+        <ellipse cx="256" cy="192" rx="20" ry="3.5" fill="#DA5526" fillOpacity="0.10" />
+        <path d="M239 76 L273 76 L266 118 Q256 130 246 118 Z"
+              fill="#DA5526" fillOpacity="0.10" stroke="#DA5526" strokeWidth="2.3" strokeLinejoin="round" />
+        {/* liquid line — tier 3 */}
+        <path d="M243.4 96 L268.6 96 L266 118 Q256 130 246 118 Z"
+              fill="#DA5526" fillOpacity="0.20" stroke="#DA5526" strokeWidth="1.2" strokeOpacity="0.7" />
+        <path d="M241 84 L271 84" stroke="#DA5526" strokeWidth="1" strokeOpacity="0.4" />
+        <line x1="256" y1="127" x2="256" y2="186" stroke="#DA5526" strokeWidth="2.3" strokeLinecap="round" />
+        <path d="M242 188 Q256 183 270 188" fill="none" stroke="#DA5526" strokeWidth="2.3" strokeLinecap="round" />
       </g>
 
-      {/* HEADPHONES — Listen, rose */}
+      {/* ── HEADPHONES — Listen, rose. Low and wide, closes the row. ── */}
       <g>
-        <ellipse cx="303" cy="196" rx="24" ry="4" fill="#DC3C82" fillOpacity="0.14" />
-        <path d="M282 168 A22 22 0 0 1 324 168" fill="none" stroke="#DC3C82"
-              strokeWidth="2.4" strokeLinecap="round" />
-        <rect x="276" y="164" width="13" height="26" rx="6.5"
-              fill="#DC3C82" fillOpacity="0.20" stroke="#DC3C82" strokeWidth="2" />
-        <rect x="317" y="164" width="13" height="26" rx="6.5"
-              fill="#DC3C82" fillOpacity="0.20" stroke="#DC3C82" strokeWidth="2" />
-        <line x1="282" y1="170" x2="282" y2="184" stroke="#DC3C82" strokeWidth="1.1" strokeOpacity="0.7" />
-        <line x1="324" y1="170" x2="324" y2="184" stroke="#DC3C82" strokeWidth="1.1" strokeOpacity="0.7" />
+        <ellipse cx="303" cy="192" rx="24" ry="3.5" fill="#DC3C82" fillOpacity="0.09" />
+        <path d="M281 162 A23 23 0 0 1 327 162" fill="none" stroke="#DC3C82"
+              strokeWidth="2.3" strokeLinecap="round" />
+        <path d="M284 162 A20 20 0 0 1 324 162" fill="none" stroke="#DC3C82"
+              strokeWidth="0.9" strokeOpacity="0.35" strokeLinecap="round" />
+        <rect x="274" y="158" width="14" height="28" rx="7"
+              fill="#DC3C82" fillOpacity="0.17" stroke="#DC3C82" strokeWidth="2" />
+        <rect x="320" y="158" width="14" height="28" rx="7"
+              fill="#DC3C82" fillOpacity="0.12" stroke="#DC3C82" strokeWidth="2" strokeOpacity="0.75" />
+        <line x1="281" y1="165" x2="281" y2="179" stroke="#DC3C82" strokeWidth="1.1" strokeOpacity="0.6" />
+        {/* cable */}
+        <path d="M327 184 Q333 196 326 202" fill="none" stroke="#DC3C82"
+              strokeWidth="1.3" strokeOpacity="0.4" strokeLinecap="round" />
       </g>
 
-      {/* Shelf line — grounds the objects without a literal surface */}
-      <line x1="14" y1="200" x2="326" y2="200" stroke="url(#shelfLine)" strokeWidth="1.2" />
+      {/* Shelf edge — a line, not a surface. Grounds without describing. */}
+      <line x1="18" y1="196" x2="322" y2="196" stroke="url(#shelfEdge)" strokeWidth="1.1" />
     </svg>
   )
 }
