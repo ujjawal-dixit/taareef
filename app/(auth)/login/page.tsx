@@ -34,7 +34,7 @@ export default function LoginPage() {
         fontSize: '11px', color: 'rgba(240,230,200,0.25)',
         textAlign: 'center', marginTop: '24px', lineHeight: 1.6,
       }}>
-        Private by default. Your vault belongs to you.
+        Private by default. Trust works both ways.
       </p>
     </div>
   )
