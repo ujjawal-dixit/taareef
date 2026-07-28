@@ -14,15 +14,47 @@
 
 import Link            from 'next/link'
 import { usePathname } from 'next/navigation'
+import { useEffect, useState } from 'react'
+
+// One-time tooltip pointing at the FAB.
+//
+// WHY (Session 15, 2026-07-28): after signing in, someone landed on the
+// dashboard with no indication of how to save anything else. The demo
+// taught them to save, then the real product offered no next step. This
+// is the single piece of hand-holding in the entire app — it appears
+// once, for four seconds, and never again.
+const TOOLTIP_KEY = 'taareef_fab_tooltip_shown'
 
 const NEON = '#1fce94'
 
 type Props = { onFabTap: () => void }
 
+function useFabTooltip(enabled: boolean) {
+  const [show, setShow] = useState(false)
+
+  useEffect(() => {
+    if (!enabled) return
+    try {
+      if (localStorage.getItem(TOOLTIP_KEY)) return
+    } catch { return }
+
+    const appear = setTimeout(() => {
+      setShow(true)
+      try { localStorage.setItem(TOOLTIP_KEY, '1') } catch { /* private mode */ }
+    }, 500)
+    const vanish = setTimeout(() => setShow(false), 4500)
+
+    return () => { clearTimeout(appear); clearTimeout(vanish) }
+  }, [enabled])
+
+  return show
+}
+
 export function BottomNav({ onFabTap }: Props) {
   const pathname  = usePathname()
   const isVault   = pathname === '/dashboard' || pathname.startsWith('/rec/')
   const isProfile = pathname.startsWith('/profile')
+  const showTip   = useFabTooltip(pathname === '/dashboard')
 
   return (
     <div
@@ -47,6 +79,47 @@ export function BottomNav({ onFabTap }: Props) {
           This approach is immune to mobile browser chrome issues
           because the FAB moves with the fixed nav container.
       ──────────────────────────────────────────────────────── */}
+      {isVault && showTip && (
+        <div
+          role="status"
+          style={{
+            position:      'absolute',
+            bottom:        '100%',
+            left:          '50%',
+            transform:     'translateX(-50%)',
+            marginBottom:  '12px',
+            padding:       '10px 15px',
+            borderRadius:  '12px',
+            background:    'rgba(20,24,22,0.97)',
+            border:        `0.5px solid ${NEON}44`,
+            boxShadow:     '0 8px 28px rgba(0,0,0,0.55)',
+            fontFamily:    'var(--f-body)',
+            fontSize:      '13px',
+            lineHeight:    1.45,
+            color:         'rgba(244,243,238,0.88)',
+            whiteSpace:    'nowrap',
+            pointerEvents: 'none',
+            animation:     'taareefTipIn 220ms ease-out',
+            zIndex:        60,
+          }}
+        >
+          Tap <span style={{ color: NEON, fontWeight: 700 }}>+</span> any time to save something
+          <span
+            style={{
+              position:   'absolute',
+              top:        '100%',
+              left:       '50%',
+              width:      0,
+              height:     0,
+              marginLeft: '-6px',
+              borderLeft:  '6px solid transparent',
+              borderRight: '6px solid transparent',
+              borderTop:   `6px solid rgba(20,24,22,0.97)`,
+            }}
+          />
+        </div>
+      )}
+
       {isVault && (
         <button
           onClick={onFabTap}
