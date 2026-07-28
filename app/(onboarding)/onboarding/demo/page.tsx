@@ -40,7 +40,7 @@ export default function DemoVaultPage() {
       {/* Banner */}
       <div style={{ background: 'rgba(31,206,148,0.08)', borderBottom: '0.5px solid rgba(31,206,148,0.18)', padding: '10px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
         <span style={{ fontFamily: 'var(--f-body)', fontSize: 13, color: 'rgba(244,243,238,0.55)' }}>
-          This is what your Taareef looks like →
+          Preview
         </span>
         <Link href="/login" style={{ fontFamily: 'var(--f-ui)', fontWeight: 700, fontSize: 11, letterSpacing: '0.06em', textTransform: 'uppercase', color: '#1fce94', textDecoration: 'none' }}>
           Sign in
@@ -58,9 +58,9 @@ export default function DemoVaultPage() {
       </div>
 
       {/* Category pills — visual only */}
-      <div style={{ display: 'flex', gap: 8, padding: '0 20px 16px', overflowX: 'auto', scrollbarWidth: 'none', flexShrink: 0 }}>
-        {CAT_LIST.slice(0, 4).map((cat) => (
-          <div key={cat.id} style={{ padding: '6px 14px', borderRadius: 20, border: '0.5px solid rgba(255,255,255,0.10)', fontFamily: 'var(--f-ui)', fontWeight: 700, fontSize: 11, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'rgba(244,243,238,0.30)', whiteSpace: 'nowrap', flexShrink: 0, userSelect: 'none' }}>
+      <div style={{ display: 'flex', gap: 5, padding: '0 16px 16px', flexShrink: 0 }}>
+        {CAT_LIST.map((cat) => (
+          <div key={cat.id} style={{ flex: 1, minWidth: 0, padding: '6px 2px', borderRadius: 20, border: '0.5px solid rgba(255,255,255,0.10)', fontFamily: 'var(--f-ui)', fontWeight: 700, fontSize: 10, letterSpacing: '0.04em', textTransform: 'uppercase', color: 'rgba(244,243,238,0.30)', textAlign: 'center', whiteSpace: 'nowrap', userSelect: 'none' }}>
             {cat.label}
           </div>
         ))}
