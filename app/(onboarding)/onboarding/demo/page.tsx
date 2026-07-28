@@ -7,8 +7,10 @@ import { useState } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
 import { EXAMPLE_CARDS, type ExampleCard } from '@/constants/example-cards'
+import type { Category } from '@/lib/types'
 import { CategoryMotif } from '@/components/features/cards/category-motif'
 import { ensureSession } from '@/lib/supabase/anon'
+import { compressImage } from '@/lib/utils/compress-image'
 
 // Self-contained category config — does not depend on constants/categories.ts export shape
 const CAT_CONFIG: Record<string, { label: string; vividHex: string; vividRgb: string; verb: string }> = {
@@ -184,11 +186,53 @@ function DemoSaveSheet({ onClose }: { onClose: () => void }) {
   const [saved, setSaved]       = useState(false)
   const [saving, setSaving]     = useState(false)
   const [error, setError]       = useState<string | null>(null)
+  // 'choose' mirrors the capture screen inside the app, so the demo
+  // teaches the flow someone will actually use rather than a typed form
+  // they will never see again.
+  const [mode, setMode]         = useState<'choose' | 'form'>('choose')
+  const [scanning, setScanning] = useState(false)
+  const [voiceNote, setVoiceNote] = useState(false)
   const canSave = title.trim().length > 0 && category.length > 0 && !saving
 
   // Creates an anonymous session (if there isn't one) and writes a real
   // row. Enrichment runs server-side exactly as it does for a signed-in
   // user, so the card fills in with a poster or photo moments later.
+  // Reads a screenshot through the same OCR route the app uses, then
+  // pre-fills the form. Anonymous sessions satisfy its auth guard, and
+  // migration 005 caps them at three saves.
+  async function handleScan(file: File) {
+    setScanning(true)
+    setError(null)
+    try {
+      const userId = await ensureSession()
+      if (!userId) throw new Error('no-session')
+
+      const upload = await compressImage(file)
+      const form   = new FormData()
+      form.append('image', upload)
+
+      const res  = await fetch('/api/capture/ocr', { method: 'POST', body: form })
+      const json = await res.json() as {
+        data?: { title?: string | null; category?: string | null; source_name?: string | null }
+        error?: string | null
+      }
+      if (!res.ok || json.error || !json.data) throw new Error(json.error ?? 'scan-failed')
+
+      if (json.data.title)       setTitle(json.data.title)
+      if (json.data.category)    setCategory(json.data.category)
+      if (json.data.source_name) setSource(json.data.source_name)
+      setMode('form')
+    } catch (err) {
+      console.error('[demo] scan failed:', err)
+      // Never a dead end — drop into the typed form so the save can
+      // still happen.
+      setError("Couldn't read that screenshot — type it instead")
+      setMode('form')
+    } finally {
+      setScanning(false)
+    }
+  }
+
   async function handleSave() {
     if (!canSave) return
     setSaving(true)
@@ -231,6 +275,51 @@ function DemoSaveSheet({ onClose }: { onClose: () => void }) {
               <h2 style={{ fontFamily: 'var(--f-display)', fontStyle: 'italic', fontWeight: 500, fontSize: 22, color: '#F4F3EE', margin: 0 }}>Save a recommendation</h2>
               <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'rgba(244,243,238,0.35)', cursor: 'pointer', padding: 4, fontSize: 20, lineHeight: 1 }}>×</button>
             </div>
+            {mode === 'choose' ? (
+              <div style={{ paddingBottom: 8 }}>
+                <p style={{ fontFamily: 'var(--f-body)', fontSize: 14, color: 'rgba(244,243,238,0.45)', margin: '0 0 22px', lineHeight: 1.5 }}>
+                  However it reached you.
+                </p>
+
+                <label style={{ display: 'flex', alignItems: 'center', gap: 14, width: '100%', padding: '16px 18px', marginBottom: 10, borderRadius: 14, border: '0.5px solid rgba(31,206,148,0.35)', background: 'rgba(31,206,148,0.06)', cursor: scanning ? 'default' : 'pointer' }}>
+                  <span style={{ fontSize: 20, lineHeight: 1 }}>&#128247;</span>
+                  <span style={{ flex: 1, textAlign: 'left' }}>
+                    <span style={{ display: 'block', fontFamily: 'var(--f-display)', fontStyle: 'italic', fontWeight: 500, fontSize: 18, color: '#F4F3EE' }}>
+                      {scanning ? 'Reading it\u2026' : 'Scan it'}
+                    </span>
+                    <span style={{ display: 'block', fontFamily: 'var(--f-body)', fontSize: 12, color: 'rgba(244,243,238,0.42)', marginTop: 3 }}>
+                      A screenshot from anywhere &mdash; we&rsquo;ll read it
+                    </span>
+                  </span>
+                  <input type="file" accept="image/*" disabled={scanning} onChange={(e) => { const f = e.target.files?.[0]; if (f) void handleScan(f) }} style={{ display: 'none' }} />
+                </label>
+
+                <button onClick={() => setMode('form')} style={{ display: 'flex', alignItems: 'center', gap: 14, width: '100%', padding: '16px 18px', marginBottom: 10, borderRadius: 14, border: '0.5px solid rgba(255,255,255,0.12)', background: 'transparent', cursor: 'pointer' }}>
+                  <span style={{ fontSize: 20, lineHeight: 1 }}>&#9998;</span>
+                  <span style={{ flex: 1, textAlign: 'left' }}>
+                    <span style={{ display: 'block', fontFamily: 'var(--f-display)', fontStyle: 'italic', fontWeight: 500, fontSize: 18, color: '#F4F3EE' }}>Type it</span>
+                    <span style={{ display: 'block', fontFamily: 'var(--f-body)', fontSize: 12, color: 'rgba(244,243,238,0.42)', marginTop: 3 }}>Just the name is enough</span>
+                  </span>
+                </button>
+
+                <button onClick={() => setVoiceNote(true)} style={{ display: 'flex', alignItems: 'center', gap: 14, width: '100%', padding: '16px 18px', borderRadius: 14, border: '0.5px solid rgba(255,255,255,0.07)', background: 'transparent', cursor: 'pointer' }}>
+                  <span style={{ fontSize: 20, lineHeight: 1, opacity: 0.4 }}>&#127908;</span>
+                  <span style={{ flex: 1, textAlign: 'left' }}>
+                    <span style={{ display: 'block', fontFamily: 'var(--f-display)', fontStyle: 'italic', fontWeight: 500, fontSize: 18, color: 'rgba(244,243,238,0.40)' }}>Speak it</span>
+                    <span style={{ display: 'block', fontFamily: 'var(--f-body)', fontSize: 12, color: 'rgba(244,243,238,0.28)', marginTop: 3 }}>Needs an account</span>
+                  </span>
+                </button>
+
+                {voiceNote && (
+                  <p style={{ fontFamily: 'var(--f-body)', fontSize: 12.5, color: 'rgba(244,243,238,0.42)', lineHeight: 1.55, margin: '14px 2px 0' }}>
+                    Voice notes work once your vault is yours. Try a screenshot for now.
+                  </p>
+                )}
+
+                {error && <p role="alert" style={{ fontFamily: 'var(--f-body)', fontSize: 12, color: '#c8151e', textAlign: 'center', margin: '14px 0 0' }}>{error}</p>}
+              </div>
+            ) : (
+            <>
             <div style={{ marginBottom: 20 }}>
               <label style={labelStyle}>What is it?</label>
               <input autoFocus type="text" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Restaurant name, film title, album..." style={inputStyle} />
@@ -253,28 +342,43 @@ function DemoSaveSheet({ onClose }: { onClose: () => void }) {
               {saving ? 'Saving…' : 'Save it'}
             </button>
             {error && <p role="alert" style={{ fontFamily: 'var(--f-body)', fontSize: 12, color: '#c8151e', textAlign: 'center', margin: '12px 0 0' }}>{error}</p>}
+            </>
+            )}
           </>
         ) : (
-          <SigninPrompt title={title} />
+          <SigninPrompt title={title} category={category} source={source} />
         )}
       </div>
     </>
   )
 }
 
-function SigninPrompt({ title }: { title: string }) {
+function SigninPrompt({ title, category, source }: { title: string; category: string; source: string }) {
+  // The card the visitor just made sits above the prompt, undimmed.
+  // The spec's rule for this moment: they can see what they are
+  // protecting. Previously this showed the example cards instead, so the
+  // one real thing on screen was the only thing hidden.
+  const cfg = CAT_CONFIG[category] ?? CAT_CONFIG.watch
   return (
     <div style={{ textAlign: 'center', padding: '8px 0' }}>
-      <div style={{ width: 36, height: 4, borderRadius: 2, background: 'rgba(255,255,255,0.15)', margin: '0 auto 28px' }} />
-      <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: 'rgba(31,206,148,0.10)', border: '0.5px solid rgba(31,206,148,0.20)', borderRadius: 8, padding: '8px 14px', marginBottom: 24 }}>
-        <span style={{ fontSize: 14 }}>✓</span>
-        <span style={{ fontFamily: 'var(--f-body)', fontSize: 13, color: 'rgba(244,243,238,0.65)' }}>
-          <strong style={{ color: '#1fce94', fontStyle: 'normal' }}>{title}</strong> is saved
-        </span>
+      <div style={{ width: 36, height: 4, borderRadius: 2, background: 'rgba(255,255,255,0.15)', margin: '0 auto 22px' }} />
+
+      <div style={{ display: 'flex', alignItems: 'center', gap: 14, textAlign: 'left', padding: '14px 16px', marginBottom: 22, borderRadius: 14, background: `rgba(${cfg.vividRgb},0.07)`, border: `0.5px solid rgba(${cfg.vividRgb},0.28)` }}>
+        <div style={{ position: 'relative', width: 52, height: 52, flexShrink: 0, borderRadius: 10, overflow: 'hidden', background: `rgba(${cfg.vividRgb},0.10)` }}>
+          <CategoryMotif category={category as Category} rgb={cfg.vividRgb} size={52} />
+        </div>
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <p style={{ fontFamily: 'var(--f-display)', fontStyle: 'italic', fontWeight: 500, fontSize: 17, color: '#F4F3EE', margin: 0, lineHeight: 1.2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{title}</p>
+          <p style={{ fontFamily: 'var(--f-ui)', fontWeight: 700, fontSize: 10, letterSpacing: '0.06em', textTransform: 'uppercase', color: cfg.vividHex, margin: '5px 0 0' }}>
+            From {source || 'Someone'} &middot; {cfg.verb}
+          </p>
+        </div>
+        <span style={{ fontSize: 15, color: '#1fce94', flexShrink: 0 }}>&#10003;</span>
       </div>
+
       <h2 style={{ fontFamily: 'var(--f-display)', fontStyle: 'italic', fontWeight: 500, fontSize: 24, color: '#F4F3EE', margin: '0 0 10px', lineHeight: 1.15 }}>Your vault is starting.</h2>
-      <p style={{ fontFamily: 'var(--f-body)', fontSize: 14, color: 'rgba(244,243,238,0.45)', lineHeight: 1.55, margin: '0 0 28px' }}>
-        Create an account to keep it — and everything<br />you&rsquo;ll save from now on.
+      <p style={{ fontFamily: 'var(--f-body)', fontSize: 14, color: 'rgba(244,243,238,0.45)', lineHeight: 1.55, margin: '0 0 24px' }}>
+        Create an account to keep it &mdash; and everything<br />you&rsquo;ll save from now on.
       </p>
       <Link href="/login" style={{ display: 'block', width: '100%', padding: '15px 0', background: '#1fce94', borderRadius: 12, textAlign: 'center', fontFamily: 'var(--f-ui)', fontWeight: 700, fontSize: 14, letterSpacing: '0.06em', textTransform: 'uppercase', color: '#0a0a0a', textDecoration: 'none' }}>
         Continue with Google
