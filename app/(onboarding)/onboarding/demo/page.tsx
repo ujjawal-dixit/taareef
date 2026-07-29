@@ -3,7 +3,7 @@
 // app/(onboarding)/onboarding/demo/page.tsx
 // Screen 1+2: demo vault + save sheet + signin prompt. No auth required.
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
 import { EXAMPLE_CARDS, type ExampleCard } from '@/constants/example-cards'
@@ -182,6 +182,7 @@ function DemoSaveSheet({ onClose }: { onClose: () => void }) {
   const [category, setCategory] = useState<string>('')
   const [source, setSource]     = useState('')
   const [saved, setSaved]       = useState(false)
+  const [savedId, setSavedId]   = useState<string | null>(null)
   const [saving, setSaving]     = useState(false)
   const [error, setError]       = useState<string | null>(null)
   // 'choose' mirrors the capture screen inside the app, so the demo
@@ -250,9 +251,10 @@ function DemoSaveSheet({ onClose }: { onClose: () => void }) {
         }),
       })
 
-      const json = await res.json() as { data?: unknown; error?: string | null }
+      const json = await res.json() as { data?: { id?: string } | null; error?: string | null }
       if (!res.ok || json.error) throw new Error(json.error ?? 'save-failed')
 
+      if (json.data?.id) setSavedId(json.data.id)
       setSaved(true)
     } catch (err) {
       console.error('[demo] save failed:', err)
@@ -344,35 +346,96 @@ function DemoSaveSheet({ onClose }: { onClose: () => void }) {
             )}
           </>
         ) : (
-          <SigninPrompt title={title} category={category} source={source} />
+          <SigninPrompt title={title} category={category} source={source} recId={savedId} />
         )}
       </div>
     </>
   )
 }
 
-function SigninPrompt({ title, category, source }: { title: string; category: string; source: string }) {
-  // The card the visitor just made sits above the prompt, undimmed.
-  // The spec's rule for this moment: they can see what they are
-  // protecting. Previously this showed the example cards instead, so the
-  // one real thing on screen was the only thing hidden.
+function SigninPrompt({ title, category, source, recId }: { title: string; category: string; source: string; recId: string | null }) {
+  // The card is watched as enrichment lands on it — poster, artist,
+  // locality — before the visitor is asked for anything.
+  //
+  // WHY (Session 15, 2026-07-28): the save was already real, but the
+  // moment looked static. Enrichment is the thing that separates Taareef
+  // from a notes app, and it was happening invisibly, after sign-in, to
+  // a card nobody was looking at. Now it happens in front of them, on
+  // their own card, while they decide.
   const cfg = CAT_CONFIG[category] ?? CAT_CONFIG.watch
+
+  const [img, setImg]       = useState<string | null>(null)
+  const [meta, setMeta]     = useState<string | null>(null)
+  const [settled, setSettled] = useState(false)
+
+  useEffect(() => {
+    if (!recId) { setSettled(true); return }
+
+    let cancelled = false
+    let tries     = 0
+
+    // Enrichment is dispatched server-side ~300ms after the insert and
+    // typically lands within a few seconds. Poll gently, give up quietly.
+    const poll = async () => {
+      tries += 1
+      try {
+        const res  = await fetch(`/api/recommendations/${recId}`)
+        const json = await res.json() as {
+          data?: { image_url?: string | null; metadata?: Record<string, unknown> | null } | null
+        }
+        const rec = json.data
+        if (rec && !cancelled) {
+          if (rec.image_url) setImg(rec.image_url)
+
+          const m = rec.metadata ?? {}
+          const bits = [m.artist, m.director, m.author, m.neighbourhood, m.city]
+            .filter((v): v is string => typeof v === 'string' && v.length > 0)
+          const year = typeof m.release_year === 'number' ? String(m.release_year) : null
+          const line = [bits[0], year].filter(Boolean).join(' \u00b7 ')
+          if (line) setMeta(line)
+
+          if (rec.image_url) { setSettled(true); return }
+        }
+      } catch { /* keep waiting */ }
+
+      if (tries >= 6) { if (!cancelled) setSettled(true); return }
+      if (!cancelled) setTimeout(() => { void poll() }, 1400)
+    }
+
+    const start = setTimeout(() => { void poll() }, 900)
+    return () => { cancelled = true; clearTimeout(start) }
+  }, [recId])
+
+  const working = Boolean(recId) && !settled
+
   return (
     <div style={{ textAlign: 'center', padding: '8px 0' }}>
       <div style={{ width: 36, height: 4, borderRadius: 2, background: 'rgba(255,255,255,0.15)', margin: '0 auto 22px' }} />
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: 14, textAlign: 'left', padding: '14px 16px', marginBottom: 22, borderRadius: 14, background: `rgba(${cfg.vividRgb},0.07)`, border: `0.5px solid rgba(${cfg.vividRgb},0.28)` }}>
-        <div style={{ position: 'relative', width: 52, height: 52, flexShrink: 0, borderRadius: 10, overflow: 'hidden', background: `rgba(${cfg.vividRgb},0.10)` }}>
-          <CategoryMotif category={category as Category} rgb={cfg.vividRgb} size={52} />
+      <div style={{ display: 'flex', alignItems: 'center', gap: 14, textAlign: 'left', padding: '14px 16px', marginBottom: 12, borderRadius: 14, background: `rgba(${cfg.vividRgb},0.07)`, border: `0.5px solid rgba(${cfg.vividRgb},0.28)`, transition: 'border-color 400ms ease' }}>
+        <div style={{ position: 'relative', width: 56, height: 56, flexShrink: 0, borderRadius: 10, overflow: 'hidden', background: `rgba(${cfg.vividRgb},0.10)` }}>
+          {img ? (
+            /* eslint-disable-next-line @next/next/no-img-element */
+            <img src={img} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', animation: 'taareefTipIn 450ms ease-out' }} />
+          ) : (
+            <CategoryMotif category={category as Category} rgb={cfg.vividRgb} size={56} />
+          )}
         </div>
         <div style={{ minWidth: 0, flex: 1 }}>
           <p style={{ fontFamily: 'var(--f-display)', fontStyle: 'italic', fontWeight: 500, fontSize: 17, color: '#F4F3EE', margin: 0, lineHeight: 1.2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{title}</p>
+          {meta && (
+            <p style={{ fontFamily: 'var(--f-body)', fontSize: 12, color: 'rgba(244,243,238,0.50)', margin: '3px 0 0', animation: 'taareefTipIn 450ms ease-out' }}>{meta}</p>
+          )}
           <p style={{ fontFamily: 'var(--f-ui)', fontWeight: 700, fontSize: 10, letterSpacing: '0.06em', textTransform: 'uppercase', color: cfg.vividHex, margin: '5px 0 0' }}>
             From {source || 'Someone'} &middot; {cfg.verb}
           </p>
         </div>
-        <span style={{ fontSize: 15, color: '#1fce94', flexShrink: 0 }}>&#10003;</span>
+        {!working && <span style={{ fontSize: 15, color: '#1fce94', flexShrink: 0 }}>&#10003;</span>}
       </div>
+
+      <p style={{ fontFamily: 'var(--f-body)', fontSize: 12.5, color: 'rgba(244,243,238,0.38)', margin: '0 0 22px', minHeight: 17, transition: 'opacity 300ms ease' }}>
+        {working ? 'finding the poster, the year, the details\u2026' : 'Your card is ready.'}
+      </p>
 
       <h2 style={{ fontFamily: 'var(--f-display)', fontStyle: 'italic', fontWeight: 500, fontSize: 24, color: '#F4F3EE', margin: '0 0 10px', lineHeight: 1.15 }}>Your vault is starting.</h2>
       <p style={{ fontFamily: 'var(--f-body)', fontSize: 14, color: 'rgba(244,243,238,0.45)', lineHeight: 1.55, margin: '0 0 24px' }}>
