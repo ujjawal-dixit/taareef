@@ -69,7 +69,7 @@ export default function DemoVaultPage() {
       </div>
 
       {/* Example cards */}
-      <div style={{ flex: 1, padding: '0 20px', display: 'flex', flexDirection: 'column', gap: 16, paddingBottom: 160 }}>
+      <div style={{ flex: 1, padding: '0 20px', display: 'flex', flexDirection: 'column', gap: 16, paddingBottom: 260 }}>
         {EXAMPLE_CARDS.map((card) => (
           <ExampleCardFull key={card.id} card={card} />
         ))}
@@ -105,11 +105,15 @@ export default function DemoVaultPage() {
 }
 
 function ExampleCardFull({ card }: { card: ExampleCard }) {
+  // If the file is missing or fails to decode, fall back to the motif.
+  // Without this a 404 renders the browser's broken-image state and
+  // prints the alt text across the artwork.
+  const [imgFailed, setImgFailed] = useState(false)
   const cat = CAT_CONFIG[card.category]
   if (!cat) return null
   const subtype = (card.metadata.subtype as string | undefined) ?? ''
   const rgb = cat.vividRgb
-  const hasImage = !!card.image_url
+  const hasImage = !!card.image_url && !imgFailed
   const titleLen = card.title.length
   const titleSize = titleLen <= 22 ? 25 : titleLen <= 34 ? 22 : 19
 
@@ -140,7 +144,7 @@ function ExampleCardFull({ card }: { card: ExampleCard }) {
             <div style={{ flex: '1 1 auto', minHeight: 0, borderRadius: 7, overflow: 'hidden', position: 'relative', boxShadow: `0 0 0 2px #0a0a0a, 0 0 0 3px rgba(${rgb},0.3)` }}>
               {hasImage ? (
                 <>
-                  <Image src={card.image_url!} alt={card.title} fill style={{ objectFit: 'cover', objectPosition: 'top center' }} sizes="(max-width: 430px) 100vw, 390px" priority />
+                  <Image src={card.image_url!} alt="" onError={() => setImgFailed(true)} fill style={{ objectFit: 'cover', objectPosition: 'top center' }} sizes="(max-width: 430px) 100vw, 390px" priority />
                   <div style={{ position: 'absolute', inset: 0, background: `rgba(${rgb},0.14)`, mixBlendMode: 'overlay', zIndex: 4 }} />
                 </>
               ) : (
@@ -398,11 +402,16 @@ function SigninPrompt({ title, category, source, recId }: { title: string; categ
         }
       } catch { /* keep waiting */ }
 
-      if (tries >= 6) { if (!cancelled) setSettled(true); return }
-      if (!cancelled) setTimeout(() => { void poll() }, 1400)
+      // Verified 2026-07-29: a real save enriched correctly but only
+      // after the previous 9s window had already given up, so the card
+      // sat on its motif while the poster existed in the database.
+      // Nothing here blocks the visitor — the Google button is live
+      // throughout — so patience costs nothing.
+      if (tries >= 26) { if (!cancelled) setSettled(true); return }
+      if (!cancelled) setTimeout(() => { void poll() }, 1500)
     }
 
-    const start = setTimeout(() => { void poll() }, 900)
+    const start = setTimeout(() => { void poll() }, 800)
     return () => { cancelled = true; clearTimeout(start) }
   }, [recId])
 
@@ -434,7 +443,7 @@ function SigninPrompt({ title, category, source, recId }: { title: string; categ
       </div>
 
       <p style={{ fontFamily: 'var(--f-body)', fontSize: 12.5, color: 'rgba(244,243,238,0.38)', margin: '0 0 22px', minHeight: 17, transition: 'opacity 300ms ease' }}>
-        {working ? 'finding the poster, the year, the details\u2026' : 'Your card is ready.'}
+        {working ? 'finding the poster, the year, the details\u2026' : (img ? 'Your card is ready.' : 'Saved. We\u2019ll keep looking for the artwork.')}
       </p>
 
       <h2 style={{ fontFamily: 'var(--f-display)', fontStyle: 'italic', fontWeight: 500, fontSize: 24, color: '#F4F3EE', margin: '0 0 10px', lineHeight: 1.15 }}>Your vault is starting.</h2>
