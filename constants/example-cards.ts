@@ -43,7 +43,7 @@ export const EXAMPLE_CARDS: ExampleCard[] = [
     source_type: 'friend',
     source_name: 'Rohit',
     notes: 'Sit upstairs, order the beer',
-    image_url: '/examples/leopold.jpeg',
+    image_url: null, // TODO: set to '/examples/leopold.jpeg' once the file is uploaded
     status: 'saved',
     reaction: null,
     metadata: {
@@ -59,7 +59,7 @@ export const EXAMPLE_CARDS: ExampleCard[] = [
     source_type: 'friend',
     source_name: 'Zaid',
     notes: 'Worth the wait',
-    image_url: '/examples/the-fall-off.jpeg',
+    image_url: null, // TODO: set to '/examples/the-fall-off.jpeg' once the file is uploaded
     status: 'saved',
     reaction: null,
     metadata: { subtype: 'album', artist: 'J. Cole' },
@@ -71,7 +71,7 @@ export const EXAMPLE_CARDS: ExampleCard[] = [
     source_type: 'family',
     source_name: 'Amma',
     notes: 'Take your time with it',
-    image_url: '/examples/midnights-children.jpeg',
+    image_url: null, // TODO: set to '/examples/midnights-children.jpeg' once the file is uploaded
     status: 'saved',
     reaction: null,
     metadata: { subtype: 'fiction', author: 'Salman Rushdie', release_year: 1981 },
