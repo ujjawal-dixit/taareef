@@ -9,14 +9,12 @@
 // - Category-specific empty state copy (not a product pitch)
 // - Delete toast with 10-second soft-delete undo
 
-import { useState, useCallback, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import Link                      from 'next/link'
-import { AppShell }              from '@/components/features/navigation/app-shell'
-import { useToast }              from '@/components/ui/toast'
-import { useCreateRecommendation } from '@/hooks/use-recommendations'
+import { useSave, useSaveEvents } from '@/components/features/navigation/app-providers'
 import { RecommendationCard }    from '@/components/features/cards/recommendation-card'
 import { useRouter }             from 'next/navigation'
-import type { Recommendation, CreateRecommendationInput } from '@/lib/types'
+import type { Recommendation } from '@/lib/types'
 import type { CategoryConfig }   from '@/constants/categories'
 
 type Props = {
@@ -189,11 +187,8 @@ function DeleteToast({ title, recId, categoryId, onDismiss }: {
 // ── MAIN COMPONENT ────────────────────────────────────────────────
 
 export function CategoryListClient({ recommendations: serverRecs, categoryConfig: cfg, deletedId }: Props) {
-  const { toast }  = useToast()
-  const { create } = useCreateRecommendation()
 
-  // Direct handle to AppShell's open() — no DOM queries needed
-  const openCaptureRef = useRef<(() => void) | null>(null)
+  const { openCapture } = useSave()
 
   const [recs,        setRecs]        = useState<Recommendation[]>(
     // Filter out the deleted card immediately if redirected post-delete
@@ -235,28 +230,25 @@ export function CategoryListClient({ recommendations: serverRecs, categoryConfig
     return deleted ? { title: deleted.title, recId: deletedId } : null
   })
 
-  const handleSave = useCallback(async (input: CreateRecommendationInput) => {
-    const tempId = `temp-${Date.now()}`
-    const temp: Recommendation = {
-      id: tempId, user_id: '', status: 'saved', reaction: null,
-      priority: input.priority ?? 'medium', metadata: input.metadata ?? {},
-      url: input.url ?? null, image_url: input.image_url ?? null,
-      notes: input.notes ?? null, location: input.location ?? null,
-      created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
-      ...input,
-    }
-    if (input.category === cfg.id) setRecs(prev => [temp, ...prev])
-    await create(input, undefined,
-      (real) => {
-        setRecs(prev => prev.map(r => r.id === tempId ? real : r))
-        toast('Saved ✦', 'success')
-      },
-      (err) => {
-        setRecs(prev => prev.filter(r => r.id !== tempId))
-        toast(err, 'error')
-      }
-    )
-  }, [create, toast, cfg.id])
+  // The save itself lives in the provider above the router. This screen
+  // only reacts: insert immediately, swap in the real card when it
+  // lands, remove it if the save failed.
+  useSaveEvents({
+    onOptimistic: (temp) => {
+      if (temp.category === cfg.id) setRecs(prev => [temp, ...prev])
+    },
+    onSaved: (real, tempId) => {
+      setRecs(prev => {
+        const hadTemp = prev.some(r => r.id === tempId)
+        if (hadTemp) return prev.map(r => r.id === tempId ? real : r)
+        // Saved into this category from elsewhere — add it.
+        return real.category === cfg.id ? [real, ...prev] : prev
+      })
+    },
+    onFailed: (tempId) => {
+      setRecs(prev => prev.filter(r => r.id !== tempId))
+    },
+  })
 
   const nudges   = ['All', ...cfg.nudges]
   const filtered = activeNudge === 'All'
@@ -275,7 +267,7 @@ export function CategoryListClient({ recommendations: serverRecs, categoryConfig
   const canToggle = true  // All categories support both views
 
   return (
-    <AppShell onSaveRecommendation={handleSave} onCaptureReady={(fn) => { openCaptureRef.current = fn }}>
+    <>
       <div style={{ maxWidth: '430px', margin: '0 auto', paddingBottom: '100px' }}>
 
         {/* Back nav */}
@@ -465,7 +457,7 @@ export function CategoryListClient({ recommendations: serverRecs, categoryConfig
 
             <button
               onClick={() => {
-                openCaptureRef.current?.()
+                openCapture()
               }}
               style={{
                 width:                   '56px',
@@ -569,7 +561,7 @@ export function CategoryListClient({ recommendations: serverRecs, categoryConfig
         />
       )}
 
-    </AppShell>
+    </>
   )
 }
 
