@@ -3,6 +3,7 @@
 // These are read-only — never written to Supabase.
 // Dismissed automatically after 3 real saves (taareef_example_save_count in localStorage).
 // Can be individually dismissed via the example chip × button.
+//
 
 export interface ExampleCard {
   id: string
