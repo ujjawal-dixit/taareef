@@ -7,12 +7,9 @@
 
 import { useCallback, useMemo } from 'react'
 import { useRouter }   from 'next/navigation'
-import { AppShell }    from '@/components/features/navigation/app-shell'
-import { useToast }    from '@/components/ui/toast'
-import { useCreateRecommendation } from '@/hooks/use-recommendations'
 import { CATEGORIES, getTileGradient } from '@/constants/categories'
 import type { CategoryConfig } from '@/constants/categories'
-import type { Recommendation, CreateRecommendationInput } from '@/lib/types'
+import type { Recommendation } from '@/lib/types'
 
 type TileData = {
   category:   CategoryConfig
@@ -79,26 +76,16 @@ function getSubHeadline(totalSaved: number): string {
 }
 
 export function DashboardClient({ tiles, totalSaved }: DashboardClientProps) {
-  const router     = useRouter()
-  const { toast }  = useToast()
-  const { create } = useCreateRecommendation()
+  const router = useRouter()
 
   // Computed once on mount — stable per session, shifts across visits
   const subHeadline = useMemo(() => getSubHeadline(totalSaved), [totalSaved])
-
-  const handleSave = useCallback(async (input: CreateRecommendationInput) => {
-    await create(
-      input, undefined,
-      () => { toast('Saved ✦', 'success'); router.refresh() },
-      (err) => toast(err, 'error'),
-    )
-  }, [create, toast, router])
 
   const filledMap: Record<string, TileData> = {}
   tiles.forEach(t => { filledMap[t.category.id] = t })
 
   return (
-    <AppShell onSaveRecommendation={handleSave}>
+    <>
       <div style={{ maxWidth: '430px', margin: '0 auto', padding: '0 0 88px' }}>
 
         <div style={{ textAlign: 'center', padding: '28px 0 12px' }}>
@@ -144,7 +131,7 @@ export function DashboardClient({ tiles, totalSaved }: DashboardClientProps) {
         </div>
 
       </div>
-    </AppShell>
+    </>
   )
 }
 
