@@ -116,6 +116,10 @@ export function RecDetailClient({ recommendation: rec, categoryConfig: cfg }: Pr
     (rec.metadata as Record<string,unknown>) ?? {}
   )
   const [liveImageUrl,   setLiveImageUrl]   = useState<string | null>(rec.image_url)
+  // Enrichment either lands or it does not. Roughly 45s covers TMDB
+  // plus Watchmode comfortably; past that, "finding the right poster…"
+  // is no longer true and must stop claiming otherwise.
+  const [posterSearchOver, setPosterSearchOver] = useState(false)
   const [confirmingId,   setConfirmingId]   = useState<number | null>(null)
   const [dismissedCands, setDismissedCands] = useState(false)
   const [platforms,      setPlatforms]      = useState<string[]>(
@@ -257,6 +261,12 @@ export function RecDetailClient({ recommendation: rec, categoryConfig: cfg }: Pr
       }
     } catch {}
   }, [note, noteDraftKey, rec.notes])
+
+  useEffect(() => {
+    if (liveImageUrl) { setPosterSearchOver(true); return }
+    const t = setTimeout(() => setPosterSearchOver(true), 45_000)
+    return () => clearTimeout(t)
+  }, [liveImageUrl])
 
   const hasImage = hasValidImage(liveImageUrl)
   const isExp    = rec.status !== 'saved'
@@ -676,7 +686,7 @@ export function RecDetailClient({ recommendation: rec, categoryConfig: cfg }: Pr
           const cands = Array.isArray(liveMeta.tmdb_candidates) && !dismissedCands
             ? liveMeta.tmdb_candidates as Record<string,unknown>[]
             : []
-          if (!cands.length && !liveImageUrl && rec.category === 'watch') {
+          if (!cands.length && !liveImageUrl && !posterSearchOver && rec.category === 'watch') {
             // Enrichment fired but candidates not yet back — show breathing rangoli
             return (
               <div style={{
