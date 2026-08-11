@@ -648,6 +648,11 @@ export function RecDetailClient({ recommendation: rec, categoryConfig: cfg }: Pr
               rgb={rgb}
               hasImage={hasImage}
               liveImageUrl={liveImageUrl}
+              // A stored URL that no longer resolves is the same as no
+              // photo. Clearing it re-enables "add a photo" and the
+              // picker, which were hidden while the app believed a
+              // photo existed.
+              onImageError={() => setLiveImageUrl(null)}
               dSubtype={dSubtype}
               subcatLbl={subcatLbl}
               platform={platform}
