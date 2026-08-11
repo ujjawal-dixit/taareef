@@ -9,6 +9,7 @@
 
 import type { Ref } from 'react'
 import Image from 'next/image'
+import { useState } from 'react'
 import { CategoryMotif } from '@/components/features/cards/category-motif'
 import { PlatformLogo } from '@/components/features/cards/platform-logo'
 import type { CategoryConfig } from '@/constants/categories'
@@ -37,9 +38,15 @@ export type FullCardProps = {
 }
 
 export function FullCard({
-  cardRef, rec, cfg, rgb, hasImage, liveImageUrl, dSubtype, subcatLbl,
+  cardRef, rec, cfg, rgb, hasImage: hasImageProp, liveImageUrl, dSubtype, subcatLbl,
   platform, castLine, metaLine, note, isLoved, isExp, vowText, titleSize, srcDisplay,
 }: FullCardProps) {
+  // Google Places photo URLs are signed and expire. A dead URL must
+  // degrade to the folk-art motif, never to the browser's broken-image
+  // state with the title stamped across the artwork.
+  const [imgFailed, setImgFailed] = useState(false)
+  const hasImage = hasImageProp && !imgFailed
+
   return (
     <div ref={cardRef} style={{
       position: 'relative',
@@ -79,7 +86,8 @@ export function FullCard({
                 <>
                   <Image
                     src={liveImageUrl!}
-                    alt={rec.title}
+                    alt=""
+                    onError={() => setImgFailed(true)}
                     fill
                     style={{ objectFit: 'cover', objectPosition: 'top' }}
                     sizes="(max-width:480px) 100vw,480px"
