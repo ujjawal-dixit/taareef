@@ -24,6 +24,13 @@ export type FullCardProps = {
   rgb:          string
   hasImage:     boolean
   liveImageUrl: string | null
+  /**
+   * Called when the stored image fails to load. Google Places photo URLs
+   * are signed and expire, so a card can hold a URL that no longer
+   * resolves. The screen needs to know — otherwise it keeps believing a
+   * photo exists and hides the means to replace it.
+   */
+  onImageError?: () => void
   dSubtype:     string | null
   subcatLbl:    string | null
   platform:     string | null
@@ -38,7 +45,7 @@ export type FullCardProps = {
 }
 
 export function FullCard({
-  cardRef, rec, cfg, rgb, hasImage: hasImageProp, liveImageUrl, dSubtype, subcatLbl,
+  cardRef, rec, cfg, rgb, hasImage: hasImageProp, liveImageUrl, onImageError, dSubtype, subcatLbl,
   platform, castLine, metaLine, note, isLoved, isExp, vowText, titleSize, srcDisplay,
 }: FullCardProps) {
   // Google Places photo URLs are signed and expire. A dead URL must
@@ -87,7 +94,7 @@ export function FullCard({
                   <Image
                     src={liveImageUrl!}
                     alt=""
-                    onError={() => setImgFailed(true)}
+                    onError={() => { setImgFailed(true); onImageError?.() }}
                     fill
                     style={{ objectFit: 'cover', objectPosition: 'top' }}
                     sizes="(max-width:480px) 100vw,480px"
