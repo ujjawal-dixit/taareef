@@ -1,5 +1,7 @@
 'use client'
 
+import { useState } from 'react'
+
 // components/features/cards/recommendation-card.tsx
 // Session 9 — three variants:
 //   full    → two-zone card (used on detail screen reference, shared artifact)
@@ -67,6 +69,13 @@ function GridCard({ rec, config, metaLine, hasImage }: {
   metaLine: string
   hasImage: boolean
 }) {
+  // Stored image URLs are not guaranteed to survive. Google Places photo
+  // URLs in particular are signed and expire, so a card that rendered
+  // fine last month can 404 today. Fall back to the motif rather than
+  // the browser's broken-image state with the title stamped over it.
+  const [imgFailed, setImgFailed] = useState(false)
+  const showImage = hasImage && !imgFailed
+
   // Dynamic title sizing — short titles feel large, long ones compress
   const titleLen  = rec.title.length
   const titleSize = titleLen <= 12 ? '17px' : titleLen <= 22 ? '15px' : '13px'
@@ -116,10 +125,11 @@ function GridCard({ rec, config, metaLine, hasImage }: {
           overflow:   'hidden',
         }}>
           <div style={{ position: 'absolute', inset: 0 }}>
-            {hasImage ? (
+            {showImage ? (
               <Image
                 src={rec.image_url!}
-                alt={rec.title}
+                alt=""
+                onError={() => setImgFailed(true)}
                 fill
                 style={{ objectFit: 'cover' }}
                 sizes="(max-width:480px) 50vw, 200px"
@@ -229,7 +239,8 @@ function CompactRow({ rec, config, metaLine }: {
   config:   CategoryConfig
   metaLine: string
 }) {
-  const hasImage = hasValidImage(rec.image_url)
+  const [imgFailed, setImgFailed] = useState(false)
+  const hasImage = hasValidImage(rec.image_url) && !imgFailed
   const reactionColors: Record<string, string> = {
     loved: '#f43f5e', good: '#10b981', okay: '#f59e0b',
   }
@@ -259,7 +270,8 @@ function CompactRow({ rec, config, metaLine }: {
         {hasImage ? (
           <Image
             src={rec.image_url!}
-            alt={rec.title}
+            alt=""
+            onError={() => setImgFailed(true)}
             fill
             style={{ objectFit: 'cover' }}
             sizes="52px"
