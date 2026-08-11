@@ -251,7 +251,9 @@ function DemoSaveSheet({ onClose }: { onClose: () => void }) {
           title:       title.trim(),
           category,
           source_type: 'friend',
-          source_name: source.trim() || 'Someone',
+          // Empty means unknown. Writing a placeholder name pollutes the
+          // vault and skews "most trusted source" on the profile.
+          source_name: source.trim() || null,
         }),
       })
 
