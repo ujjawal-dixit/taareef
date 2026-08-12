@@ -34,6 +34,7 @@ import type { Recommendation, Reaction, Category } from '@/lib/types'
 import { triggerEnrichment } from '@/lib/utils/enrich'
 import { buildMetaLine }      from '@/lib/card/derive'
 import { PlacePhotoPicker }   from '@/components/features/places/photo-picker'
+import { trackCardOpened, trackStatusChanged } from '@/lib/analytics/track'
 
 type Props = {
   recommendation: Recommendation
@@ -110,6 +111,13 @@ export function RecDetailClient({ recommendation: rec, categoryConfig: cfg }: Pr
   const [sharing,      setSharing]      = useState(false)
   const cardRef = useRef<HTMLDivElement>(null)
   const router   = useRouter()
+
+  // Session 17 — measurement only. Q: what actually gets looked at?
+  // found_via is read from the referring surface: it is IMPOSSIBLE to
+  // reconstruct after the fact, so it must be captured at open time.
+  useEffect(() => {
+    trackCardOpened(rec.id, rec.category)
+  }, [rec.id, rec.category])
 
   // Live metadata state — updated when candidates arrive or poster confirmed
   const [liveMeta,       setLiveMeta]       = useState<Record<string,unknown>>(
@@ -311,14 +319,26 @@ export function RecDetailClient({ recommendation: rec, categoryConfig: cfg }: Pr
     }
   }
 
+  // Days between save and completion, frozen at the moment it happens rather
+  // than derived later — the row must survive the recommendation being edited.
+  function daysSinceSave(): number {
+    const saved = new Date(rec.created_at).getTime()
+    return Math.max(0, Math.round((Date.now() - saved) / 86_400_000))
+  }
+
   async function handleMarkExperienced() {
-    await patch({ status: cfg.statusOptions.find(s => s !== 'saved' && s !== 'dismissed') ?? 'experienced' })
+    // Status is a category-specific text field, not a global enum — track the
+    // RESOLVED value, never the literal 'experienced'.
+    const nextStatus = cfg.statusOptions.find(s => s !== 'saved' && s !== 'dismissed') ?? 'experienced'
+    await patch({ status: nextStatus })
+    trackStatusChanged(rec.id, rec.category, rec.status, nextStatus, 'unknown', daysSinceSave())
     window.location.reload()
   }
 
   async function handleReaction(v: Reaction) {
     setReaction(v)
     await patch({ reaction: v, status: 'experienced' })
+    trackStatusChanged(rec.id, rec.category, rec.status, 'experienced', 'unknown', daysSinceSave())
   }
 
   async function handleRemove() {
