@@ -5,8 +5,9 @@
 // - Rotating sub-headline: time-seeded, never same twice in a row
 // - Tile behaviour unchanged from session 10
 
-import { useCallback, useMemo } from 'react'
+import { useCallback, useEffect, useMemo } from 'react'
 import { useRouter }   from 'next/navigation'
+import { trackAppOpened } from '@/lib/analytics/track'
 import { CATEGORIES, getTileGradient } from '@/constants/categories'
 import type { CategoryConfig } from '@/constants/categories'
 import type { Recommendation } from '@/lib/types'
@@ -77,6 +78,13 @@ function getSubHeadline(totalSaved: number): string {
 
 export function DashboardClient({ tiles, totalSaved }: DashboardClientProps) {
   const router = useRouter()
+
+  // Session 17 — measurement only. Answers the question the event log exists
+  // for: is the vault ever opened without something being saved?
+  // Fire-and-forget; cannot fail a render.
+  useEffect(() => {
+    trackAppOpened('dashboard')
+  }, [])
 
   // Computed once on mount — stable per session, shifts across visits
   const subHeadline = useMemo(() => getSubHeadline(totalSaved), [totalSaved])
