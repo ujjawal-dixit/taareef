@@ -46,13 +46,33 @@ export async function GET(request: NextRequest) {
       response.cookies.set(CLAIM_COOKIE, '', { path: '/', maxAge: 0 })
 
       try {
-        const { data: moved, error: claimError } = await supabase
-          .rpc('claim_anonymous_saves', { anon_user_id: anonUserId })
+        // Session 17: claim_anonymous_saves refused when the anonymous session
+        // had zero saves — which is exactly the browse-and-leave first session
+        // whose events we most want. claim_anonymous_session moves
+        // recommendations, events AND search_log in one transaction.
+        // Returns jsonb, not integer.
+        const { data: claimed, error: claimError } = await supabase
+          .rpc('claim_anonymous_session', { anon_user_id: anonUserId })
 
         if (claimError) {
           console.error('[AuthCallback] claim failed:', claimError.message)
         } else {
-          console.log(`[AuthCallback] claimed ${moved ?? 0} save(s) from ${anonUserId}`)
+          const result = claimed as {
+            ok: boolean
+            reason?: string
+            recommendations?: number
+            events?: number
+            searches?: number
+          } | null
+
+          if (result?.ok) {
+            console.log(
+              `[AuthCallback] claimed ${result.recommendations ?? 0} save(s), ` +
+              `${result.events ?? 0} event(s), ${result.searches ?? 0} search(es) from ${anonUserId}`,
+            )
+          } else {
+            console.log(`[AuthCallback] claim declined (${result?.reason ?? 'unknown'}) for ${anonUserId}`)
+          }
         }
       } catch (claimErr) {
         console.error('[AuthCallback] claim threw:', claimErr)
