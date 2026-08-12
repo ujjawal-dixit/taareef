@@ -16,6 +16,7 @@ import { RecommendationCard }    from '@/components/features/cards/recommendatio
 import { useRouter }             from 'next/navigation'
 import type { Recommendation } from '@/lib/types'
 import type { CategoryConfig }   from '@/constants/categories'
+import { trackCategoryViewed }   from '@/lib/analytics/track'
 
 type Props = {
   recommendations: Recommendation[]
@@ -195,6 +196,12 @@ export function CategoryListClient({ recommendations: serverRecs, categoryConfig
     serverRecs.filter(r => r.id !== deletedId)
   )
   const [activeNudge, setActiveNudge] = useState<string>('All')
+
+  // Session 17 — measurement only. Q: which categories are alive and which
+  // are inert? Fire-and-forget; cannot fail a render.
+  useEffect(() => {
+    trackCategoryViewed(cfg.id)
+  }, [cfg.id])
 
   // Grid/list toggle — per-category, persisted in localStorage
   const storageKey = `taareef-view-${cfg.id}`
