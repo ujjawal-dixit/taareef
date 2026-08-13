@@ -16,7 +16,11 @@
 import { NextRequest, NextResponse }   from 'next/server'
 import { createClient }               from '@/lib/supabase/server'
 import { getStreamingPlatforms }      from '@/lib/utils/watchmode-server'
-import type { Recommendation, RecMetadata } from '@/lib/types'
+import type { Recommendation, RecMetadata, Category } from '@/lib/types'
+import {
+  trackEnrichmentShownServer,
+  trackEnrichmentResolvedServer,
+}                                     from '@/lib/analytics/track-server'
 import {
   MODEL_DISAMBIGUATE,
   GROQ_CHAT_URL,
@@ -124,7 +128,7 @@ export async function PATCH(
     // Read existing rec to get current metadata for merging
     const { data: rec, error: recError } = await supabase
       .from('recommendations')
-      .select('metadata')
+      .select('metadata, category')
       .eq('id', params.id)
       .eq('user_id', user.id)
       .single()
@@ -217,6 +221,17 @@ export async function PATCH(
     if (updateError) {
       console.error('[enrich PATCH] update error:', updateError)
       return NextResponse.json({ error: 'Update failed' }, { status: 500 })
+    }
+
+    // Session 17 — calibration. Reaching PATCH means the user actively picked
+    // from the candidate strip, which is a CORRECTION of what enrichment
+    // proposed. Silence is tracked separately as 'untouched' by the rollup —
+    // no correction is NOT the same as correct.
+    const enrichmentId = (existingMeta as { enrichment_id?: string }).enrichment_id
+    if (enrichmentId) {
+      await trackEnrichmentResolvedServer(
+        user.id, enrichmentId, params.id, 'corrected',
+      )
     }
 
     // Return { data: { confirmed: true } } — matches what handleConfirmCandidate checks
@@ -322,11 +337,20 @@ async function enrichWatch(
     subtype,
   }))
 
+  // Session 17 — calibration. The correlation id is PERSISTED alongside the
+  // candidates because a correction may arrive days later, and without the
+  // ticket number it can never be matched back to the score that produced it.
+  const enrichmentId = crypto.randomUUID()
+
   await supabase
     .from('recommendations')
-    .update({ metadata: { ...meta, tmdb_candidates: candidates } })
+    .update({ metadata: { ...meta, tmdb_candidates: candidates, enrichment_id: enrichmentId } })
     .eq('id', rec.id as string)
     .eq('user_id', userId)
+
+  await trackEnrichmentShownServer(
+    userId, enrichmentId, rec.id as string, rec.category as Category, confidence, false,
+  )
 
   return NextResponse.json({ success: true, candidates })
 }
