@@ -47,10 +47,12 @@ export async function middleware(request: NextRequest) {
 
   // ── Logged-in user visiting the landing or login page → send to dashboard ──
   // NOTE: /onboarding/* is intentionally NOT redirected here. A logged-in user
-  // must be able to reach /onboarding/categories (the first-run question, which
-  // reads their account and writes preferences) and /onboarding/demo (the "?"
-  // replay). Redirecting /onboarding here creates an infinite loop against the
-  // dashboard's own "no preferences → /onboarding/categories" guard.
+  // must be able to reach /onboarding/demo (the "?" replay).
+  //
+  // Session 17: the previous note described a dashboard guard that redirected
+  // to /onboarding/categories when preferences were missing. That guard and
+  // that screen were both removed; the comment outlived them and would have
+  // led a future reader to preserve behaviour that no longer exists.
   if (user && (pathname === '/' || pathname.startsWith('/login'))) {
     return NextResponse.redirect(new URL('/dashboard', request.url))
   }
