@@ -25,6 +25,7 @@ import type { CreateRecommendationInput, Category, SourceType } from '@/lib/type
 import type { UnderstandResult } from '@/app/api/capture/understand/route'
 import { CATEGORIES } from '@/constants/categories'
 import { compressImage } from '@/lib/utils/compress-image'
+import { trackSaveStarted, trackSaveCompleted, trackSaveAbandoned } from '@/lib/analytics/track'
 
 // ── TYPES ─────────────────────────────────────────────────────────
 
@@ -99,12 +100,37 @@ export function CaptureScreen({ isOpen, onClose, onSaved }: Props) {
   const [saving,    setSaving]    = useState(false)
   const [error,     setError]     = useState<string | null>(null)
 
+  // Session 17 — abandonment tracking.
+  // Refs, not state: these are read inside the close effect, where a stale
+  // state closure would report the wrong stage. The whole value of this event
+  // is WHERE someone gave up, so reading the wrong stage is worse than not
+  // logging at all.
+  const savedRef   = useRef(false)
+  const stageRef   = useRef<Stage>('input')
+  const methodRef  = useRef<Method>('choose')
+  useEffect(() => { stageRef.current  = stage  }, [stage])
+  useEffect(() => { methodRef.current = method }, [method])
+
+  // Our funnel names the stage someone reached, not the internal state name.
+  function funnelStage(s: Stage): 'uploaded' | 'extracted' | 'confirmed' {
+    if (s === 'confirming') return 'confirmed'
+    if (s === 'clarifying') return 'extracted'
+    return 'uploaded'
+  }
+
   // Reset on close
   useEffect(() => {
     if (!isOpen) {
+      // Someone who opened a method and left without saving is the
+      // abandonment signal. Closing from the method chooser is not — they
+      // never started.
+      if (methodRef.current !== 'choose' && !savedRef.current) {
+        trackSaveAbandoned(funnelStage(stageRef.current), methodRef.current)
+      }
       const t = setTimeout(() => {
         setMethod('choose'); setStage('input')
         setUnderstood(null); setSaving(false); setError(null)
+        savedRef.current = false
       }, 320)
       return () => clearTimeout(t)
     }
@@ -143,6 +169,8 @@ export function CaptureScreen({ isOpen, onClose, onSaved }: Props) {
     setSaving(true); setError(null)
     try {
       await onSaved(input)
+      savedRef.current = true
+      trackSaveCompleted('', input.category, method === 'choose' ? 'type' : method)
     } catch {
       setError("Couldn't save — try again?")
       setSaving(false)
@@ -191,12 +219,12 @@ export function CaptureScreen({ isOpen, onClose, onSaved }: Props) {
             <div style={{ padding: '16px 20px 28px', flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: '0' }}>
               {/* Top row: speak + scan */}
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                <MethodOption icon={<WarliMicIcon />}    label="speak" color="rgba(200,21,30,0.90)"  glow="rgba(200,21,30,0.30)"  onClick={() => setMethod('speak')} />
-                <MethodOption icon={<WarliCameraIcon />} label="scan"  color="rgba(60,130,255,0.90)" glow="rgba(60,130,255,0.30)" onClick={() => setMethod('scan')}  />
+                <MethodOption icon={<WarliMicIcon />}    label="speak" color="rgba(200,21,30,0.90)"  glow="rgba(200,21,30,0.30)"  onClick={() => { trackSaveStarted('speak'); setMethod('speak') }} />
+                <MethodOption icon={<WarliCameraIcon />} label="scan"  color="rgba(60,130,255,0.90)" glow="rgba(60,130,255,0.30)" onClick={() => { trackSaveStarted('scan'); setMethod('scan') }}  />
               </div>
               {/* Bottom row: type centered */}
               <div style={{ display: 'flex', justifyContent: 'center' }}>
-                <MethodOption icon={<WarliPenIcon />} label="type" color="rgba(16,195,182,0.90)" glow="rgba(16,195,182,0.30)" onClick={() => setMethod('type')} />
+                <MethodOption icon={<WarliPenIcon />} label="type" color="rgba(16,195,182,0.90)" glow="rgba(16,195,182,0.30)" onClick={() => { trackSaveStarted('type'); setMethod('type') }} />
               </div>
             </div>
           </div>
