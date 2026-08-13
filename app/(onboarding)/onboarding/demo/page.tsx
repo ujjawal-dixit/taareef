@@ -10,6 +10,7 @@ import { EXAMPLE_CARDS, type ExampleCard } from '@/constants/example-cards'
 import type { Category } from '@/lib/types'
 import { CategoryMotif } from '@/components/features/cards/category-motif'
 import { ensureSession } from '@/lib/supabase/anon'
+import { track, trackSaveStarted, trackSaveCompleted, trackSaveAbandoned } from '@/lib/analytics/track'
 import { compressImage } from '@/lib/utils/compress-image'
 
 // Self-contained category config — does not depend on constants/categories.ts export shape
@@ -36,6 +37,29 @@ const inputStyle: React.CSSProperties = {
 
 export default function DemoVaultPage() {
   const [saveSheetOpen, setSaveSheetOpen] = useState(false)
+
+  // Session 17 (Option A) — create the anonymous identity on DEMO ENTRY
+  // rather than at first save.
+  //
+  // This reverses a deliberate Session 15 choice ("someone who only browses
+  // the demo never becomes a user, which keeps abandoned accounts and MAU
+  // down"). Both original reasons are now covered: abandoned accounts are
+  // collected by cleanup_anonymous_users(), and the Supabase MAU ceiling is
+  // 50,000. What the old behaviour cost was the entire pre-save funnel — and
+  // people who browse and leave are the only ones who can explain why people
+  // leave.
+  //
+  // Deliberately NOT on the landing page: a bounce should not get a row.
+  // Tapping into the demo is an expression of intent.
+  useEffect(() => {
+    let cancelled = false
+    void (async () => {
+      const userId = await ensureSession()
+      if (cancelled || !userId) return
+      track('app_opened', { surface: 'onboarding', payload: { entry_point: 'demo' } })
+    })()
+    return () => { cancelled = true }
+  }, [])
 
   return (
     <div style={{ minHeight: '100dvh', background: '#0a0a0a', display: 'flex', flexDirection: 'column', position: 'relative' }}>
@@ -83,7 +107,7 @@ export default function DemoVaultPage() {
         <p style={{ fontFamily: 'var(--f-body)', fontSize: 13, color: 'rgba(244,243,238,0.45)', margin: '0 0 14px' }}>
           Save your first one.
         </p>
-        <button onClick={() => setSaveSheetOpen(true)} style={{ width: '100%', padding: '13px 0', background: '#1fce94', borderRadius: 10, border: 'none', fontFamily: 'var(--f-ui)', fontWeight: 700, fontSize: 13, letterSpacing: '0.06em', textTransform: 'uppercase', color: '#0a0a0a', cursor: 'pointer' }}>
+        <button onClick={() => { track('category_viewed', { surface: 'onboarding', payload: { entry_point: 'demo' } }); setSaveSheetOpen(true) }} style={{ width: '100%', padding: '13px 0', background: '#1fce94', borderRadius: 10, border: 'none', fontFamily: 'var(--f-ui)', fontWeight: 700, fontSize: 13, letterSpacing: '0.06em', textTransform: 'uppercase', color: '#0a0a0a', cursor: 'pointer' }}>
           Save your first →
         </button>
       </div>
@@ -209,6 +233,7 @@ function DemoSaveSheet({ onClose }: { onClose: () => void }) {
     try {
       const userId = await ensureSession()
       if (!userId) throw new Error('no-session')
+      trackSaveStarted('scan')
 
       const upload = await compressImage(file)
       const form   = new FormData()
@@ -262,8 +287,12 @@ function DemoSaveSheet({ onClose }: { onClose: () => void }) {
 
       if (json.data?.id) setSavedId(json.data.id)
       setSaved(true)
+      trackSaveCompleted(json.data?.id ?? '', category as Category, 'type')
     } catch (err) {
       console.error('[demo] save failed:', err)
+      // Stage matters more than the failure: 'confirmed' means they got all
+      // the way to submitting and the server refused.
+      trackSaveAbandoned('confirmed', 'type')
       setError("Couldn't save that — please try again")
     } finally {
       setSaving(false)
@@ -300,7 +329,7 @@ function DemoSaveSheet({ onClose }: { onClose: () => void }) {
                   <input type="file" accept="image/*" disabled={scanning} onChange={(e) => { const f = e.target.files?.[0]; if (f) void handleScan(f) }} style={{ display: 'none' }} />
                 </label>
 
-                <button onClick={() => setMode('form')} style={{ display: 'flex', alignItems: 'center', gap: 14, width: '100%', padding: '16px 18px', marginBottom: 10, borderRadius: 14, border: '0.5px solid rgba(255,255,255,0.12)', background: 'transparent', cursor: 'pointer' }}>
+                <button onClick={() => { trackSaveStarted('type'); setMode('form') }} style={{ display: 'flex', alignItems: 'center', gap: 14, width: '100%', padding: '16px 18px', marginBottom: 10, borderRadius: 14, border: '0.5px solid rgba(255,255,255,0.12)', background: 'transparent', cursor: 'pointer' }}>
                   <svg width="22" height="22" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0 }}><path d="M4 20h4.2L19 9.2a2.1 2.1 0 0 0-3-3L5.2 17V20z" stroke="rgba(244,243,238,0.62)" strokeWidth="1.5" strokeLinejoin="round"/><path d="M14.5 7.5l2.9 2.9" stroke="rgba(244,243,238,0.62)" strokeWidth="1.5"/></svg>
                   <span style={{ flex: 1, textAlign: 'left' }}>
                     <span style={{ display: 'block', fontFamily: 'var(--f-display)', fontStyle: 'italic', fontWeight: 500, fontSize: 18, color: '#F4F3EE' }}>type it</span>
