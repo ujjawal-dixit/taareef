@@ -12,7 +12,7 @@ Taareef (تعریف — Urdu/Hindi for "praise" and "recommendation") is a priva
 
 The builder reads and understands code but needs support with debugging. Claude Code is the primary coding assistant. Code must be written as if it will be maintained and scaled — no shortcuts that work for a prototype but break at 1,000 users.
 
----
+--------
 
 ## Locked Stack — No Substitutions Without Explicit Approval
 
