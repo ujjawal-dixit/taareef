@@ -1,0 +1,161 @@
+# GAPS.md — Taareef Open Gaps Register
+
+> A living list of known gaps: things that are missing, wrong, unverified, or
+> deliberately deferred. **A gap is not a feature request.** Features live in
+> `BACKLOG.md`. A gap is something that is *already broken, already unknown, or
+> already inconsistent* in what exists.
+>
+> **How to use this file**
+> · Add a gap the moment it is found, even if there's no plan to fix it
+> · Never delete a gap — move it to §RESOLVED with the date and the resolution
+> · Every gap has an owner-question: *what would we know if this were closed?*
+>
+> Last updated: Session 17 · 2026-08-12
+
+---
+
+## SEVERITY KEY
+
+| Level | Meaning |
+|---|---|
+| **A** | Silently wrong. Producing bad data or bad behaviour right now, undetected |
+| **B** | Blocking. Something cannot be built or measured until this is closed |
+| **C** | Known unknown. Not harmful, but we are guessing where we could know |
+| **D** | Deferred by decision. Recorded so it is not rediscovered as a surprise |
+
+---
+
+## OPEN GAPS
+
+### G01 · `found_via` is hardcoded to `'unknown'` — **B**
+Every `status_changed` event records `found_via: 'unknown'` because no surface
+passes a referrer yet.
+**What we lose:** which retrieval path actually produces completions — the single
+most valuable field for Phase 4, and impossible to reconstruct afterwards.
+**Closes when:** search and source browsing exist and pass their surface through.
+**Risk if left:** we build retrieval with no way to tell which path worked.
+
+### G02 · Save funnel is unwired — **B**
+`capture-screen.tsx` (1,371 lines) has no `trackSaveStarted` /
+`trackSaveCompleted` / `trackSaveAbandoned`.
+**What we lose:** the abandonment funnel. We cannot see *where* in the save flow
+people give up, which is the input to the peek and confidence-band work.
+**Deliberately deferred** — the save flow is the one thing that currently works;
+a rushed edit there to finish a checklist is the wrong trade.
+
+### G03 · Two of three completions have no reaction — **A**
+Live data: `experienced = 3`, of which only one has a `reaction` value.
+**Meaning:** when the loop does close, the final step silently does not fire.
+**Closes when:** the completion destination exists and asks for the verdict at
+the moment of completion.
+
+### G04 · `status` is `text`, not an enum — **A**
+No database constraint. Any typo is a permanently valid status.
+**Closes when:** converted — which touches every writer, so it needs its own
+delivery with a full consumer sweep.
+
+### G05 · `category` enum carries 14 dead values — **C**
+Live: `watch, listen, read, dine, do, visit`. Also insertable: `restaurant, bar,
+film, tv, music, book, city, activity, podcast, person, eat, drink, go, see`.
+**Deferred deliberately** — Postgres cannot drop enum values; cleaning means
+recreating the type on a live table. Risk exceeds benefit today.
+
+### G06 · Dead onboarding vertical slice — **C**
+| Item | State |
+|---|---|
+| `app/(onboarding)/onboarding/categories/page.tsx` | Functional, zero inbound links, reachable by URL |
+| `app/api/user/preferences/route.ts` | Zero callers |
+| `user_preferences` table | 0 rows |
+| `middleware.ts` L50–53 | Comment describes a guard **that no longer exists** |
+
+**The stale comment is the dangerous part** — a future reader will preserve
+behaviour that isn't there. Awaiting explicit approval to remove (UI tenet).
+
+### G07 · Google Places photo URLs expire — **A**
+Cards silently lose their images. All four render paths are guarded against the
+broken state, but the cause is unfixed and every new Dine/Visit/Do save plants
+another one that will die.
+**Closes when:** photos are mirrored to Supabase Storage (Phase 5.1).
+**Watch:** the 1 GB free file limit is the first ceiling this project will hit.
+
+### G08 · `app-shell.tsx` is dead — **C**
+Only reference is its own path comment.
+
+### G09 · `430px` hardcoded in 12 places — **C**
+`FRAME_MAX_WIDTH` exists in `app-frame.tsx` and is largely unused. Any frame
+change means twelve edits and one will be missed.
+
+### G10 · Anonymous transfer unproven in production — **B**
+`claim_anonymous_session` passes all four guard tests against the live database,
+but the success path has never run for real — every existing anonymous user is
+older than the 2-hour window, so they all correctly refuse.
+**Closes when:** the end-to-end test runs (see `TESTING.md`).
+
+### G11 · Rollup never verified against real data — **B**
+`verify_rollup` returns PASS on zero rows, which proves nothing.
+**Closes when:** real events exist and 30 consecutive nights read PASS. That is
+the precondition for retention deletion ever being enabled.
+
+### G12 · No timezone source for `local_date` — **C**
+`track.ts` reads the browser's timezone. A user travelling would file events
+against their travel timezone, not home.
+**Judgment: correct for now** — "did I open it today" means *where I am*. Recorded
+because it will look like a bug in the data later.
+
+### G13 · Motion direction undecided — **B**
+Blocks the save peek, folder entry, and every list transition. Sitting at the top
+of Phase 1 and unmoved.
+
+### G14 · Compact card spec unlocked — **B**
+Folder, source browsing, search and archive all render lists of compact cards.
+Building any of them first means retrofitting four surfaces.
+
+### G15 · Complexity hotspots — **D**
+`rec-detail-client.tsx` 1,761 lines · `capture-screen.tsx` 1,371 ·
+`api/enrich/[id]/route.ts` 1,113. Not urgent. Recorded so their size is never a
+surprise mid-delivery.
+
+### G16 · Golden test suite is not a gate — **C**
+`scripts/matching.golden.ts` (16 checks) has not run in three sessions. It is a
+script someone remembers, not a gate something triggers.
+
+---
+
+## RESOLVED
+
+### R01 · `status_changed_at` did not exist — *closed S17, 2026-08-12*
+North-star metric was unmeasurable; `max(created_at)` was being misread as
+completion date. Column added, 6 rows backfilled from `updated_at` (approximate,
+flagged).
+
+### R02 · `last_opened_at` did not exist — *closed S17, 2026-08-12*
+Weekly snapshot would have gone blind past the 90-day event window. Column added.
+
+### R03 · `claim_anonymous_saves` dropped zero-save sessions — *closed S17*
+`IF source_count = 0 ... RETURN 0` meant a browse-and-leave first session
+transferred nothing. Replaced by `claim_anonymous_session`, which also moves
+events and `search_log`. Old function retained until the new one is proven (G10).
+
+### R04 · `rollup_daily` PK forced `category` NOT NULL — *closed S17*
+Declared nullable but placed in the primary key, so every category-less event
+(`app_opened`, `search_performed`) would have failed to roll up — silently losing
+the most important question in the system. PKs replaced with unique indexes over
+a `category_key` column. Same fault fixed in `rollup_enrichment`.
+**Found only by building the consumer.** Existence checks would never have caught it.
+
+### R05 · `pg_cron` not enabled — *closed S17*
+Dropped in error when converting a migration to a file. Installed; two jobs live.
+
+---
+
+## HABITS THIS FILE HAS TAUGHT US
+
+1. **A schema is not verified until something has written to it.** R04 survived a
+   twelve-point verification because every check asked *does this exist*, none
+   asked *does this work*. Build the consumer in the same delivery.
+2. **Read the function body, not its description.** R03 was documented in the KB
+   as "six layered guards" — true, and it said nothing about what they guard.
+3. **When a metric drives a decision, name the column it reads.** The two-month
+   misreading came from `max(created_at)` meaning save date, not completion date.
+4. **Deliver for the tool actually in use.** Multi-statement SQL fails silently in
+   the Supabase editor, which shows only the last result.
