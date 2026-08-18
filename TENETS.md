@@ -2,7 +2,7 @@
 
 > The non-negotiable rules of how we work. Numbered so they can be cited in conversation ("that violates T2").
 > Every tenet here was earned by something going wrong. The story is included, because a rule without its cause gets discarded the first time it's inconvenient.
-> Last updated: Session 17 — 2026-08-13
+> Last updated: Session 17 — 2026-08-16
 
 ---
 
@@ -23,6 +23,17 @@ Before asserting anything about the code, the database, a third-party service, o
 Trust increases the obligation to check, not the licence to skip it.
 
 **Origin:** a nine-day silent outage (model shut down, error message blamed the user's screenshot), a phantom guest save (documented as working, never built), a wrong database region carried across sessions, a "legacy subtype" migration that targeted values which didn't exist, and three consecutive wrong explanations for why a second Google account could sign in. Every one came from reasoning from plausibility instead of evidence.
+
+**Session 17 extension — enumerate presence before concluding absence.** Four errors in one session shared one shape: deciding something was missing without listing what was there.
+
+| Concluded | Actually |
+|---|---|
+| `place_id` was thrown away | It was under `place_photo_refs`; the key name was guessed |
+| `status` was unconstrained | Six per-category CHECK constraints already existed |
+| The nightly backup had failed | It was 01:03 IST, two hours before the job was due |
+| A1a and A4 were unbuilt | Claude Code had already shipped them |
+
+**Before changing a thing, list what already governs it** — every constraint on the table, every key actually present in the JSON, every call site of the function, every open PR. A check that returns "missing" is a prompt to enumerate, never a conclusion.
 
 **In practice:** clone the repo fresh rather than pull into a working directory. Query the live database rather than trust documentation. Read the provider's docs before theorising about their API. When something is directly testable, propose the test rather than a mechanism.
 
@@ -217,6 +228,30 @@ The flow, in order:
 **One concern per PR.** A batch spanning four unrelated concerns means a single failure has a blast radius of four.
 
 **What this does not do:** it does not prevent bad judgement, only unreviewed access. Every substantive Session 17 mistake would have passed through a PR unnoticed. What it guarantees is that no mistake reaches production without having been seen running first, and that every one is reversible.
+
+---
+
+## T20 — One surface owns a task, and the PR is the claim
+
+Claude is reachable through several surfaces — this chat, Claude Code, Cowork — and **they are the same worker in separate rooms, not several workers.** They share context and reach the same conclusions, and they cannot see each other.
+
+**Only one surface works a given task at a time.**
+
+**The open PR is how that is declared.** Whoever picks up a task opens a PR — draft is fine — **before writing code**. The PR is the claim. Anyone starting work checks open PRs and recent commits on `main` first, exactly as they enumerate existing constraints before altering a table.
+
+Mechanically: `git fetch` and read open PRs before creating a branch. A branch cut from a stale base is how the duplication becomes a merge conflict rather than a quick "already handled".
+
+**Division by kind of work, not by convenience:**
+
+| Surface | Owns |
+|---|---|
+| Chat | Deciding — architecture, trade-offs, whether to build at all |
+| Claude Code | Executing a decision already made, inside the repo |
+| Cowork | The case study and other non-code tracks |
+
+**Origin:** Session 17. Ujjawal asked chat to build A1a and A4; Claude Code, holding the same context, built the same two fixes in parallel. Both independently found that `calculateConfidence` is a Levenshtein spelling test, both used the same Gokul Bar and Chungking Express examples, and both opened a PR. PR #3 merged; PR #4 arrived with merge conflicts and was closed as a duplicate.
+
+**Why this is worse than human duplication:** two people notice within minutes and one says "I'm on it". Two Claude instances duplicate silently and confidently for an hour, because identical context produces near-identical work. The similarity of the output is the symptom, not a coincidence. Left unchecked, the second merger resolves conflicts in code they did not write, and two half-designs end up interleaved — the two-copies problem (T10), arriving faster.
 
 ---
 
