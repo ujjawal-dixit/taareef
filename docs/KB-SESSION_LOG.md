@@ -1,6 +1,62 @@
 # KB-SESSION_LOG.md — Taareef
 > Living log of every build session. Newest first.
-> Last updated: Session 16 — 2026-08-10
+> Last updated: Session 17 — 2026-08-18
+
+---
+
+## Session 17 — 2026-08-12 → 18 — Measurement layer, safety rails, and a session that ran too long
+
+**Shape of the session:** built the measurement layer from nothing, then spent the back half building the process rails that should have existed first — backups, branch protection, a single source of truth. Ended with more tenets than features, for reasons that are themselves the lesson.
+
+### The correction that opened it
+
+Session 16 read `max(created_at)` on experienced rows and concluded nothing had completed in two months. **That column is the SAVE date, not the transition date.** The real gap was ~2.5 weeks. The reprioritisation it caused was built on a misread column.
+
+Sharper finding underneath it: **two of three experienced rows have `reaction: null`.** When the loop does close, the final step does not fire.
+
+### Built
+
+**Measurement layer.** Partitioned `events` table (monthly), `search_log`, `rollup_daily`, `rollup_card_monthly`, `rollup_enrichment`, `rollup_funnel_daily`, `snapshot_weekly`. Two writers only — `lib/analytics/track.ts` (browser) and `track-server.ts` (routes). No route inserts directly.
+
+Governing rule: **only log what you would show the person in their own Wrapped.** No dwell time, no location, no content. Search queries are the sole exception — they are the user's own words and the words are the data.
+
+**First weekly snapshot, on real data:** 26 saved · **20 never re-opened** · oldest untouched **82 days** · 3 completed ever · **5 of 6 categories with zero completions.** The core problem, finally a number.
+
+**Database safety.** `recommendations_backup` with 14 daily snapshots, dry-run-first `restore_from_backup`, `/api/health/database` watching for the silent pause that caused a two-week outage. `cleanup_anonymous_users` — de-identifies rather than deletes, so non-converting sessions survive as funnel data.
+
+**Anonymous session handling.** `claim_anonymous_saves` refused when the session had **zero** saves — exactly the browse-and-leave first session most worth keeping. Replaced by `claim_anonymous_session`, moving recommendations, events and searches in one transaction.
+
+**GitHub workflow.** Ruleset on `main`, PR required, fine-grained token scoped to Contents + Pull Requests. Admin endpoints return 403 — Claude cannot alter its own guardrail.
+
+**Enrichment logging (A4).** The confident path auto-confirmed **without logging anything** — the path where a wrong match costs most and is least visible. Now logs layer evidence rather than a band, because `calculateConfidence` is Levenshtein string similarity: "Gokul Bar" vs "Gokul Bite" scores ~80 and is wrong; "Chungking Express" vs its Chinese title scores ~0 and is right.
+
+**`places.id` (A1a)** was never in the Google field mask. Now requested and stored.
+
+**`/docs` as single source of truth.** Eleven files existed only in Claude project knowledge, backed up nowhere.
+
+### Mistakes, and what they cost
+
+| Mistake | Cause | Cost |
+|---|---|---|
+| `rollup_daily` PK forced `category` NOT NULL | Nullable column placed in a primary key | Would have silently dropped every `app_opened` event. Found only by building the consumer |
+| Global `status` CHECK added | Did not list the six per-category constraints that already existed | Would have blocked books being "reading". Reverted in one minute |
+| A1 diagnosed twice wrongly | Guessed a metadata key name; concluded absence from a failed grep | Nearly justified building photo mirroring when the key was never lost |
+| **Built A1a/A4 twice** (PRs #3 and #4) | Lost the earlier turn from context and rebuilt it | ~40 min, plus a merge conflict on Ujjawal's phone |
+| **Blamed the duplication on Claude Code** | Guessed a cause and wrote it into TENETS.md as fact | A wrong tenet nearly shipped permanently |
+
+**Every one is the same error: concluding something was absent without enumerating what was present.**
+
+### Tenets added
+
+T17 preview before you destroy · T18 one file one purpose one run · T19 branch, preview, merge · T20 check whether you already did it · T21 verify before explaining · T22 long sessions end.
+
+### Open at close
+
+- **Motion direction (G13)** — blocks retrieval, completion, archive, the compact card. **The single largest blocker in the project**
+- **`enrichment_id` on 0 of 35 rows** — code deployed, never exercised. Save something ambiguous to verify
+- **Photo mirroring to Storage** — on-demand resolution is billable against a 1,000/month ceiling, so mirroring is the answer. Touches render paths; proposal not written
+- **Anonymous transfer success path unproven** — every guard proven to refuse; the path that moves data has never run
+- **Token rotation** — pasted in chat, should be replaced
 
 ---
 
