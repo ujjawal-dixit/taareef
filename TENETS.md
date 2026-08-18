@@ -231,29 +231,29 @@ The flow, in order:
 
 ---
 
-## T20 — One surface owns a task, and the PR is the claim
+## T20 — Check whether you already did it
 
-Claude is reachable through several surfaces — this chat, Claude Code, Cowork — and **they are the same worker in separate rooms, not several workers.** They share context and reach the same conclusions, and they cannot see each other.
+**In a long session, Claude cannot trust its own memory of what it has already built.** Context is dropped as a conversation grows. The dropped work is not remembered as forgotten — it is not remembered at all, so introspection cannot catch it and confidence is unaffected.
 
-**Only one surface works a given task at a time.**
+**Before writing any code, enumerate what already exists:**
 
-**The open PR is how that is declared.** Whoever picks up a task opens a PR — draft is fine — **before writing code**. The PR is the claim. Anyone starting work checks open PRs and recent commits on `main` first, exactly as they enumerate existing constraints before altering a table.
+```
+git fetch origin
+git log --oneline HEAD..origin/main     # what landed since this branch
+gh/api: list open PRs                    # including ones Claude opened itself
+```
 
-Mechanically: `git fetch` and read open PRs before creating a branch. A branch cut from a stale base is how the duplication becomes a merge conflict rather than a quick "already handled".
+**Read the results as potentially your own.** The question is not "has someone else done this" — it is "have I done this and lost the memory of it".
 
-**Division by kind of work, not by convenience:**
+**And branch from a fetched base, never a stale clone.** A stale base turns a duplicate into a merge conflict on someone else's screen.
 
-| Surface | Owns |
-|---|---|
-| Chat | Deciding — architecture, trade-offs, whether to build at all |
-| Claude Code | Executing a decision already made, inside the repo |
-| Cowork | The case study and other non-code tracks |
+**Origin:** Session 17. Ujjawal asked for A1a and A4. Claude built them, opened PR #3, and merged it. Two hours later — the earlier turn no longer in context — Claude built the identical fixes again and opened PR #4, which arrived with merge conflicts.
 
-**Origin:** Session 17. Ujjawal asked chat to build A1a and A4; Claude Code, holding the same context, built the same two fixes in parallel. Both independently found that `calculateConfidence` is a Levenshtein spelling test, both used the same Gokul Bar and Chungking Express examples, and both opened a PR. PR #3 merged; PR #4 arrived with merge conflicts and was closed as a duplicate.
+Claude then found PR #3, guessed it came from Claude Code, and wrote that guess into this tenet as fact. It had not been checked. One API call showed both PRs were authored by the same git identity Claude had configured, pushed with the token only Claude held. **The tenet was originally written to solve a coordination problem between tools that never occurred**, while the real cause — Claude repeating its own lost work — went unaddressed.
 
-**Why this is worse than human duplication:** two people notice within minutes and one says "I'm on it". Two Claude instances duplicate silently and confidently for an hour, because identical context produces near-identical work. The similarity of the output is the symptom, not a coincidence. Left unchecked, the second merger resolves conflicts in code they did not write, and two half-designs end up interleaved — the two-copies problem (T10), arriving faster.
+**The compounding failure is the one to remember.** The wrong diagnosis was not a guess held loosely; it was a guess presented to Ujjawal as an explanation, built into a rule, and committed. When the cause of something is unknown, say unknown and check — an invented cause is worse than an open question, because it stops the search and it ships.
 
----
+**Corollary — the same applies across surfaces.** If Claude Code or Cowork is also working the repo, the open PR is the claim, and it is opened before the code. But that is the secondary case. The primary case is Claude duplicating itself.
 
 ## Standing calendar item
 

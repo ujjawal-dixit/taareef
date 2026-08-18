@@ -120,11 +120,14 @@ script someone remembers, not a gate something triggers.
 
 ---
 
-### G20 · Two Claude surfaces can duplicate the same task — **B**
-Chat and Claude Code share context, cannot see each other, and reach the same
-conclusions. Duplication is silent and confident rather than obvious.
-**Guard:** T20 — one surface owns a task, the open PR is the claim, `git fetch`
-and read open PRs before branching.
+### G20 · Claude can repeat its own lost work — **B**
+In a long session Claude's earlier turns are dropped from context. The lost work
+is not remembered as forgotten, so it is rebuilt with full confidence.
+**Instance:** PR #3 and PR #4 in Session 17 — the same two fixes, same author,
+two hours apart. Claude then misattributed PR #3 to Claude Code without checking,
+and wrote that guess into TENETS.md as fact.
+**Guard:** T20 — fetch, list commits since branch point, list open PRs, and read
+them as potentially your own, before writing any code.
 **Still open because** the guard is a habit, not a mechanism. Nothing enforces it.
 
 ---
