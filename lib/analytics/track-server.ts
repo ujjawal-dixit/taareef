@@ -100,42 +100,99 @@ export async function trackServer(
 }
 
 // ── Confidence bands ────────────────────────────────────────────────────────
-// Thresholds mirror the existing auto-confirm rule in the enrich route
-// (confidence >= 92). They are a STARTING POINT, not a finding: the whole
-// purpose of rollup_enrichment is to discover whether they are honest.
 //
-// Do not tune these by intuition. Tune them when the calibration data says so.
+// SESSION 17 CORRECTION. The previous version of this function read:
+//     if (score >= 92) return 'sure'
+//     if (score >= 75) return 'fairly_sure'
+//     return 'not_sure'
+//
+// Both numbers were wrong to have here, for different reasons:
+//
+//   · 92 was inherited from the enrich route's auto-confirm rule, where it
+//     was tuned by a real failure. It belongs there, not duplicated here.
+//   · 75 was invented. There was no derivation behind it.
+//
+// The deeper problem: `score` is calculateConfidence(), which is Levenshtein
+// string similarity — it compares LETTERS. It does not know what a film or a
+// restaurant is. "Gokul Bar" vs "Gokul Bite" scores ~80 and is the WRONG
+// venue; "Chungking Express" vs its Chinese title scores ~0 and is CORRECT.
+//
+// Meanwhile the enrich route already computes five layers of real evidence
+// (strict exactness, name overlap, popularity gap, address components,
+// geographic hint) and then discards those verdicts, keeping only the string
+// score. Calibrating bands on the score would mean tuning the weakest signal
+// in the stack with great precision.
+//
+// So the band is now derived from the DECISION the layers reached, not from
+// a threshold on a spelling test:
+//
+//   sure         — auto-confirmed: survived every layer, user never asked
+//   needs_review — the candidate strip was shown: the machine deferred
+//
+// Two honest states beat three invented ones. Thresholds can be re-derived
+// from real correction data once enough enrichments have been logged —
+// which is what `shouldReview` and the layer verdicts below make possible.
 
-export function confidenceBand(score: number): EnrichmentBand {
-  if (score >= 92) return 'sure'
-  if (score >= 75) return 'fairly_sure'
-  return 'not_sure'
+export function bandFromDecision(autoConfirmed: boolean): EnrichmentBand {
+  return autoConfirmed ? 'sure' : 'not_sure'
 }
 
 /**
- * Q: Of everything we called "fairly sure", what share was actually right?
+ * The layer verdicts, captured as they were actually decided.
  *
- * `correlationId` is the ticket number a later correction quotes. It must be
- * persisted alongside the candidates, or a correction arriving four days later
- * can never be matched back to the score that produced it.
+ * This is the point of A4: `match_type` and `demoted_by` say WHY the system
+ * believed what it believed. A restaurant matched on address components is a
+ * different kind of confident from a film matched on title spelling, and only
+ * this shape can tell those apart later.
+ */
+export interface EnrichmentEvidence {
+  /** Raw Levenshtein score. Kept for continuity — NOT the basis of the band. */
+  score?:         number
+  /** 'exact' | 'likely' | 'possible' | 'none' — the layered verdict. */
+  matchType?:     string
+  /** Which layer demoted the match, if one did. The most diagnostic field here. */
+  demotedBy?:     string
+  /** Was a location hint supplied and checked? */
+  hadLocationHint?: boolean
+  /** How many candidates Google returned. */
+  candidateCount?: number
+  /** Which enrichment source produced this — tmdb | places | spotify | books. */
+  provider?:      string
+}
+
+/**
+ * Q: When the app was SURE, was it right?
+ *
+ * Previously this only fired when the candidate strip was shown — so every
+ * confident enrichment went unrecorded. That is precisely the band where the
+ * user is never asked, so a wrong match there is silent and permanent: a card
+ * quietly acquires the wrong film's poster and nobody sees the moment it
+ * happened. Measuring only the uncertain cases left the expensive failure
+ * mode invisible.
+ *
+ * Now every enrichment is logged, with `auto_confirmed` distinguishing them.
+ *
+ * `correlationId` is the ticket number a later correction quotes. It is
+ * persisted in metadata.enrichment_id because a correction may arrive days
+ * later, long after this request is gone.
  */
 export async function trackEnrichmentShownServer(
-  userId: string,
+  userId:        string,
   correlationId: string,
-  cardId: string,
-  category: Category,
-  score: number,
+  cardId:        string,
+  category:      Category,
   autoConfirmed: boolean,
+  evidence:      EnrichmentEvidence = {},
 ): Promise<void> {
   await trackServer(userId, 'enrichment_shown', {
-    surface:       'save_peek',
+    surface:       autoConfirmed ? 'save_peek' : 'card_detail',
     category,
     cardId,
     correlationId,
     payload: {
-      band:  confidenceBand(score),
-      score,
+      band:           bandFromDecision(autoConfirmed),
       auto_confirmed: autoConfirmed,
+      ...evidence,
     },
   })
 }

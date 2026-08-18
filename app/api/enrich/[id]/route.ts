@@ -316,6 +316,27 @@ async function enrichWatch(
   )
 
   if (shouldAutoConfirm) {
+    // A4 — log the CONFIDENT case too. This is the branch where the user is
+    // never asked, so a wrong match here is silent and permanent. Logging only
+    // the uncertain branch left the most expensive failure mode invisible.
+    const autoId = crypto.randomUUID()
+    await supabase
+      .from('recommendations')
+      .update({ metadata: { ...meta, enrichment_id: autoId } })
+      .eq('id', rec.id as string)
+      .eq('user_id', userId)
+
+    await trackEnrichmentShownServer(
+      userId, autoId, rec.id as string, rec.category as Category,
+      true,                                  // auto-confirmed
+      {
+        score:          confidence,
+        provider:       'tmdb',
+        matchType:      'exact',
+        candidateCount: results.length,
+      },
+    )
+
     return await autoConfirmWatch(supabase, rec, userId, topResult, subtype, mediaType, meta, tmdbKey)
   }
 
@@ -349,7 +370,9 @@ async function enrichWatch(
     .eq('user_id', userId)
 
   await trackEnrichmentShownServer(
-    userId, enrichmentId, rec.id as string, rec.category as Category, confidence, false,
+    userId, enrichmentId, rec.id as string, rec.category as Category,
+    false,                                   // strip shown = machine deferred
+    { score: confidence, provider: 'tmdb', candidateCount: candidates.length },
   )
 
   return NextResponse.json({ success: true, candidates })
@@ -682,6 +705,10 @@ async function enrichPlaces(
             // addressComponents gives us labelled address segments —
             // no string parsing required to extract locality
             'X-Goog-FieldMask': [
+              // A1a: places.id is the STABLE key. The Places API returns
+              // only what the mask names, so omitting it here would make
+              // chosen.id silently undefined and the whole fix a no-op.
+              'places.id',
               'places.displayName',
               'places.formattedAddress',
               'places.addressComponents',
@@ -966,12 +993,32 @@ match_type:
       cuisine:    formatPrimaryType(p.primaryType),
       photoUrl:   photoUrls[i] ?? null,
       photo_refs: photoRefs(p),
+      // A1a — carried so that whichever candidate the user picks, the key
+      // survives the choice. Without it, confirming from the strip would
+      // discard exactly what the auto-confirm path now keeps.
+      place_id:   p.id ?? null,
     }))
+    const placeEnrichmentId = crypto.randomUUID()
     await supabase
       .from('recommendations')
-      .update({ metadata: { ...meta, place_candidates: candidates } })
+      .update({ metadata: { ...meta, place_candidates: candidates, enrichment_id: placeEnrichmentId } })
       .eq('id', rec.id)
       .eq('user_id', userId)
+
+    // A4 — the layer verdicts, not the string score. `reason` carries which
+    // layer demoted the match, which is the single most diagnostic field we
+    // have: it distinguishes "matched on address" from "matched on spelling".
+    await trackEnrichmentShownServer(
+      userId, placeEnrichmentId, rec.id as string, rec.category as Category,
+      false,
+      {
+        provider:        'places',
+        matchType:       finalResult.match_type,
+        demotedBy:       finalResult.reason,
+        hadLocationHint: Boolean(locationHint),
+        candidateCount:  places.length,
+      },
+    )
     return NextResponse.json({ success: true, candidates: true })
   }
 
@@ -990,6 +1037,19 @@ match_type:
   const locality = extractLocality(chosen.addressComponents, locationHint)
   const cuisine  = formatPrimaryType(chosen.primaryType)
 
+  // A4 — the confident branch. Never asked the user, so never previously seen.
+  const placeAutoId = crypto.randomUUID()
+  await trackEnrichmentShownServer(
+    userId, placeAutoId, rec.id as string, rec.category as Category,
+    true,
+    {
+      provider:        'places',
+      matchType:       finalResult.match_type,
+      hadLocationHint: Boolean(locationHint),
+      candidateCount:  places.length,
+    },
+  )
+
   await supabase
     .from('recommendations')
     .update({
@@ -1003,6 +1063,20 @@ match_type:
         place_confirmed:  true,
         place_candidates: null,
         place_photo_refs: photoRefs(chosen),
+
+        // A1a (Session 17) — THE KEY, not just the photo.
+        // Google Places photo URLs expire. Until now we stored only the
+        // expiring URL, so when it died there was no way to ask Google for
+        // a new one: the identifier had been thrown away. Recovery meant
+        // re-searching by name, blind, through the same five-layer
+        // disambiguation that produced the Gokul Bar bug — with no way to
+        // know whether the answer was even the same venue.
+        //
+        // place_id is stable and permanent. Storing it makes every photo
+        // from here on repairable, and costs one field.
+        place_id:         chosen.id ?? null,
+        place_photo_synced_at: null,   // set when mirrored to Storage (A1b)
+        enrichment_id:    placeAutoId,
       },
     })
     .eq('id', rec.id)
@@ -1121,6 +1195,8 @@ interface PlaceLLMResult {
 }
 
 interface GooglePlace {
+  /** Stable Google Place ID. Requested via places.id in the field mask. */
+  id?:                 string
   displayName?:        { text: string; languageCode?: string }
   formattedAddress?:   string
   addressComponents?:  GoogleAddressComponent[]
