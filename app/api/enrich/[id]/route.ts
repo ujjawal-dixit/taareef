@@ -21,6 +21,7 @@ import {
   trackEnrichmentShownServer,
   trackEnrichmentResolvedServer,
 }                                     from '@/lib/analytics/track-server'
+import type { EnrichmentSignals }     from '@/lib/analytics/track-server'
 import {
   MODEL_DISAMBIGUATE,
   GROQ_CHAT_URL,
@@ -316,7 +317,20 @@ async function enrichWatch(
   )
 
   if (shouldAutoConfirm) {
-    return await autoConfirmWatch(supabase, rec, userId, topResult, subtype, mediaType, meta, tmdbKey)
+    // Session 17 — the confident path is the one that never asks the user, so
+    // it is where a wrong match is most expensive and least visible. It must
+    // be logged with the same evidence as the uncertain path.
+    return await autoConfirmWatch(
+      supabase, rec, userId, topResult, subtype, mediaType, meta, tmdbKey,
+      {
+        provider:          'tmdb',
+        score:             confidence,
+        top_popularity:    topPop,
+        second_popularity: secondPop,
+        result_count:      results.length,
+        reason:            results.length === 1 ? 'only result' : 'clear popularity gap',
+      },
+    )
   }
 
   // Store top 3 as candidates for the user to pick in the detail screen.
@@ -349,7 +363,16 @@ async function enrichWatch(
     .eq('user_id', userId)
 
   await trackEnrichmentShownServer(
-    userId, enrichmentId, rec.id as string, rec.category as Category, confidence, false,
+    userId, enrichmentId, rec.id as string, rec.category as Category,
+    {
+      provider:          'tmdb',
+      score:             confidence,
+      top_popularity:    topPop,
+      second_popularity: secondPop,
+      result_count:      results.length,
+      reason:            'below auto-confirm threshold or popularity gap too small',
+    },
+    false,
   )
 
   return NextResponse.json({ success: true, candidates })
@@ -368,7 +391,12 @@ async function autoConfirmWatch(
   mediaType:   string,
   meta:        Record<string, unknown>,
   tmdbKey:     string,
+  signals?:    EnrichmentSignals,
 ) {
+  // Correlation ticket for the confident path too — a user who later corrects
+  // an auto-confirmed poster is the single most valuable calibration signal
+  // we can collect, and without this id it cannot be matched to its decision.
+  const autoEnrichmentId = crypto.randomUUID()
   const [detailRes, creditsRes] = await Promise.all([
     fetch(`https://api.themoviedb.org/3/${mediaType}/${topResult.id}?api_key=${tmdbKey}&language=en-US`),
     fetch(`https://api.themoviedb.org/3/${mediaType}/${topResult.id}/credits?api_key=${tmdbKey}&language=en-US`),
@@ -421,10 +449,18 @@ async function autoConfirmWatch(
         streaming_platforms: streamingPlatforms,
         tmdb_candidates:     null,
         tmdb_confirmed:      true,
+        enrichment_id:       autoEnrichmentId,
       },
     })
     .eq('id', rec.id as string)
     .eq('user_id', userId)
+
+  if (signals) {
+    await trackEnrichmentShownServer(
+      userId, autoEnrichmentId, rec.id as string, rec.category as Category,
+      signals, true,
+    )
+  }
 
   return NextResponse.json({ success: true, auto_confirmed: true, cast })
 }
@@ -682,6 +718,10 @@ async function enrichPlaces(
             // addressComponents gives us labelled address segments —
             // no string parsing required to extract locality
             'X-Goog-FieldMask': [
+              // places.id is the durable identifier. Without it a photo can be
+              // re-fetched only by parsing it out of a photo reference string,
+              // and a row with no photo refs is unrecoverable entirely.
+              'places.id',
               'places.displayName',
               'places.formattedAddress',
               'places.addressComponents',
@@ -961,17 +1001,35 @@ match_type:
   if (finalResult.match_type === 'possible') {
     const candidates = places.map((p, i) => ({
       name:       p.displayName?.text ?? '',
+      place_id:   p.id ?? null,
       address:    p.formattedAddress  ?? null,
       locality:   extractLocality(p.addressComponents, locationHint),
       cuisine:    formatPrimaryType(p.primaryType),
       photoUrl:   photoUrls[i] ?? null,
       photo_refs: photoRefs(p),
     }))
+
+    // Session 17 — one correlation id per enrichment decision, persisted so a
+    // correction arriving days later can be matched back to this moment.
+    const placeEnrichmentId = crypto.randomUUID()
+
     await supabase
       .from('recommendations')
-      .update({ metadata: { ...meta, place_candidates: candidates } })
+      .update({ metadata: { ...meta, place_candidates: candidates, enrichment_id: placeEnrichmentId } })
       .eq('id', rec.id)
       .eq('user_id', userId)
+
+    await trackEnrichmentShownServer(
+      userId, placeEnrichmentId, rec.id as string, rec.category as Category,
+      {
+        provider:     'places',
+        match_type:   finalResult.match_type,
+        reason:       finalResult.reason,
+        result_count: places.length,
+      },
+      false,
+    )
+
     return NextResponse.json({ success: true, candidates: true })
   }
 
@@ -990,6 +1048,10 @@ match_type:
   const locality = extractLocality(chosen.addressComponents, locationHint)
   const cuisine  = formatPrimaryType(chosen.primaryType)
 
+  // Session 17 — the confident path auto-confirms WITHOUT asking the user, so
+  // it is the path where being wrong costs most. It previously logged nothing.
+  const placeAutoEnrichmentId = crypto.randomUUID()
+
   await supabase
     .from('recommendations')
     .update({
@@ -997,16 +1059,29 @@ match_type:
       metadata:  {
         ...meta,
         venue_name:       chosen.displayName?.text ?? null,
+        place_id:         chosen.id ?? null,
         address:          chosen.formattedAddress  ?? null,
         locality,
         cuisine,
         place_confirmed:  true,
         place_candidates: null,
         place_photo_refs: photoRefs(chosen),
+        enrichment_id:    placeAutoEnrichmentId,
       },
     })
     .eq('id', rec.id)
     .eq('user_id', userId)
+
+  await trackEnrichmentShownServer(
+    userId, placeAutoEnrichmentId, rec.id as string, rec.category as Category,
+    {
+      provider:     'places',
+      match_type:   finalResult.match_type,
+      reason:       finalResult.reason,
+      result_count: places.length,
+    },
+    true,
+  )
 
   try {
     await supabase.rpc('increment_api_usage', { api_id: 'google_places' })
@@ -1121,6 +1196,7 @@ interface PlaceLLMResult {
 }
 
 interface GooglePlace {
+  id?:                 string
   displayName?:        { text: string; languageCode?: string }
   formattedAddress?:   string
   addressComponents?:  GoogleAddressComponent[]

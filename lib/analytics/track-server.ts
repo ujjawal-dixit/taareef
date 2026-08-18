@@ -100,11 +100,17 @@ export async function trackServer(
 }
 
 // ── Confidence bands ────────────────────────────────────────────────────────
-// Thresholds mirror the existing auto-confirm rule in the enrich route
-// (confidence >= 92). They are a STARTING POINT, not a finding: the whole
-// purpose of rollup_enrichment is to discover whether they are honest.
+// PROVENANCE, stated plainly (Session 17):
+//   92 — INHERITED from the enrich route's existing auto-confirm rule, which an
+//        earlier session raised from 88 after a real wrong match. Load-bearing.
+//   75 — INVENTED. It has no derivation. It sits between 92 and 50 because 50
+//        felt too low to call "fairly sure". That is the entire reasoning.
 //
-// Do not tune these by intuition. Tune them when the calibration data says so.
+// These are therefore NOT a finding and must not be shown to a user as though
+// they were. They exist only so rollup_enrichment has a grouping key. The real
+// answer comes from EnrichmentSignals above, once correction data exists.
+//
+// Do not tune these by intuition. Tune them when the data says so.
 
 export function confidenceBand(score: number): EnrichmentBand {
   if (score >= 92) return 'sure'
@@ -113,29 +119,68 @@ export function confidenceBand(score: number): EnrichmentBand {
 }
 
 /**
- * Q: Of everything we called "fairly sure", what share was actually right?
+ * The raw evidence behind one enrichment decision.
+ *
+ * WHY SIGNALS AND NOT A VERDICT (Session 17):
+ * A band is a collapse — several layers of reasoning squeezed into one word.
+ * Store the word and the reasoning is gone forever. Store the signals and any
+ * band can be re-derived later, retroactively, over historical data, as many
+ * times as it takes to get one right.
+ *
+ * This matters here specifically because `score` is Levenshtein string
+ * similarity — it compares spelling, not meaning. "Gokul Bar" vs "Gokul Bite"
+ * scores ~80 and is the WRONG venue; "Chungking Express" vs its Chinese title
+ * scores ~0 and is the RIGHT film. Calibrating thresholds on that number alone
+ * would be tuning the weakest signal in the stack.
+ */
+export interface EnrichmentSignals {
+  /** Levenshtein similarity 0-100. Spelling only. Not a confidence. */
+  score?:          number
+  /** Did a stricter layer confirm it — exact match, address, popularity gap? */
+  strict_exact?:   boolean
+  name_overlap?:   boolean
+  /** TMDB popularity of top vs runner-up. A clear gap is real evidence. */
+  top_popularity?: number
+  second_popularity?: number
+  /** How many candidates the provider returned. 1 is very different from 3. */
+  result_count?:   number
+  /** Which layer actually made the call, in the provider's own words. */
+  match_type?:     string
+  reason?:         string
+  provider?:       'tmdb' | 'places' | 'spotify' | 'books'
+}
+
+/**
+ * Q: When enrichment was confident, was it right?
+ *
+ * Logged on EVERY enrichment, not only the uncertain ones. The confident path
+ * auto-confirms without asking the user, so being wrong there is the most
+ * expensive kind of wrong — the card silently gets the wrong poster and the
+ * moment it happened is never seen.
  *
  * `correlationId` is the ticket number a later correction quotes. It must be
  * persisted alongside the candidates, or a correction arriving four days later
- * can never be matched back to the score that produced it.
+ * can never be matched back to the decision that produced it.
  */
 export async function trackEnrichmentShownServer(
-  userId: string,
+  userId:        string,
   correlationId: string,
-  cardId: string,
-  category: Category,
-  score: number,
+  cardId:        string,
+  category:      Category,
+  signals:       EnrichmentSignals,
   autoConfirmed: boolean,
 ): Promise<void> {
   await trackServer(userId, 'enrichment_shown', {
-    surface:       'save_peek',
+    surface:       autoConfirmed ? 'capture_sheet' : 'save_peek',
     category,
     cardId,
     correlationId,
     payload: {
-      band:  confidenceBand(score),
-      score,
+      // Derived for convenience only. The signals below are the source of
+      // truth; this label is disposable and can be recomputed at any time.
+      band: signals.score !== undefined ? confidenceBand(signals.score) : 'not_sure',
       auto_confirmed: autoConfirmed,
+      ...signals,
     },
   })
 }
