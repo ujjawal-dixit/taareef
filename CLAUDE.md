@@ -267,16 +267,23 @@ export type ApiResponse<T> = {
 
 ## Companion Documents
 
+**All knowledge files live in `/docs`.** That folder is the single source of
+truth; Claude project knowledge is no longer maintained.
+
 | File | Contents |
 |---|---|
-| `TENETS.md` | T1–T19, the non-negotiable working rules, each with the failure that caused it |
-| `GAPS.md` | Open gaps by severity; resolved ones with dates |
-| `KB-MEASUREMENT_DECISIONS.md` | Why the measurement layer is shaped as it is |
-| `KB-DECISIONS.md` | Product and architecture decisions |
-| `BACKLOG.md` | What we intend to build |
-| `DATA_SAFETY.md` | Destructive-operation protocol |
+| `docs/TENETS.md` | T1–T22, the non-negotiable working rules, each with the failure that caused it |
+| `docs/GAPS.md` | Open gaps by severity; resolved ones with dates |
+| `docs/KB-DECISIONS.md` | Product and architecture decisions — append only |
+| `docs/KB-SESSION_LOG.md` | What happened each session |
+| `docs/BACKLOG.md` | What we intend to build |
+| `docs/DATA_SAFETY.md` | Destructive-operation protocol |
+| `docs/KB-MEASUREMENT_DECISIONS.md` | Why the measurement layer is shaped as it is |
+| `docs/README.md` | Index of everything in `/docs` |
 
----
+⚠️ **If a change makes a document wrong, the document is updated in the SAME
+pull request.** Not afterwards, not at session close. A PR that changes
+behaviour and leaves a doc describing the old behaviour is incomplete.
 
 ## Do Not Touch Without Explicit Instruction
 
