@@ -255,6 +255,35 @@ Claude then found PR #3, guessed it came from Claude Code, and wrote that guess 
 
 **Corollary — the same applies across surfaces.** If Claude Code or Cowork is also working the repo, the open PR is the claim, and it is opened before the code. But that is the secondary case. The primary case is Claude duplicating itself.
 
+## T21 — Verify before explaining, not after being challenged
+
+When explaining something that happened in the repo, the database, or a deploy, **check the record before offering a cause.** Not once the explanation is questioned.
+
+If the cause cannot be checked, say **"unknown, checking"** and check. An invented cause is worse than an open question, because a plausible story ends the search and then ships.
+
+**The tell:** a hedge word followed by confident use of the hedged thing. *"Someone — Claude Code, at a guess —"* and then three paragraphs treating Claude Code as established. **If a claim needs a hedge, it needs a lookup, not a softer verb.**
+
+**Origin:** Session 17. Finding an unexpected merged PR, Claude guessed it came from Claude Code, wrote that guess into TENETS.md as fact, and committed it. One API call — the one eventually run when Ujjawal pushed back — showed both PRs were authored by the same git identity Claude had configured, using the token only Claude held. The invented cause was on its way to becoming a permanent rule addressing a problem that had never occurred.
+
+---
+
+## T22 — Long sessions end; handoff files are the memory
+
+**Claude's context degrades as a session grows, and it cannot perceive this happening.** Dropped work is not remembered as forgotten — it is not remembered at all, so confidence is unaffected and introspection cannot catch it.
+
+Therefore:
+
+- **A session that has run long enough to lose turns should end, not push on.** The knowledge-base files exist so a fresh session loses nothing but the fog.
+- **Claude proposes the handoff** when a session has produced several deliveries or when it notices it is reconstructing something it should already know. It does not wait to be told.
+- **Nothing important lives only in the conversation.** A decision that matters is written to `KB-DECISIONS.md`, a gap to `GAPS.md`, a rule to `TENETS.md` — at the time it is made, not at session end. Chat is not storage.
+- **Session close is not optional.** `KB-SESSION_LOG.md`, `GAPS.md`, and any changed KB file are updated before the session ends.
+
+**Origin:** Session 17. Claude built A1a and A4, opened PR #3, lost that turn from context as the conversation grew, and two hours later rebuilt the identical work as PR #4. The duplication was invisible from the inside; it surfaced only as a merge conflict on Ujjawal's phone.
+
+**The general form:** every safeguard in this file assumes Claude can remember the session it is in. That assumption weakens over a long conversation. Writing things down is not documentation overhead — it is the only memory that does not decay.
+
+---
+
 ## Standing calendar item
 
 **Every session, before anything else:** run the vault status query against `recommendations`.
