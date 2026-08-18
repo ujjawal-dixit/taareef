@@ -2,7 +2,7 @@
 
 > The non-negotiable rules of how we work. Numbered so they can be cited in conversation ("that violates T2").
 > Every tenet here was earned by something going wrong. The story is included, because a rule without its cause gets discarded the first time it's inconvenient.
-> Last updated: Session 17 — 2026-08-13
+> Last updated: Session 17 — 2026-08-16
 
 ---
 
@@ -23,6 +23,17 @@ Before asserting anything about the code, the database, a third-party service, o
 Trust increases the obligation to check, not the licence to skip it.
 
 **Origin:** a nine-day silent outage (model shut down, error message blamed the user's screenshot), a phantom guest save (documented as working, never built), a wrong database region carried across sessions, a "legacy subtype" migration that targeted values which didn't exist, and three consecutive wrong explanations for why a second Google account could sign in. Every one came from reasoning from plausibility instead of evidence.
+
+**Session 17 extension — enumerate presence before concluding absence.** Four errors in one session shared one shape: deciding something was missing without listing what was there.
+
+| Concluded | Actually |
+|---|---|
+| `place_id` was thrown away | It was under `place_photo_refs`; the key name was guessed |
+| `status` was unconstrained | Six per-category CHECK constraints already existed |
+| The nightly backup had failed | It was 01:03 IST, two hours before the job was due |
+| A1a and A4 were unbuilt | Claude Code had already shipped them |
+
+**Before changing a thing, list what already governs it** — every constraint on the table, every key actually present in the JSON, every call site of the function, every open PR. A check that returns "missing" is a prompt to enumerate, never a conclusion.
 
 **In practice:** clone the repo fresh rather than pull into a working directory. Query the live database rather than trust documentation. Read the provider's docs before theorising about their API. When something is directly testable, propose the test rather than a mechanism.
 
@@ -219,6 +230,30 @@ The flow, in order:
 **What this does not do:** it does not prevent bad judgement, only unreviewed access. Every substantive Session 17 mistake would have passed through a PR unnoticed. What it guarantees is that no mistake reaches production without having been seen running first, and that every one is reversible.
 
 ---
+
+## T20 — Check whether you already did it
+
+**In a long session, Claude cannot trust its own memory of what it has already built.** Context is dropped as a conversation grows. The dropped work is not remembered as forgotten — it is not remembered at all, so introspection cannot catch it and confidence is unaffected.
+
+**Before writing any code, enumerate what already exists:**
+
+```
+git fetch origin
+git log --oneline HEAD..origin/main     # what landed since this branch
+gh/api: list open PRs                    # including ones Claude opened itself
+```
+
+**Read the results as potentially your own.** The question is not "has someone else done this" — it is "have I done this and lost the memory of it".
+
+**And branch from a fetched base, never a stale clone.** A stale base turns a duplicate into a merge conflict on someone else's screen.
+
+**Origin:** Session 17. Ujjawal asked for A1a and A4. Claude built them, opened PR #3, and merged it. Two hours later — the earlier turn no longer in context — Claude built the identical fixes again and opened PR #4, which arrived with merge conflicts.
+
+Claude then found PR #3, guessed it came from Claude Code, and wrote that guess into this tenet as fact. It had not been checked. One API call showed both PRs were authored by the same git identity Claude had configured, pushed with the token only Claude held. **The tenet was originally written to solve a coordination problem between tools that never occurred**, while the real cause — Claude repeating its own lost work — went unaddressed.
+
+**The compounding failure is the one to remember.** The wrong diagnosis was not a guess held loosely; it was a guess presented to Ujjawal as an explanation, built into a rule, and committed. When the cause of something is unknown, say unknown and check — an invented cause is worse than an open question, because it stops the search and it ships.
+
+**Corollary — the same applies across surfaces.** If Claude Code or Cowork is also working the repo, the open PR is the claim, and it is opened before the code. But that is the secondary case. The primary case is Claude duplicating itself.
 
 ## Standing calendar item
 

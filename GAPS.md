@@ -10,7 +10,7 @@
 > · Never delete a gap — move it to §RESOLVED with the date and the resolution
 > · Every gap has an owner-question: *what would we know if this were closed?*
 >
-> Last updated: Session 17 · 2026-08-12
+> Last updated: Session 17 · 2026-08-16
 
 ---
 
@@ -49,10 +49,9 @@ Live data: `experienced = 3`, of which only one has a `reaction` value.
 **Closes when:** the completion destination exists and asks for the verdict at
 the moment of completion.
 
-### G04 · `status` is `text`, not an enum — **A**
-No database constraint. Any typo is a permanently valid status.
-**Closes when:** converted — which touches every writer, so it needs its own
-delivery with a full consumer sweep.
+### G04 · ~~`status` is `text`, not an enum~~ — **CLOSED, was never a gap**
+See R06. Six per-category CHECK constraints already exist. The severity rating
+came from reading the column *type* and never checking for constraints on it.
 
 ### G05 · `category` enum carries 14 dead values — **C**
 Live: `watch, listen, read, dine, do, visit`. Also insertable: `restaurant, bar,
@@ -121,6 +120,18 @@ script someone remembers, not a gate something triggers.
 
 ---
 
+### G20 · Claude can repeat its own lost work — **B**
+In a long session Claude's earlier turns are dropped from context. The lost work
+is not remembered as forgotten, so it is rebuilt with full confidence.
+**Instance:** PR #3 and PR #4 in Session 17 — the same two fixes, same author,
+two hours apart. Claude then misattributed PR #3 to Claude Code without checking,
+and wrote that guess into TENETS.md as fact.
+**Guard:** T20 — fetch, list commits since branch point, list open PRs, and read
+them as potentially your own, before writing any code.
+**Still open because** the guard is a habit, not a mechanism. Nothing enforces it.
+
+---
+
 ## RESOLVED
 
 ### R01 · `status_changed_at` did not exist — *closed S17, 2026-08-12*
@@ -145,6 +156,27 @@ a `category_key` column. Same fault fixed in `rollup_enrichment`.
 
 ### R05 · `pg_cron` not enabled — *closed S17*
 Dropped in error when converting a migration to a file. Installed; two jobs live.
+
+---
+
+### R06 · G04 `status` enum — *closed S17, not a gap*
+Six per-category CHECK constraints already existed: `read` allows
+reading/finished/abandoned, `do` allows done, the rest allow experienced.
+A global three-value constraint was briefly added and **reverted within a
+minute** — it would have blocked a book from being marked "reading" and an
+activity from being "done", and it validated cleanly because no row uses those
+statuses yet. The damage would have surfaced weeks later with no clue why.
+
+### R07 · G19 enrichment tracking — *closed S17*
+Every enrichment now logs, including the auto-confirmed path that previously
+recorded nothing. Logs layer evidence rather than a collapsed band, because
+`calculateConfidence` is Levenshtein string similarity and calibrating on it
+would tune the weakest signal in the stack.
+
+### R08 · G07 photo expiry, partially — *place_id stored S17*
+`places.id` was never in the Google field mask. Now requested and stored.
+Mirroring to Storage remains open — resolving references on demand is billable
+per call against a 1,000/month ceiling, so on-demand resolution is not viable.
 
 ---
 
