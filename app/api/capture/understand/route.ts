@@ -44,6 +44,14 @@ export type UnderstandResult = {
     director?:      string | null  // watch
     author?:        string | null  // read
     location_hint?: string | null  // dine/do/visit
+    // Session 18 — the Jawaan failure. A user said "starring Shah Rukh" and
+    // the phrase had nowhere to go: only director and author existed, so the
+    // single strongest disambiguating signal a person can give was discarded
+    // at capture, before matching ever ran. Named people are never accidental.
+    people?:        string[] | null  // watch/listen/read — actors, artists, authors
+    // Soft evidence, never a filter. Speech mangles years and people misremember
+    // them; this is here to be weighed, not to exclude anything.
+    year?:          number | null
   }
 
   // What clarification is needed, if any — computed by this route, not the LLM
@@ -112,6 +120,8 @@ Extract supplementary context if present without being asked:
 - For dine: what specific dish, drink, or item was mentioned (what_to_order)
 - For visit: any closing date, run dates, or deadline mentioned (dates)
 - For watch: director or creator mentioned (director)
+- For watch/listen/read: any PEOPLE named — actors, artists, authors, hosts (people, as an array). "starring Shah Rukh" → ["Shah Rukh"]. Extract exactly as spoken; never correct or complete a name.
+- Any YEAR mentioned (year, as a number). Extract even if it sounds wrong — it is weighed later, never used to exclude.
 - For read: author mentioned (author)
 - For dine/do/visit: city or neighbourhood hint (location_hint).
      Extract ONLY the neighbourhood or city name — never relational phrases.
@@ -166,6 +176,8 @@ Return exactly this JSON structure and nothing else:
     "what_to_order": string | null,
     "dates": string | null,
     "director": string | null,
+    "people": string[] | null,
+    "year": number | null,
     "author": string | null,
     "location_hint": string | null
   }
@@ -347,6 +359,26 @@ function sanitise(raw: Record<string, unknown>, originalInput: string): Omit<Und
   const toStr = (v: unknown): string | null =>
     typeof v === 'string' && v.trim() !== '' ? v.trim() : null
 
+  // Capped at 6: a person naming more than six people is describing, not
+  // identifying, and a long list dilutes the veto rather than sharpening it.
+  const toStrArray = (v: unknown): string[] | null => {
+    if (!Array.isArray(v)) return null
+    const out = v
+      .filter((x): x is string => typeof x === 'string')
+      .map(x => x.trim())
+      .filter(x => x.length > 1)
+      .slice(0, 6)
+    return out.length > 0 ? out : null
+  }
+
+  // A model may return "2024", 2024, or something absurd. Anything outside a
+  // plausible range is treated as absent rather than passed on as evidence.
+  const toYear = (v: unknown): number | null => {
+    const n = typeof v === 'number' ? v : typeof v === 'string' ? parseInt(v, 10) : NaN
+    if (!Number.isFinite(n)) return null
+    return n >= 1850 && n <= 2100 ? n : null
+  }
+
   // Category — must be one of our 6
   const rawCat = toStr(raw.category)
   const category = rawCat && isValidCategory(rawCat) ? rawCat as Category : null
@@ -406,6 +438,8 @@ function sanitise(raw: Record<string, unknown>, originalInput: string): Omit<Und
       director:      toStr(sup.director),
       author:        toStr(sup.author),
       location_hint: toStr(sup.location_hint),
+      people:        toStrArray(sup.people),
+      year:          toYear(sup.year),
     },
   }
 }
