@@ -37,6 +37,10 @@ Trust increases the obligation to check, not the licence to skip it.
 
 **In practice:** clone the repo fresh rather than pull into a working directory. Query the live database rather than trust documentation. Read the provider's docs before theorising about their API. When something is directly testable, propose the test rather than a mechanism.
 
+**Session 18 extension — this applies mid-conversation, not just before code.** Asked whether an LLM could see the user's raw phrasing, Claude answered "the capture text isn't stored" and built a recommendation around that constraint. One grep would have shown the audio route already returns the transcript so the capture screen can display it. Nothing needed storing; the design question had a different and easier answer.
+
+A design conversation is not a lower-evidence setting than a delivery. Constraints invented in discussion are worse than wrong code, because they silently remove options before anyone evaluates them — and nobody reviews a possibility that was never raised. **Before saying a thing does not exist, grep for it, even when talking.**
+
 **Session 17 extension — the knowledge base is a hypothesis, not a fact.** Three times in one session, something described in the KB as existing either didn't or didn't do what its description implied: the anonymous cleanup job (never written), `claim_anonymous_saves`'s "six layered guards" (real, but two of them silently discarded the sessions we most needed), and an anonymous identity that was assumed to exist on page load but was only created at first save. **When reusing an existing function, read its body, not its description.**
 
 ---
