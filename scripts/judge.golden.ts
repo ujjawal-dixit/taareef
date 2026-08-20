@@ -18,6 +18,9 @@ import {
   parseJudgement, fallbackJudgement,
   type JudgeSubject, type JudgeCandidate, type Judgement,
 } from '../lib/enrichment/judge'
+import {
+  normaliseQuery, selectExtraQueries, parseQueries, dedupeById,
+} from '../lib/enrichment/query-shaper'
 
 let failures = 0
 function check(name: string, actual: unknown, expected: unknown) {
@@ -159,6 +162,61 @@ check('parse: negative index is discarded',
 
 check('veto: index beyond the candidate list becomes none',
   applyVetoes(llm('match', 9), { title: 'x' }, [telugu2017]).verdict, 'none')
+
+// ── Query shaping (Session 18, the SECOND Jawaan failure) ───────────────────
+// The judge said "none of these" and was right — but TMDB never returned the
+// 2023 film for the spelling "Jawaan", so the correct answer was never in the
+// list. These guard the deterministic half: what gets searched, and how often.
+
+check('shape: an alternative spelling is worth searching',
+  selectExtraQueries(['Jawan'], 'Jawaan')[0], 'Jawan')
+
+check('shape: the user\'s own title is never re-searched',
+  selectExtraQueries(['Jawaan'], 'Jawaan').length, 0)
+
+check('shape: case and punctuation alone are not a new query',
+  selectExtraQueries(['JAWAAN!', 'jawaan'], 'Jawaan').length, 0)
+
+check('shape: near-duplicates among proposals collapse',
+  selectExtraQueries(['Jawan', 'JAWAN', 'jawan '], 'Jawaan').length, 1)
+
+check('shape: capped at two extra queries',
+  selectExtraQueries(['a1', 'b2', 'c3', 'd4'], 'zzz').length, 2)
+
+check('shape: one-character proposals are discarded',
+  selectExtraQueries(['x', 'Jawan'], 'Jawaan').length, 1)
+
+check('shape: a sentence is not a title',
+  selectExtraQueries(['the one where Shah Rukh Khan plays a jailer and also his own father'], 'Jawaan').length, 0)
+
+check('shape: non-array input is survivable',
+  selectExtraQueries('Jawan', 'Jawaan').length, 0)
+
+check('shape: non-string members are skipped',
+  selectExtraQueries([42, null, 'Jawan'], 'Jawaan').length, 1)
+
+check('normalise: transliteration differences survive normalisation',
+  normaliseQuery('Jawaan') === normaliseQuery('Jawan'), false)
+
+check('parse: fenced query JSON',
+  (parseQueries('```json\n{"queries":["Jawan"]}\n```') as string[])[0], 'Jawan')
+
+check('parse: empty array when the model recognises nothing',
+  (parseQueries('{"queries":[]}') as string[]).length, 0)
+
+check('parse: malformed query reply degrades to empty',
+  (parseQueries('sorry, I cannot help') as unknown[]).length, 0)
+
+// dedupe — the user's own results must always lead
+const pageA = [{ id: 1 }, { id: 2 }]
+const pageB = [{ id: 2 }, { id: 3 }]
+
+check('dedupe: union size', dedupeById([pageA, pageB]).length, 3)
+check('dedupe: the user\'s own results keep first position',
+  dedupeById([pageA, pageB])[0].id, 1)
+check('dedupe: a repeated id is not searched twice into the pool',
+  dedupeById([pageA, pageB]).filter(x => x.id === 2).length, 1)
+check('dedupe: empty pages are harmless', dedupeById([[], pageA]).length, 2)
 
 console.log('')
 if (failures > 0) {

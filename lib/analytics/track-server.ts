@@ -184,6 +184,10 @@ export interface EnrichmentEvidence {
   judgeMethod?:   string
   /** The verdict's one-line reason. Calibration evidence, never shown. */
   judgeReason?:   string
+  /** Extra queries the shaping layer proposed. Empty means it added nothing —
+   *  which is the expected, and cheapest, common case. Logged so we can ask
+   *  later whether shaping actually improved recall or merely spent calls. */
+  shapedQueries?: string[]
 }
 
 /**
