@@ -55,8 +55,16 @@ export interface JudgeCandidate {
   index:      number
   title:      string
   year:       number | null
-  /** Cast, authors, artists — whatever the provider gives for this medium. */
-  people:     string[]
+  /**
+   * Cast, authors, artists — whatever the provider gives for this medium.
+   *
+   * null means WE COULD NOT LOOK. [] means we looked and nobody is listed.
+   * These must never be conflated: the previous version passed [] for "not
+   * looked up", and the prompt's instruction to reject candidates missing a
+   * named person then rejected every candidate, always. Naming an actor
+   * guaranteed a "none" verdict.
+   */
+  people:     string[] | null
   /** One-line description, trimmed before sending. */
   overview:   string | null
   /** Provider popularity, if any. Tie-breaker only, never a reason. */
@@ -134,8 +142,11 @@ export function contradictsNamedPeople(
   candidate: JudgeCandidate,
 ): boolean {
   const named = (subject.people ?? []).filter(p => p.trim().length > 2)
-  if (named.length === 0)            return false
-  if (candidate.people.length === 0) return false
+  if (named.length === 0)             return false
+  // Cannot see, or saw nobody: abstain. A veto is a statement about evidence
+  // that IS present, never about evidence that is missing.
+  if (!candidate.people)              return false
+  if (candidate.people.length === 0)  return false
 
   const haystack = candidate.people.map(normaliseName)
   // If the user named anyone at all and NOT ONE of them appears, the candidate
@@ -221,15 +232,21 @@ ${JSON.stringify(candidates, null, 2)}
 
 RULES, in order:
 1. If the person named any PEOPLE, that is the strongest signal. A candidate
-   whose cast/creators do not include anyone they named is the wrong thing,
-   however similar the title looks.
-2. Titles are transcribed from speech and are often misspelled. Similar
+   whose cast/creators DO list someone they named is very likely the right one,
+   however different its title looks. A candidate with a NON-EMPTY cast list
+   that includes none of them is the wrong thing, however similar its title.
+2. A candidate whose "people" field is null means WE COULD NOT LOOK UP its
+   cast. That is missing evidence, not contrary evidence. Never reject a
+   candidate for it, and never let it outrank one whose cast actually matches.
+3. Titles are transcribed from speech and are often misspelled. Similar
    spelling is weak evidence. Identical spelling is NOT proof — different works
    share titles.
-3. A year the person gave is soft evidence. People misremember years. Never
+4. A year the person gave is soft evidence. People misremember years. Never
    reject on year alone.
-4. If no candidate is the thing they meant, answer "none". Never pick the
-   least bad option. "none" is a correct and useful answer.
+5. If no candidate is the thing they meant, answer "none". Never pick the
+   least bad option. "none" is a correct and useful answer. But do NOT answer
+   "none" merely because cast could not be looked up — judge on title, year and
+   what they said instead.
 
 Return ONLY valid JSON, no other text:
 {"verdict":"match"|"probably"|"unsure"|"none","index":<number or null>,"reason":"<one sentence>"}
