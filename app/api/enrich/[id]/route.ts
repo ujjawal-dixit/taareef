@@ -244,17 +244,63 @@ export async function PATCH(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// enrichWatch — TMDB search with smarter matching
+// enrichWatch — TMDB retrieval, then matching
 //
-// Improvements over the original:
-//   — Year-filtered search (uses year captured by the Understand LLM) with a
-//     year-less fallback in case the LLM got the year slightly wrong
+// STAGE 1 IS RETRIEVAL AND MUST NOT FILTER (Session 18).
+// The previous version searched TMDB with &year= and only fell back to an
+// unfiltered search when the filtered one returned NOTHING. That loses the
+// right answer in the most common case there is: the year is slightly wrong
+// but the filtered search still returns something plausible, so the fallback
+// never fires and the correct film is never seen by any later stage.
+//
+// Year comes from speech and from an LLM's reading of loose phrasing. It is
+// evidence, never a gate. Retrieval is now one wide unfiltered search; the
+// year REORDERS the results instead of removing them. Nothing downstream can
+// recover a candidate that retrieval discarded — ranking only ever reorders
+// what it is given.
+//
+// Improvements retained from the original:
 //   — Candidates now store poster_url (full URL) so the UI can render them
 //     without constructing URLs client-side
 //   — Subtype stored in each candidate so PATCH knows which TMDB endpoint to use
 //   — Auto-confirm requires high string confidence (≥92) AND a clear popularity
 //     gap vs the second result — avoids silently locking in an ambiguous poster
 // ─────────────────────────────────────────────────────────────────────────────
+/**
+ * How many TMDB results retrieval keeps. Three was the old value and it was
+ * applied BEFORE any ranking, so a correct match sitting fourth by TMDB
+ * relevance was unreachable no matter how good later stages became. Ten costs
+ * nothing — same single request — and is the pool the judgement layer will
+ * read from.
+ */
+const RETRIEVAL_POOL_SIZE = 10
+
+/** Release year of a TMDB result, from whichever date field the media type uses. */
+function resultYear(r: TMDBSearchResult): number | null {
+  const date = r.release_date ?? r.first_air_date ?? null
+  if (!date) return null
+  const y = parseInt(date.slice(0, 4))
+  return Number.isFinite(y) ? y : null
+}
+
+/**
+ * Stable partition by year agreement. Order within each group is preserved,
+ * so TMDB's own relevance still decides ties. Deliberately NOT a fuzzy year
+ * window: ±1 would promote sequels and re-releases, which is the specific
+ * confusion this is meant to resolve.
+ */
+function promoteYearMatches(
+  results: TMDBSearchResult[],
+  year:    number,
+): TMDBSearchResult[] {
+  const matching: TMDBSearchResult[] = []
+  const rest:     TMDBSearchResult[] = []
+  for (const r of results) {
+    (resultYear(r) === year ? matching : rest).push(r)
+  }
+  return [...matching, ...rest]
+}
+
 async function enrichWatch(
   supabase:  Awaited<ReturnType<typeof createClient>>,
   rec:       Recommendation,
@@ -271,34 +317,29 @@ async function enrichWatch(
   const year      = meta.release_year as number | null | undefined
   const mediaType = subtype === 'series' ? 'tv' : 'movie'
 
-  // Year-filtered search: tighter first pass
-  const yearParam = year
-    ? (mediaType === 'tv' ? `&first_air_date_year=${year}` : `&year=${year}`)
-    : ''
-
+  // ── STAGE 1: RETRIEVAL — wide, cheap, forgiving. One call, no filters. ──
   const baseUrl = `https://api.themoviedb.org/3/search/${mediaType}?api_key=${tmdbKey}&query=${encodeURIComponent(title)}&language=en-US&page=1`
 
-  let searchRes = await fetch(`${baseUrl}${yearParam}`)
+  const searchRes = await fetch(baseUrl)
   if (!searchRes.ok) {
     return NextResponse.json({ error: 'TMDB search failed' }, { status: 502 })
   }
 
-  let search  = await searchRes.json() as { results: TMDBSearchResult[] }
-  let results = (search.results ?? []).slice(0, 3)
+  const search = await searchRes.json() as { results: TMDBSearchResult[] }
+  const pool   = (search.results ?? []).slice(0, RETRIEVAL_POOL_SIZE)
 
-  // Fallback without year if the year-filtered search returned nothing
-  // (handles cases where the LLM captured a slightly wrong year)
-  if (results.length === 0 && year) {
-    const fallbackRes = await fetch(baseUrl)
-    if (fallbackRes.ok) {
-      const fallback = await fallbackRes.json() as { results: TMDBSearchResult[] }
-      results = (fallback.results ?? []).slice(0, 3)
-    }
-  }
-
-  if (results.length === 0) {
+  if (pool.length === 0) {
     return NextResponse.json({ message: 'No TMDB results found' })
   }
+
+  // ── STAGE 2: RANKING — the year is a signal applied here, not a filter ──
+  // Stable partition: candidates whose release year matches keep their TMDB
+  // relevance order and move ahead of those that don't. When the year is
+  // absent or matches nothing, the order is TMDB's, unchanged — a wrong year
+  // can now cost position, never existence.
+  const ranked = year ? promoteYearMatches(pool, year) : pool
+
+  const results = ranked.slice(0, 3)
 
   const topResult  = results[0]
   const confidence = calculateConfidence(title, topResult.title ?? topResult.name ?? '')
@@ -337,7 +378,11 @@ async function enrichWatch(
       },
     )
 
-    return await autoConfirmWatch(supabase, rec, userId, topResult, subtype, mediaType, meta, tmdbKey)
+    // autoId is passed in, not re-read. autoConfirmWatch writes metadata from
+    // the `meta` it is handed, and that snapshot predates the enrichment_id
+    // written two statements ago — so every auto-confirmed card silently lost
+    // its correlation ticket the moment it was confirmed. Found Session 18.
+    return await autoConfirmWatch(supabase, rec, userId, topResult, subtype, mediaType, meta, tmdbKey, autoId)
   }
 
   // Store top 3 as candidates for the user to pick in the detail screen.
@@ -391,7 +436,29 @@ async function autoConfirmWatch(
   mediaType:   string,
   meta:        Record<string, unknown>,
   tmdbKey:     string,
+  enrichmentId: string,
 ) {
+  // ── The poster is written FIRST, on its own. ──────────────────────────────
+  // It is the card's face and the only part of enrichment anyone watches
+  // arrive. Everything below — details, credits, Watchmode — used to run
+  // before the row was touched, so the poster waited on a third-party
+  // streaming lookup that nobody is looking at. Two writes cost one extra
+  // round trip to our own database and take seconds off the thing that shows.
+  const posterUrl = topResult.poster_path
+    ? `https://image.tmdb.org/t/p/w500${topResult.poster_path}`
+    : null
+
+  if (posterUrl) {
+    await supabase
+      .from('recommendations')
+      .update({
+        image_url: posterUrl,
+        metadata: { ...meta, tmdb_id: topResult.id, subtype, enrichment_id: enrichmentId },
+      })
+      .eq('id', rec.id as string)
+      .eq('user_id', userId)
+  }
+
   const [detailRes, creditsRes] = await Promise.all([
     fetch(`https://api.themoviedb.org/3/${mediaType}/${topResult.id}?api_key=${tmdbKey}&language=en-US`),
     fetch(`https://api.themoviedb.org/3/${mediaType}/${topResult.id}/credits?api_key=${tmdbKey}&language=en-US`),
@@ -423,6 +490,9 @@ async function autoConfirmWatch(
     ?? (detail as TMDBMovieDetail | null)?.runtime
     ?? null
 
+  // Watchmode is a second provider and the slowest thing in this function.
+  // It runs in parallel with nothing and blocks nothing that is visible —
+  // the poster is already on the card by now.
   const streamingPlatforms = await getStreamingPlatforms(canonicalTitle).catch(() => [] as string[])
 
   await supabase
@@ -433,6 +503,10 @@ async function autoConfirmWatch(
         : null,
       metadata: {
         ...meta,
+        // Carried explicitly through BOTH writes. `meta` is a snapshot taken
+        // before the correlation id existed, so spreading it alone silently
+        // deletes the ticket a correction days later would be matched against.
+        enrichment_id:       enrichmentId,
         tmdb_id:             topResult.id,
         subtype,
         release_year:        airDate ? parseInt(airDate.slice(0, 4)) : null,
