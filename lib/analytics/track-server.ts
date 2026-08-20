@@ -188,6 +188,10 @@ export interface EnrichmentEvidence {
    *  which is the expected, and cheapest, common case. Logged so we can ask
    *  later whether shaping actually improved recall or merely spent calls. */
   shapedQueries?: string[]
+  /** How many candidates survived into the pool. Added Session 18 because a
+   *  truncating merge silently discarded an entire query's results and nothing
+   *  in the log could have shown it. */
+  poolSize?:      number
 }
 
 /**

@@ -174,9 +174,8 @@ export function parseQueries(raw: string): unknown {
 /**
  * Merge result pages, keeping the first appearance of each id.
  *
- * Order matters and is deliberate: results for the user's OWN wording come
- * first, so when their spelling was right all along, nothing moves. Shaped
- * queries append. Ranking and judgement then work on the union.
+ * Concatenation order: the user's own wording first. Use interleaveById when
+ * the merged list will be TRUNCATED — see the warning there.
  */
 export function dedupeById<T extends { id: number }>(pages: T[][]): T[] {
   const seen = new Set<number>()
@@ -188,5 +187,47 @@ export function dedupeById<T extends { id: number }>(pages: T[][]): T[] {
       out.push(item)
     }
   }
+  return out
+}
+
+/**
+ * Merge pages ROUND-ROBIN, so every query is represented in a capped pool.
+ *
+ * WHY THIS REPLACED A CONCATENATION (Session 18, the third Jawaan failure)
+ * The previous line was:
+ *
+ *   dedupeById([firstPage, ...extraPages]).slice(0, POOL_SIZE)
+ *
+ * TMDB returns up to twenty results per query and "Jawaan" alone returns more
+ * than ten. So the concatenation put twenty of the user's-spelling results
+ * first and the slice kept only those. The shaped query proposed exactly the
+ * right title, the search ran, and its entire page was discarded before
+ * ranking — the fix fired and could not possibly have changed the outcome.
+ *
+ * "Results for their own wording lead" was the intent. Concatenating and then
+ * truncating turned it into "their own wording is the only thing present."
+ *
+ * Round-robin keeps the intent — position one is still theirs — while
+ * guaranteeing every query reaches the pool. A cap that a single page can
+ * exhaust is not a cap, it is a filter.
+ */
+export function interleaveById<T extends { id: number }>(
+  pages: T[][],
+  limit: number,
+): T[] {
+  const seen = new Set<number>()
+  const out: T[] = []
+  const depth = Math.max(0, ...pages.map(p => p.length))
+
+  for (let i = 0; i < depth && out.length < limit; i++) {
+    for (const page of pages) {
+      if (out.length >= limit) break
+      const item = page[i]
+      if (!item || seen.has(item.id)) continue
+      seen.add(item.id)
+      out.push(item)
+    }
+  }
+
   return out
 }

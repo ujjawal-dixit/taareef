@@ -19,7 +19,7 @@ import {
   type JudgeSubject, type JudgeCandidate, type Judgement,
 } from '../lib/enrichment/judge'
 import {
-  normaliseQuery, selectExtraQueries, parseQueries, dedupeById,
+  normaliseQuery, selectExtraQueries, parseQueries, dedupeById, interleaveById,
 } from '../lib/enrichment/query-shaper'
 
 let failures = 0
@@ -217,6 +217,58 @@ check('dedupe: the user\'s own results keep first position',
 check('dedupe: a repeated id is not searched twice into the pool',
   dedupeById([pageA, pageB]).filter(x => x.id === 2).length, 1)
 check('dedupe: empty pages are harmless', dedupeById([[], pageA]).length, 2)
+
+// ── The THIRD Jawaan failure (Session 18) ───────────────────────────────────
+// Shaping proposed exactly the right title, the search ran, and the outcome
+// did not change — because the merged pool was concatenated and then
+// truncated, so twenty results for the user's spelling filled a pool of ten
+// and the shaped page was discarded before ranking. A cap a single page can
+// exhaust is a filter, not a cap.
+
+const userPage  = Array.from({ length: 20 }, (_, i) => ({ id: 100 + i }))
+const shapedPg  = [{ id: 999 }, { id: 998 }]
+
+check('pool: concatenating then truncating LOSES the shaped page (the bug)',
+  dedupeById([userPage, shapedPg]).slice(0, 10).some(x => x.id === 999), false)
+
+check('pool: interleaving guarantees the shaped page reaches the pool',
+  interleaveById([userPage, shapedPg], 10).some(x => x.id === 999), true)
+
+check('pool: the user\'s own top result still holds position one',
+  interleaveById([userPage, shapedPg], 10)[0].id, 100)
+
+check('pool: the cap is still respected',
+  interleaveById([userPage, shapedPg], 10).length, 10)
+
+check('pool: ids are never duplicated across queries',
+  interleaveById([[{ id: 1 }, { id: 2 }], [{ id: 1 }, { id: 3 }]], 10).length, 3)
+
+check('pool: a single short page does not stall the round robin',
+  interleaveById([[{ id: 1 }], [{ id: 2 }, { id: 3 }]], 10).length, 3)
+
+check('pool: no pages is survivable', interleaveById([], 10).length, 0)
+
+check('pool: all-empty pages are survivable', interleaveById([[], []], 10).length, 0)
+
+// ── Cast blindness (the other half of the third failure) ────────────────────
+// people: null means "we could not look". people: [] means "we looked and
+// nobody is listed". The veto must abstain on the first.
+
+const noCastLookup: JudgeCandidate = {
+  index: 0, title: 'Jawan', year: 2023, people: null, overview: null, popularity: 61,
+}
+
+check('cast: null people NEVER vetoes — missing evidence is not contrary evidence',
+  contradictsNamedPeople(jawaanSubject, noCastLookup), false)
+
+check('cast: a null-cast candidate survives applyVetoes',
+  applyVetoes(llm('match', 0), jawaanSubject, [noCastLookup]).verdict, 'match')
+
+check('cast: an empty-but-looked-up list still abstains',
+  contradictsNamedPeople(jawaanSubject, { ...noCastLookup, people: [] }), false)
+
+check('cast: a populated list that omits everyone named still vetoes',
+  contradictsNamedPeople(jawaanSubject, { ...noCastLookup, people: ['Sai Durgha Tej'] }), true)
 
 console.log('')
 if (failures > 0) {

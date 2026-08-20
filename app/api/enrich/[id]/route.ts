@@ -17,7 +17,7 @@ import { NextRequest, NextResponse }   from 'next/server'
 import { createClient }               from '@/lib/supabase/server'
 import { getStreamingPlatforms }      from '@/lib/utils/watchmode-server'
 import { judge, mayAutoConfirm, bandFromVerdict } from '@/lib/enrichment/judge'
-import { shapeQueries, dedupeById } from '@/lib/enrichment/query-shaper'
+import { shapeQueries, interleaveById } from '@/lib/enrichment/query-shaper'
 import type { Recommendation, RecMetadata, Category } from '@/lib/types'
 import {
   trackEnrichmentShownServer,
@@ -323,6 +323,31 @@ async function searchTmdb(
   }
 }
 
+/**
+ * Top-billed cast for one candidate. Returns null — not [] — when the lookup
+ * fails or is unavailable, because "we could not look" and "nobody is in this"
+ * must stay distinguishable all the way to the prompt.
+ */
+async function fetchCast(
+  mediaType: string,
+  id:        number,
+  tmdbKey:   string,
+): Promise<string[] | null> {
+  try {
+    const url = `https://api.themoviedb.org/3/${mediaType}/${id}/credits?api_key=${tmdbKey}`
+    const res = await fetch(url)
+    if (!res.ok) return null
+    const json = await res.json() as { cast?: { name?: string }[] }
+    if (!Array.isArray(json.cast)) return null
+    return json.cast
+      .map(c => c.name)
+      .filter((n): n is string => typeof n === 'string' && n.trim().length > 0)
+      .slice(0, 8)
+  } catch {
+    return null
+  }
+}
+
 /** Release year of a TMDB result, from whichever date field the media type uses. */
 function resultYear(r: TMDBSearchResult): number | null {
   const date = r.release_date ?? r.first_air_date ?? null
@@ -393,9 +418,12 @@ async function enrichWatch(
     ? await Promise.all(extraQueries.map(q => searchTmdb(mediaType, q, tmdbKey)))
     : []
 
-  // The user's own wording leads. When their spelling was right all along,
-  // nothing shifts underneath them.
-  const pool = dedupeById([firstPage, ...extraPages]).slice(0, RETRIEVAL_POOL_SIZE)
+  // Round-robin, NOT concatenate-then-truncate. TMDB returns up to twenty
+  // results per query; "Jawaan" alone returns more than ten, so concatenating
+  // and slicing to ten kept only the user's-spelling page and discarded the
+  // shaped page entirely. Position one is still theirs; every query now
+  // actually reaches the pool.
+  const pool = interleaveById([firstPage, ...extraPages], RETRIEVAL_POOL_SIZE)
 
   if (pool.length === 0) {
     return NextResponse.json({ message: 'No TMDB results found' })
@@ -416,17 +444,33 @@ async function enrichWatch(
   // because their spelling matched that film's title exactly and scored 100.
   // Character distance is not evidence of identity, and no threshold on it
   // could have caught that. See lib/enrichment/judge.ts.
+  const shortlist = ranked.slice(0, JUDGE_CANDIDATE_LIMIT)
+
+  // Cast is fetched BEFORE judging, not after. The previous version passed
+  // `people: []` for every candidate with a comment about vetoes abstaining
+  // when they cannot see. The veto did abstain correctly — but the PROMPT did
+  // not: it instructs the model to reject any candidate whose cast omits a
+  // named person, and an empty list omits everyone. So naming an actor
+  // guaranteed a "none" verdict for every candidate, including the right one.
+  // The model kept reporting exactly this and it read like the veto working.
+  //
+  // Five parallel requests, only when the person actually named someone —
+  // otherwise cast changes no decision and is not worth the latency.
+  const needsCast = (subject.people ?? []).length > 0
+  const castLists = needsCast
+    ? await Promise.all(shortlist.map(r => fetchCast(mediaType, r.id, tmdbKey)))
+    : shortlist.map(() => null)
+
   const judged = await judge(
     subject,
-    ranked.slice(0, JUDGE_CANDIDATE_LIMIT).map((r, i) => ({
+    shortlist.map((r, i) => ({
       index:      i,
       title:      r.title ?? r.name ?? '',
       year:       resultYear(r),
-      // Search results carry no cast. Rather than spend ten detail requests
-      // to find out, the people veto runs on what we have and simply does not
-      // fire when a candidate lists nobody — a veto that cannot see is a veto
-      // that must abstain, not one that guesses.
-      people:     [],
+      // null means "we could not look", which the prompt treats differently
+      // from an empty list meaning "nobody is in this". Conflating those two
+      // is the whole of fault B.
+      people:     castLists[i],
       overview:   typeof r.overview === 'string' ? r.overview.slice(0, 200) : null,
       popularity: r.popularity ?? null,
     })),
@@ -463,6 +507,7 @@ async function enrichWatch(
         judgeMethod:    judged.method,
         judgeReason:    judged.reason,
         shapedQueries:  extraQueries,
+        poolSize:       pool.length,
       },
     )
 
