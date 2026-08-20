@@ -133,7 +133,26 @@ export async function trackServer(
 // from real correction data once enough enrichments have been logged —
 // which is what `shouldReview` and the layer verdicts below make possible.
 
-export function bandFromDecision(autoConfirmed: boolean): EnrichmentBand {
+/**
+ * Session 18 — the middle band finally exists.
+ *
+ * The comment above stands: two honest states beat three invented ones, and
+ * that was the right call while the only input was a spelling score. It is no
+ * longer the only input. lib/enrichment/judge.ts returns a VERDICT reached by
+ * weighing named people, years and what the person actually said — so a third
+ * state is now a thing the system genuinely knows, not a threshold someone
+ * picked.
+ *
+ * `verdict` is preferred when present. The boolean path remains for the
+ * providers that have not been moved onto the judgement layer yet (listen,
+ * read, and the places pipeline), so nothing silently changes shape while
+ * they are migrated one at a time.
+ */
+export function bandFromDecision(
+  autoConfirmed: boolean,
+  band?:         EnrichmentBand | null,
+): EnrichmentBand {
+  if (band) return band
   return autoConfirmed ? 'sure' : 'not_sure'
 }
 
@@ -158,6 +177,13 @@ export interface EnrichmentEvidence {
   candidateCount?: number
   /** Which enrichment source produced this — tmdb | places | spotify | books. */
   provider?:      string
+  /** The judgement layer's band, when this provider uses it. */
+  band?:          EnrichmentBand | null
+  /** 'llm' | 'fallback' — how the verdict was reached. Separates a real
+   *  judgement from a degraded one, so the two are never averaged together. */
+  judgeMethod?:   string
+  /** The verdict's one-line reason. Calibration evidence, never shown. */
+  judgeReason?:   string
 }
 
 /**
@@ -190,7 +216,7 @@ export async function trackEnrichmentShownServer(
     cardId,
     correlationId,
     payload: {
-      band:           bandFromDecision(autoConfirmed),
+      band:           bandFromDecision(autoConfirmed, evidence.band),
       auto_confirmed: autoConfirmed,
       ...evidence,
     },

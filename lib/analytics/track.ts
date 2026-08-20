@@ -50,7 +50,11 @@ export type EventSurface =
   | 'other'
 
 export type DayPart = 'morning' | 'afternoon' | 'evening' | 'night'
-export type EnrichmentBand = 'sure' | 'fairly_sure' | 'not_sure'
+// 'none' added Session 18 — the judgement layer can say "none of these is it",
+// which the boolean-derived version could not express. Mirrors the Postgres
+// enum `enrichment_band`; run_rollup casts payload->>'band' straight to it, so
+// the two must never drift.
+export type EnrichmentBand = 'sure' | 'fairly_sure' | 'not_sure' | 'none'
 export type EnrichmentOutcome = 'accepted' | 'corrected' | 'untouched'
 
 export type FoundVia =

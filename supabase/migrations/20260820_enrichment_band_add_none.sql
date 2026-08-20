@@ -1,0 +1,21 @@
+-- 20260820_enrichment_band_add_none.sql
+--
+-- DDL ONLY (T18). Already applied to production on 2026-08-20; this file is
+-- the record of what was run.
+--
+-- WHY
+-- The judgement layer (lib/enrichment/judge.ts) can return "none" — no
+-- candidate is the thing the person meant. That is a true and useful answer,
+-- and the enum could not express it.
+--
+-- WHY IT HAD TO LAND FIRST
+-- run_rollup() casts (payload->>'band')::enrichment_band directly. A single
+-- unrecognised value raises inside the nightly job — and because the rollups
+-- share one function, that failure would have taken down rollup_daily and
+-- rollup_funnel_daily too, not just the enrichment one. Emitting 'none' from
+-- application code before this migration would have broken every summary in
+-- the product, silently, overnight.
+--
+-- Additive only. No existing value changes meaning; no row is rewritten.
+
+ALTER TYPE enrichment_band ADD VALUE IF NOT EXISTS 'none';

@@ -16,6 +16,7 @@
 import { NextRequest, NextResponse }   from 'next/server'
 import { createClient }               from '@/lib/supabase/server'
 import { getStreamingPlatforms }      from '@/lib/utils/watchmode-server'
+import { judge, mayAutoConfirm, bandFromVerdict } from '@/lib/enrichment/judge'
 import type { Recommendation, RecMetadata, Category } from '@/lib/types'
 import {
   trackEnrichmentShownServer,
@@ -275,6 +276,32 @@ export async function PATCH(
  */
 const RETRIEVAL_POOL_SIZE = 10
 
+/**
+ * How many candidates the judgement layer is shown. Ten is what retrieval
+ * keeps; five is what a model can weigh carefully in one pass without the
+ * list itself becoming the noise. The rest stay retrieved and unjudged —
+ * available to a better layer later, never silently discarded.
+ */
+const JUDGE_CANDIDATE_LIMIT = 5
+
+/**
+ * People the user named, gathered from every field that can hold one. Written
+ * as a sweep rather than a single lookup because `director` and `author`
+ * predate `capture_people` and both still populate on their own paths.
+ */
+function peopleFromMeta(meta: Record<string, unknown>): string[] {
+  const out: string[] = []
+  const arr = meta.capture_people
+  if (Array.isArray(arr)) {
+    for (const p of arr) if (typeof p === 'string' && p.trim()) out.push(p.trim())
+  }
+  for (const key of ['director', 'author'] as const) {
+    const v = meta[key]
+    if (typeof v === 'string' && v.trim()) out.push(v.trim())
+  }
+  return out
+}
+
 /** Release year of a TMDB result, from whichever date field the media type uses. */
 function resultYear(r: TMDBSearchResult): number | null {
   const date = r.release_date ?? r.first_air_date ?? null
@@ -341,20 +368,40 @@ async function enrichWatch(
 
   const results = ranked.slice(0, 3)
 
-  const topResult  = results[0]
-  const confidence = calculateConfidence(title, topResult.title ?? topResult.name ?? '')
-
-  // Auto-confirm only when both conditions hold:
-  //   1. String confidence is high (≥92 — stricter than the old ≥88)
-  //   2. Either it's the only result, or the top result is clearly more popular
-  //      than the second (1.5× — reduces silent wrong-poster risk)
-  // A poster is the card's face; we'd rather show the candidate strip than
-  // silently confirm the wrong one.
-  const topPop    = topResult.popularity ?? 0
-  const secondPop = results[1]?.popularity ?? 0
-  const shouldAutoConfirm = confidence >= 92 && (
-    results.length === 1 || topPop > secondPop * 1.5
+  // ── STAGE 3: JUDGEMENT — replaces the spelling score entirely ────────────
+  // The old rule was: Levenshtein ≥92 AND a popularity gap. It auto-confirmed
+  // a 2017 Telugu film for a user who said "Jawaan, starring Shah Rukh, 2024",
+  // because their spelling matched that film's title exactly and scored 100.
+  // Character distance is not evidence of identity, and no threshold on it
+  // could have caught that. See lib/enrichment/judge.ts.
+  const judged = await judge(
+    {
+      title,
+      year:        (meta.capture_year as number | null | undefined) ?? year ?? null,
+      people:      peopleFromMeta(meta),
+      captureText: (meta.capture_text as string | null | undefined) ?? null,
+    },
+    ranked.slice(0, JUDGE_CANDIDATE_LIMIT).map((r, i) => ({
+      index:      i,
+      title:      r.title ?? r.name ?? '',
+      year:       resultYear(r),
+      // Search results carry no cast. Rather than spend ten detail requests
+      // to find out, the people veto runs on what we have and simply does not
+      // fire when a candidate lists nobody — a veto that cannot see is a veto
+      // that must abstain, not one that guesses.
+      people:     [],
+      overview:   typeof r.overview === 'string' ? r.overview.slice(0, 200) : null,
+      popularity: r.popularity ?? null,
+    })),
   )
+
+  // Confidence is still computed and still logged — as evidence, never as a
+  // decision. Keeping it lets us prove the judgement layer beats the score it
+  // replaced, instead of assuming it.
+  const chosenIndex = judged.index ?? 0
+  const topResult   = ranked[chosenIndex] ?? ranked[0]
+  const confidence  = calculateConfidence(title, topResult.title ?? topResult.name ?? '')
+  const shouldAutoConfirm = mayAutoConfirm(judged)
 
   if (shouldAutoConfirm) {
     // A4 — log the CONFIDENT case too. This is the branch where the user is
@@ -371,10 +418,13 @@ async function enrichWatch(
       userId, autoId, rec.id as string, rec.category as Category,
       true,                                  // auto-confirmed
       {
-        score:          confidence,
+        score:          confidence,      // evidence only — no longer decides anything
         provider:       'tmdb',
         matchType:      'exact',
         candidateCount: results.length,
+        band:           bandFromVerdict(judged.verdict),
+        judgeMethod:    judged.method,
+        judgeReason:    judged.reason,
       },
     )
 
@@ -388,7 +438,15 @@ async function enrichWatch(
   // Store top 3 as candidates for the user to pick in the detail screen.
   // poster_url is the full CDN URL — the candidate strip reads it directly.
   // subtype is carried so PATCH knows which TMDB endpoint to confirm against.
-  const candidates = results.map((r) => ({
+  // Ordered so the judgement's pick leads the strip. When the verdict is
+  // 'none' there is no pick, and the strip stays in retrieval order — which is
+  // the honest presentation of "we don't know", rather than a confident-looking
+  // first position that means nothing.
+  const stripOrder = judged.index !== null && ranked[judged.index]
+    ? [ranked[judged.index], ...ranked.filter((_, i) => i !== judged.index)].slice(0, 3)
+    : results
+
+  const candidates = stripOrder.map((r) => ({
     tmdb_id:      r.id,
     title:        r.title ?? r.name ?? '',
     poster_path:  r.poster_path ?? null,
@@ -417,7 +475,14 @@ async function enrichWatch(
   await trackEnrichmentShownServer(
     userId, enrichmentId, rec.id as string, rec.category as Category,
     false,                                   // strip shown = machine deferred
-    { score: confidence, provider: 'tmdb', candidateCount: candidates.length },
+    {
+      score:          confidence,        // evidence only — no longer decides anything
+      provider:       'tmdb',
+      candidateCount: candidates.length,
+      band:           bandFromVerdict(judged.verdict),
+      judgeMethod:    judged.method,
+      judgeReason:    judged.reason,
+    },
   )
 
   return NextResponse.json({ success: true, candidates })
@@ -1215,6 +1280,7 @@ interface TMDBSearchResult {
   release_date?:  string          // movie
   first_air_date?: string         // tv
   popularity?:    number          // used for auto-confirm tiebreaker
+  overview?:      string          // sent to the judgement layer as context
 }
 
 // Shared base for movie + tv detail responses

@@ -57,6 +57,13 @@ export type RecMetadata = {
   what_to_order?:  string | null  // dine: dish/drink the user mentioned
   dates?:          string | null  // visit: run/closing dates
 
+  // Session 18 — evidence the person gave, kept for matching. MACHINE-FACING:
+  // none of these three is ever rendered. A remark or review belongs in
+  // `notes`, which the detail screen shows as "Your note".
+  capture_people?: string[] | null  // people they named — actors, artists, authors
+  capture_year?:   number | null    // a year they mentioned; soft evidence, never a filter
+  capture_text?:   string | null    // what they actually said, capped at 500 chars
+
   // ── watch — TMDB ─────────────────────────────────────────────────
   tmdb_id?:             number | null
   tmdb_confirmed?:      boolean

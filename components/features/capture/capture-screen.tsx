@@ -22,6 +22,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import type { CreateRecommendationInput, Category, SourceType, Recommendation } from '@/lib/types'
+import { CAPTURE_TEXT_LIMIT } from '@/lib/enrichment/judge'
 import type { UnderstandResult } from '@/app/api/capture/understand/route'
 import { CATEGORIES } from '@/constants/categories'
 import { compressImage } from '@/lib/utils/compress-image'
@@ -1076,6 +1077,24 @@ function ConfirmationScreen({ understood, onSave, saving, error, selectedCat }: 
         ...(supplementary.what_to_order ? { what_to_order: supplementary.what_to_order } : {}),
         ...(supplementary.dates         ? { dates:         supplementary.dates }         : {}),
         ...(supplementary.location_hint ? { location_hint: supplementary.location_hint } : {}),
+        ...(supplementary.people?.length ? { capture_people: supplementary.people }      : {}),
+        ...(supplementary.year          ? { capture_year:  supplementary.year }          : {}),
+        // MACHINE-FACING ONLY. Never rendered — a remark or review the person
+        // made belongs in `notes`, which the Understand prompt already extracts
+        // and the detail screen already shows as "Your note".
+        //
+        // Stored rather than passed because enrichment is POST /api/enrich/{id}
+        // with no body: it re-reads the row, so anything it needs must be ON
+        // the row. Capped, because OCR of a screenshot runs to thousands of
+        // characters and none of them past the first few hundred identify a film.
+        //
+        // Kept permanently on purpose: fields are our guesses about which
+        // evidence matters, and those guesses change. What the person actually
+        // said does not, so a better judgement layer can be re-run over old
+        // saves later without asking anyone to retype anything.
+        ...(understood.raw_input
+          ? { capture_text: understood.raw_input.slice(0, CAPTURE_TEXT_LIMIT) }
+          : {}),
       },
     })
   }
