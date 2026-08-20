@@ -9,6 +9,13 @@
 //   · Never awaited in a user path.
 //   · Never carries user content — no titles, no notes, no coordinates.
 //   · local_date and part_of_day are computed HERE, from the user's timezone.
+//
+// ONE DELIBERATE EXCEPTION (Session 18): trackCardOpened also stamps
+// recommendations.last_opened_at. The column is the durable half of the same
+// fact — events age out after 90 days, the weekly snapshot does not. Keeping
+// the two writes in one function is what stops a caller recording the event
+// and forgetting the column, which is exactly how the column stayed NULL on
+// all 35 rows while card_opened fired happily.
 
 import { createClient } from '@/lib/supabase/client'
 import type { Category } from '@/lib/types'
@@ -115,6 +122,22 @@ function partOfDay(d: Date): DayPart {
   return 'night'
 }
 
+// ── UUID guard ──────────────────────────────────────────────────────────────
+// Postgres rejects '' as a uuid, and every insert carrying one fails whole.
+// That is not hypothetical: trackSaveCompleted passed '' for four days and not
+// one save_completed row was ever written, while the catch below counted the
+// failures into a variable nothing read. Optimistic ids ('temp-1734…') are the
+// same hazard from a different direction. Anything that is not a uuid becomes
+// null, so a missing id costs one column rather than the whole row.
+
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+function asUuid(value: string | null | undefined): string | null {
+  if (!value) return null
+  return UUID_RE.test(value) ? value : null
+}
+
 // ── Failure counter ─────────────────────────────────────────────────────────
 // Analytics failing must be invisible. A nervous system that can kill the body
 // is worse than no nervous system.
@@ -122,6 +145,23 @@ function partOfDay(d: Date): DayPart {
 let failureCount = 0
 export function analyticsFailureCount(): number {
   return failureCount
+}
+
+/**
+ * Invisible to the user, never invisible to us.
+ * The contract is that analytics can never break a user action — it is not
+ * that analytics may fail unobserved. A counter nothing reads is the same as
+ * no counter at all; this is the cheapest possible way for a dropped event to
+ * leave a trace someone can find.
+ */
+function noteFailure(kind: string, detail: unknown): void {
+  failureCount += 1
+  try {
+    console.warn('[analytics] dropped', kind, detail)
+  } catch {
+    // Console unavailable. Nothing further to do — silence is the fallback,
+    // never the default.
+  }
 }
 
 // ── Core writer ─────────────────────────────────────────────────────────────
@@ -163,15 +203,15 @@ async function writeEvent(kind: EventKind, options: TrackOptions): Promise<void>
       local_date:     localDate(now),
       part_of_day:    partOfDay(now),
       category:       options.category ?? null,
-      card_id:        options.cardId ?? null,
-      correlation_id: options.correlationId ?? null,
+      card_id:        asUuid(options.cardId),
+      correlation_id: asUuid(options.correlationId),
       payload:        options.payload ?? {},
     }
 
     const { error } = await supabase.from('events').insert(row)
-    if (error) failureCount += 1
-  } catch {
-    failureCount += 1
+    if (error) noteFailure(kind, error.message)
+  } catch (err) {
+    noteFailure(kind, err)
   }
 }
 
@@ -188,13 +228,45 @@ export function trackCategoryViewed(category: Category): void {
   track('category_viewed', { surface: 'category_list', category })
 }
 
-/** Q: What actually gets looked at? Also feeds recommendations.last_opened_at. */
+/**
+ * Q: What actually gets looked at?
+ *
+ * Writes twice, on purpose: the event (90-day window, answers "in what order")
+ * and recommendations.last_opened_at (durable, feeds snapshot_weekly's
+ * never_reopened and oldest_untouched_days). Until Session 18 only the first
+ * write existed, so oldest_untouched_days could climb and never fall — and
+ * TENETS.md asks us to stop and investigate if it ever falls.
+ */
 export function trackCardOpened(
   cardId: string,
   category: Category,
   surface: EventSurface = 'card_detail',
 ): void {
   track('card_opened', { surface, category, cardId })
+  void stampLastOpened(cardId)
+}
+
+/**
+ * Fire-and-forget, like everything else here. RLS scopes the update to the
+ * caller's own rows; a demo or optimistic id simply matches nothing.
+ *
+ * Safe only because update_updated_at() ignores a touch that changes nothing
+ * but last_opened_at (migration 20260819). Without that, opening a card would
+ * bump updated_at and a read would be indistinguishable from an edit.
+ */
+async function stampLastOpened(cardId: string): Promise<void> {
+  const id = asUuid(cardId)
+  if (!id) return
+  try {
+    const supabase = createClient()
+    const { error } = await supabase
+      .from('recommendations')
+      .update({ last_opened_at: new Date().toISOString() })
+      .eq('id', id)
+    if (error) noteFailure('last_opened_at', error.message)
+  } catch (err) {
+    noteFailure('last_opened_at', err)
+  }
 }
 
 /** Q: How many saves are begun? Gap against completed = abandonment. */
@@ -202,8 +274,16 @@ export function trackSaveStarted(method: 'type' | 'speak' | 'scan'): void {
   track('save_started', { surface: 'capture_sheet', payload: { method } })
 }
 
+/**
+ * Q: How many begun saves finish? The counter-metric to the North Star.
+ *
+ * cardId is nullable by signature rather than by convention: the previous
+ * signature demanded a string, the only caller had no id to give, and it
+ * passed '' — which Postgres rejects, so the event never existed. A type that
+ * permits the honest answer is what stops that happening twice.
+ */
 export function trackSaveCompleted(
-  cardId: string,
+  cardId: string | null,
   category: Category,
   method: 'type' | 'speak' | 'scan',
 ): void {
@@ -334,9 +414,9 @@ export function logSearch(
         was_reformulation: wasReformulation,
         local_date:        localDate(now),
       })
-      if (error) failureCount += 1
-    } catch {
-      failureCount += 1
+      if (error) noteFailure('search_log', error.message)
+    } catch (err) {
+      noteFailure('search_log', err)
     }
   })()
 }

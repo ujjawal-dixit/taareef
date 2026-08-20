@@ -125,7 +125,14 @@ function SaveProvider({ children }: { children: ReactNode }) {
   const openCapture  = useCallback(() => setCaptureOpen(true),  [])
   const closeCapture = useCallback(() => setCaptureOpen(false), [])
 
-  const handleSaved = useCallback(async (input: CreateRecommendationInput) => {
+  /**
+   * Returns the saved row so the capture sheet can log a completion that
+   * points at something. Returns null when the save failed — the caller
+   * distinguishes the two, and neither throws.
+   */
+  const handleSaved = useCallback(async (
+    input: CreateRecommendationInput,
+  ): Promise<Recommendation | null> => {
     const tempId = `temp-${Date.now()}`
 
     // A complete Recommendation so subscribers can render it immediately,
@@ -153,7 +160,7 @@ function SaveProvider({ children }: { children: ReactNode }) {
     // what keeps the flow at two taps.
     closeCapture()
 
-    await create(
+    const real = await create(
       input,
       undefined,
       (real) => {
@@ -169,6 +176,8 @@ function SaveProvider({ children }: { children: ReactNode }) {
         toast(err, 'error')
       },
     )
+
+    return real
   }, [create, toast, router, closeCapture])
 
   return (

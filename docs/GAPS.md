@@ -35,13 +35,13 @@ most valuable field for Phase 4, and impossible to reconstruct afterwards.
 **Closes when:** search and source browsing exist and pass their surface through.
 **Risk if left:** we build retrieval with no way to tell which path worked.
 
-### G02 · Save funnel is unwired — **B**
-`capture-screen.tsx` (1,371 lines) has no `trackSaveStarted` /
-`trackSaveCompleted` / `trackSaveAbandoned`.
-**What we lose:** the abandonment funnel. We cannot see *where* in the save flow
-people give up, which is the input to the peek and confidence-band work.
-**Deliberately deferred** — the save flow is the one thing that currently works;
-a rushed edit there to finish a checklist is the wrong trade.
+### G02 · Save funnel is unwired — ~~B~~ **superseded by G17, Session 18**
+This entry is wrong as written. The funnel *was* wired (all three calls are in
+`capture-screen.tsx`); it was wired incorrectly, which is a different and worse
+condition — the checklist read done while the data read nonsense. See G17.
+
+**The lesson worth keeping:** this gap was closed by someone reading the import
+list. Presence of a call is not evidence of an event.
 
 ### G03 · Two of three completions have no reaction — **A**
 Live data: `experienced = 3`, of which only one has a `reaction` value.
@@ -117,6 +117,44 @@ surprise mid-delivery.
 ### G16 · Golden test suite is not a gate — **C**
 `scripts/matching.golden.ts` (16 checks) has not run in three sessions. It is a
 script someone remembers, not a gate something triggers.
+*Session 18: run manually, 16/16 pass. Still not a gate.*
+
+### G17 · The save funnel was wired backwards — **A** *(fix delivered S18, unproven in production)*
+Two saves on 15 Aug produced **one `save_abandoned` and zero `save_completed`.**
+Both halves were broken, in opposite directions, by two independent faults:
+
+1. `trackSaveCompleted('', …)` — `events.card_id` is `uuid` and `''` is not a
+   valid one, so Postgres rejected **the entire row**, not just the column. The
+   `catch` counted it into `failureCount`, which nothing reads.
+2. `savedRef.current = true` was set *after* `await onSaved(...)`, but
+   `onSaved` closes the sheet on its first tick and resolves seconds later. The
+   close effect therefore read `false` and logged a **successful** save as
+   abandoned — and the flag, arriving after the 320 ms reset, then stayed true
+   and **suppressed the next save's real abandonment.** A false positive that
+   swallows the following true one.
+
+The two faults together mean `rollup_daily.saves_completed` reads 0 forever and
+the abandonment rate reads 100%. The counter-metric to the North Star was dead
+from the day it shipped.
+**Closes when:** one real save produces one `save_completed` row carrying a
+real card id, and closing the sheet mid-flow produces one `save_abandoned`.
+
+### G18 · `last_opened_at` was never written — **A** *(fix delivered S18, unproven in production)*
+`track.ts` documented that `card_opened` "also feeds
+`recommendations.last_opened_at`". Nothing did. The column was NULL on all 35
+rows while `card_opened` fired normally.
+**Why it matters:** `snapshot_weekly.never_reopened` and
+`oldest_untouched_days` read that column, so both could only ever climb —
+and `TENETS.md` instructs us to stop and investigate if `oldest_untouched_days`
+ever *falls*. The one signal that the bottom of the vault had been rescued was
+unable to occur.
+**The second layer:** writing the column naively was unsafe. A `BEFORE UPDATE`
+trigger stamped `updated_at` on any update, so every card *open* would have
+looked like an *edit* — in the column `status_changed_at` was backfilled from
+(R01). Migration `20260819_read_touch_does_not_bump_updated_at.sql` teaches the
+trigger to ignore a touch that changes nothing but a read mark.
+**Closes when:** opening a card sets `last_opened_at` and leaves `updated_at`
+where it was.
 
 ---
 
@@ -185,6 +223,15 @@ per call against a 1,000/month ceiling, so on-demand resolution is not viable.
 1. **A schema is not verified until something has written to it.** R04 survived a
    twelve-point verification because every check asked *does this exist*, none
    asked *does this work*. Build the consumer in the same delivery.
+   *Session 18 extension: nor is a WRITER verified until something it wrote has
+   been read back.* G17 and G18 both passed every existence check — the code was
+   deployed, the columns were there, the calls were in the import list. What
+   nobody did for four days was count the rows. The session-open ritual now
+   includes non-null counts per instrumented column, not just the vault query.
+5. **A counter nothing reads is not instrumentation.** `failureCount` recorded
+   every one of these failures faithfully and told no one. Analytics must never
+   break a user action; that is not the same as analytics being allowed to fail
+   unobserved.
 2. **Read the function body, not its description.** R03 was documented in the KB
    as "six layered guards" — true, and it said nothing about what they guard.
 3. **When a metric drives a decision, name the column it reads.** The two-month

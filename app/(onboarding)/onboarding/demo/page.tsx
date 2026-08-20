@@ -287,7 +287,10 @@ function DemoSaveSheet({ onClose }: { onClose: () => void }) {
 
       if (json.data?.id) setSavedId(json.data.id)
       setSaved(true)
-      trackSaveCompleted(json.data?.id ?? '', category as Category, 'type')
+      // ?? null, never ?? '': '' is not a uuid, and the whole event row is
+      // rejected rather than the id column being dropped. Same defect as
+      // capture-screen's, found by sweeping every call site (T15).
+      trackSaveCompleted(json.data?.id ?? null, category as Category, 'type')
     } catch (err) {
       console.error('[demo] save failed:', err)
       // Stage matters more than the failure: 'confirmed' means they got all

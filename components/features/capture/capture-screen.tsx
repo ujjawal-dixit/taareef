@@ -21,7 +21,7 @@
 // - Save button always neon — never dim
 
 import { useState, useEffect, useRef, useCallback } from 'react'
-import type { CreateRecommendationInput, Category, SourceType } from '@/lib/types'
+import type { CreateRecommendationInput, Category, SourceType, Recommendation } from '@/lib/types'
 import type { UnderstandResult } from '@/app/api/capture/understand/route'
 import { CATEGORIES } from '@/constants/categories'
 import { compressImage } from '@/lib/utils/compress-image'
@@ -35,7 +35,8 @@ type Stage  = 'input' | 'clarifying' | 'confirming'
 type Props = {
   isOpen:  boolean
   onClose: () => void
-  onSaved: (input: CreateRecommendationInput) => Promise<void>
+  /** Resolves with the saved row so the completion event can carry its id. */
+  onSaved: (input: CreateRecommendationInput) => Promise<Recommendation | null>
 }
 
 // ── SHARED STYLES ─────────────────────────────────────────────────
@@ -167,11 +168,25 @@ export function CaptureScreen({ isOpen, onClose, onSaved }: Props) {
 
   async function handleSave(input: CreateRecommendationInput) {
     setSaving(true); setError(null)
+
+    // Set BEFORE the await, not after. onSaved closes the sheet on its first
+    // tick and only resolves once the server replies, so a flag set afterwards
+    // is set several seconds too late: the close effect had already read false
+    // and logged the save as abandoned. Worse, the flag then stayed true past
+    // the 320ms reset and suppressed the NEXT save's abandonment. One tap
+    // produced a false positive and swallowed a true one.
+    // Tapping save is not abandonment. If it fails, the catch says so.
+    savedRef.current = true
+
     try {
-      await onSaved(input)
-      savedRef.current = true
-      trackSaveCompleted('', input.category, method === 'choose' ? 'type' : method)
+      const saved = await onSaved(input)
+      trackSaveCompleted(
+        saved?.id ?? null,
+        input.category,
+        method === 'choose' ? 'type' : method,
+      )
     } catch {
+      savedRef.current = false
       setError("Couldn't save — try again?")
       setSaving(false)
     }
