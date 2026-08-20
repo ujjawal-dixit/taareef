@@ -17,6 +17,7 @@ import { NextRequest, NextResponse }   from 'next/server'
 import { createClient }               from '@/lib/supabase/server'
 import { getStreamingPlatforms }      from '@/lib/utils/watchmode-server'
 import { judge, mayAutoConfirm, bandFromVerdict } from '@/lib/enrichment/judge'
+import { shapeQueries, dedupeById } from '@/lib/enrichment/query-shaper'
 import type { Recommendation, RecMetadata, Category } from '@/lib/types'
 import {
   trackEnrichmentShownServer,
@@ -302,6 +303,26 @@ function peopleFromMeta(meta: Record<string, unknown>): string[] {
   return out
 }
 
+/**
+ * One TMDB search. Returns [] rather than throwing: with several queries in
+ * flight, one failing must not lose the results of the others.
+ */
+async function searchTmdb(
+  mediaType: string,
+  query:     string,
+  tmdbKey:   string,
+): Promise<TMDBSearchResult[]> {
+  try {
+    const url = `https://api.themoviedb.org/3/search/${mediaType}?api_key=${tmdbKey}&query=${encodeURIComponent(query)}&language=en-US&page=1`
+    const res = await fetch(url)
+    if (!res.ok) return []
+    const json = await res.json() as { results?: TMDBSearchResult[] }
+    return json.results ?? []
+  } catch {
+    return []
+  }
+}
+
 /** Release year of a TMDB result, from whichever date field the media type uses. */
 function resultYear(r: TMDBSearchResult): number | null {
   const date = r.release_date ?? r.first_air_date ?? null
@@ -344,16 +365,37 @@ async function enrichWatch(
   const year      = meta.release_year as number | null | undefined
   const mediaType = subtype === 'series' ? 'tv' : 'movie'
 
-  // ── STAGE 1: RETRIEVAL — wide, cheap, forgiving. One call, no filters. ──
-  const baseUrl = `https://api.themoviedb.org/3/search/${mediaType}?api_key=${tmdbKey}&query=${encodeURIComponent(title)}&language=en-US&page=1`
-
-  const searchRes = await fetch(baseUrl)
-  if (!searchRes.ok) {
-    return NextResponse.json({ error: 'TMDB search failed' }, { status: 502 })
+  // ── STAGE 0 + 1: SHAPE AND RETRIEVE ─────────────────────────────────────
+  // Retrieval can only find what the query asks for. TMDB does not return
+  // "Jawan" (2023) for the spelling "Jawaan", so the judgement layer was handed
+  // three films and correctly answered "none of these" — right, and useless.
+  //
+  // The general case is transliteration, not typos: every non-English title
+  // arrives through someone's ear and someone's keyboard, and no character
+  // distance bridges "Jawaan" to "Jawan" or "Chungking Express" to 重慶森林.
+  //
+  // The user's own wording is searched IMMEDIATELY and the shaping call runs
+  // beside it, so the common case — their spelling was right — costs no extra
+  // latency at all. Only genuinely new queries cost a round trip.
+  const subject = {
+    title,
+    year:        (meta.capture_year as number | null | undefined) ?? year ?? null,
+    people:      peopleFromMeta(meta),
+    captureText: (meta.capture_text as string | null | undefined) ?? null,
   }
 
-  const search = await searchRes.json() as { results: TMDBSearchResult[] }
-  const pool   = (search.results ?? []).slice(0, RETRIEVAL_POOL_SIZE)
+  const [firstPage, extraQueries] = await Promise.all([
+    searchTmdb(mediaType, title, tmdbKey),
+    shapeQueries(subject, 'watch'),
+  ])
+
+  const extraPages = extraQueries.length > 0
+    ? await Promise.all(extraQueries.map(q => searchTmdb(mediaType, q, tmdbKey)))
+    : []
+
+  // The user's own wording leads. When their spelling was right all along,
+  // nothing shifts underneath them.
+  const pool = dedupeById([firstPage, ...extraPages]).slice(0, RETRIEVAL_POOL_SIZE)
 
   if (pool.length === 0) {
     return NextResponse.json({ message: 'No TMDB results found' })
@@ -375,12 +417,7 @@ async function enrichWatch(
   // Character distance is not evidence of identity, and no threshold on it
   // could have caught that. See lib/enrichment/judge.ts.
   const judged = await judge(
-    {
-      title,
-      year:        (meta.capture_year as number | null | undefined) ?? year ?? null,
-      people:      peopleFromMeta(meta),
-      captureText: (meta.capture_text as string | null | undefined) ?? null,
-    },
+    subject,
     ranked.slice(0, JUDGE_CANDIDATE_LIMIT).map((r, i) => ({
       index:      i,
       title:      r.title ?? r.name ?? '',
@@ -425,6 +462,7 @@ async function enrichWatch(
         band:           bandFromVerdict(judged.verdict),
         judgeMethod:    judged.method,
         judgeReason:    judged.reason,
+        shapedQueries:  extraQueries,
       },
     )
 
@@ -482,6 +520,7 @@ async function enrichWatch(
       band:           bandFromVerdict(judged.verdict),
       judgeMethod:    judged.method,
       judgeReason:    judged.reason,
+      shapedQueries:  extraQueries,
     },
   )
 
