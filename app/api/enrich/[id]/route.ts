@@ -310,6 +310,20 @@ function pickByTitle(
   return matches[0]
 }
 
+/**
+ * A more forgiving version of the person's title for a second search.
+ *
+ * Drops the trailing word and any bracketed text. "main vaapis aaunga" finds
+ * nothing; "main vaapis" reaches the fuzzy matcher. Crude on purpose — this is
+ * the last attempt before we tell someone we could not find their film, and a
+ * shorter query costs one request and sometimes saves the card.
+ */
+function looseTitle(title: string): string {
+  const cleaned = title.replace(/\([^)]*\)/g, '').trim()
+  const words = cleaned.split(/\s+/)
+  return words.length > 2 ? words.slice(0, -1).join(' ') : cleaned
+}
+
 function normaliseTitle(s: string): string {
   return s.toLowerCase().replace(/[^a-z0-9]/g, '')
 }
@@ -494,12 +508,33 @@ async function enrichWatch(
   // person's spelling was close enough for TMDB — and that costs no request.
   let record: TMDBSearchResult | null = null
 
+  // Candidates accumulate from every route. The model narrows; it never
+  // terminates. See the fallback search below for why that matters.
+  let extraPage: TMDBSearchResult[] = []
+
   if (ident?.known && ident.title) {
     record = pickByTitle(userPage, ident.title, ident.year)
     if (!record) {
-      const identPage = await searchTmdb(mediaType, ident.title, tmdbKey)
-      record = pickByTitle(identPage, ident.title, ident.year) ?? identPage[0] ?? null
+      extraPage = await searchTmdb(mediaType, ident.title, tmdbKey)
+      record = pickByTitle(extraPage, ident.title, ident.year) ?? extraPage[0] ?? null
     }
+  }
+
+  // ── THE MODEL'S IGNORANCE IS NOT THE CATALOGUE'S ─────────────────────────
+  // "Main Vaapas Aaunga" and "Dune: Part Three" both released in 2026, after
+  // the model's knowledge ends. It answered known:false — correctly, for what
+  // it knows — and the pipeline stopped there. TMDB had both films.
+  //
+  // That was a regression I introduced by making the model the ENTRY POINT.
+  // Before it, retrieval ran first and always produced candidates: imperfect,
+  // but never nothing. A model's knowledge horizon must cost us confidence,
+  // never reach.
+  //
+  // So when the model does not recognise something, we search harder rather
+  // than stopping: the catalogue is the authority on what exists, and new
+  // releases are exactly the recommendations people are most likely to save.
+  if (!ident?.known && userPage.length === 0) {
+    extraPage = await searchTmdb(mediaType, looseTitle(title), tmdbKey)
   }
 
   // ── The proof ────────────────────────────────────────────────────────────
@@ -562,13 +597,34 @@ async function enrichWatch(
   // The model's suggestion leads when there is one, because it is the best
   // guess available even though it fell short of confirmation. Behind it, the
   // person's own search results — which are what we would have shown anyway.
-  const fallback = year ? promoteYearMatches(userPage, year) : userPage
+  const merged = [...userPage, ...extraPage.filter(e => !userPage.some(u => u.id === e.id))]
+  const fallback = year ? promoteYearMatches(merged, year) : merged
   const strip = record
     ? [record, ...fallback.filter(r => r.id !== record.id)].slice(0, 3)
     : fallback.slice(0, 3)
 
+  // ── NEVER RETURN SILENTLY ────────────────────────────────────────────────
+  // The previous early return wrote nothing and logged nothing, so a card the
+  // catalogue genuinely does not contain sat on "finding the right poster…"
+  // for ever, and no event recorded that enrichment had even run. Silence is
+  // not a state; it is the absence of one, and the UI cannot render it.
   if (strip.length === 0) {
-    return NextResponse.json({ message: 'No TMDB results found' })
+    const missId = crypto.randomUUID()
+    await supabase
+      .from('recommendations')
+      .update({
+        metadata: { ...meta, enrichment_id: missId, enrichment_state: 'not_found' },
+      })
+      .eq('id', rec.id as string)
+      .eq('user_id', userId)
+
+    await trackEnrichmentShownServer(
+      userId, missId, rec.id as string, rec.category as Category,
+      false,
+      { ...evidence, candidateCount: 0 },
+    )
+
+    return NextResponse.json({ success: true, candidates: [], state: 'not_found' })
   }
 
   const candidates = strip.map((r) => ({

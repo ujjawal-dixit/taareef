@@ -64,6 +64,10 @@ export type RecMetadata = {
   capture_year?:   number | null    // a year they mentioned; soft evidence, never a filter
   capture_text?:   string | null    // what they actually said, capped at 500 chars
   capture_method?: 'type' | 'speak' | 'scan' | null  // how they entered it
+  /** Terminal state when enrichment finished without a match. Written so the
+   *  detail screen can stop saying "finding the right poster…" — silence is
+   *  not a state and the UI cannot render it. */
+  enrichment_state?: 'not_found' | null
 
   // ── watch — TMDB ─────────────────────────────────────────────────
   tmdb_id?:             number | null
