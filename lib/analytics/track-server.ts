@@ -240,12 +240,36 @@ export async function trackEnrichmentShownServer(
  * simply not have noticed. Collapsing them would flatter the bands, which is
  * the exact failure this measurement exists to catch.
  */
+/**
+ * A correction is the most valuable signal this product receives: a person
+ * telling us the exact right answer, free and unprompted, with no labelling
+ * effort asked of them.
+ *
+ * Until Session 18 it recorded only the word "corrected" — no record of what
+ * the right answer WAS. Twelve of these had been logged and not one could be
+ * learned from.
+ *
+ * `to_id` is the durable half. Titles are ambiguous and get rewritten; a
+ * catalogue id is neither. Together with `from`, one row is a labelled
+ * training example: this phrasing means that work, verified by a human.
+ *
+ * Deliberately NOT recorded: the note, the source, or the full sentence. What
+ * is useful here is the mapping, not the person.
+ */
 export async function trackEnrichmentResolvedServer(
   userId: string,
   correlationId: string,
   cardId: string,
   outcome: EnrichmentOutcome,
   chosenIndex?: number,
+  detail?: {
+    from?:    string | null
+    /** How the PERSON originally wrote it. The half correction memory keys on. */
+    phrase?:  string | null
+    to?:      string | null
+    toId?:    number | null
+    claimed?: string | null
+  },
 ): Promise<void> {
   await trackServer(userId, 'enrichment_resolved', {
     surface:       'card_detail',
@@ -254,6 +278,11 @@ export async function trackEnrichmentResolvedServer(
     payload: {
       outcome,
       ...(chosenIndex !== undefined ? { chosen_index: chosenIndex } : {}),
+      ...(detail?.from    ? { from:    detail.from.slice(0, 120) }   : {}),
+      ...(detail?.phrase  ? { phrase:  detail.phrase.slice(0, 120) } : {}),
+      ...(detail?.to      ? { to:      detail.to.slice(0, 120) }   : {}),
+      ...(detail?.toId    ? { to_id:   detail.toId }               : {}),
+      ...(detail?.claimed ? { claimed: detail.claimed }            : {}),
     },
   })
 }

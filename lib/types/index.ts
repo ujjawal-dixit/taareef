@@ -68,6 +68,11 @@ export type RecMetadata = {
    *  detail screen can stop saying "finding the right poster…" — silence is
    *  not a state and the UI cannot render it. */
   enrichment_state?: 'not_found' | null
+  /** The person's own wording, kept when the card took the catalogue's name. */
+  original_title?: string | null
+  /** What we claimed at the time. Read when a correction arrives days later:
+   *  being corrected after 'sure' is a different failure from after 'not_sure'. */
+  last_band?:      string | null
 
   // ── watch — TMDB ─────────────────────────────────────────────────
   tmdb_id?:             number | null

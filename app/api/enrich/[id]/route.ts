@@ -247,8 +247,25 @@ export async function PATCH(
     // no correction is NOT the same as correct.
     const enrichmentId = (existingMeta as { enrichment_id?: string }).enrichment_id
     if (enrichmentId) {
+      // What it was, and what they said it actually is. Both, or this row
+      // teaches nothing — which is what the previous twelve of these did.
       await trackEnrichmentResolvedServer(
-        user.id, enrichmentId, params.id, 'corrected',
+        user.id, enrichmentId, params.id, 'corrected', undefined,
+        {
+          // `from` is what the card said when they corrected it. `phrase` is
+          // how THEY originally wrote it — which is the half a future
+          // correction memory keys on, since the next person to be wrong will
+          // be wrong in the same words, not in ours.
+          //
+          // This is also what makes metadata.original_title (added in PR #17)
+          // a field with a reader. Written without one, it was a producer with
+          // no consumer — the tenet I have quoted twice today.
+          from:    rec.title as string,
+          phrase:  (existingMeta.original_title as string | undefined) ?? (rec.title as string),
+          to:      canonicalTitle || null,
+          toId:    detail.id ?? null,
+          claimed: (existingMeta.last_band as string | undefined) ?? null,
+        },
       )
     }
 
@@ -661,7 +678,15 @@ async function enrichWatch(
 
   await supabase
     .from('recommendations')
-    .update({ metadata: { ...meta, tmdb_candidates: candidates, enrichment_id: enrichmentId } })
+    // last_band is persisted so a correction days later can say what we had
+    // CLAIMED at the time. Calibration needs the pair, not the outcome: being
+    // corrected after 'sure' is a different failure from after 'not_sure'.
+    .update({ metadata: {
+      ...meta,
+      tmdb_candidates: candidates,
+      enrichment_id:   enrichmentId,
+      last_band:       evidence.band,
+    } })
     .eq('id', rec.id as string)
     .eq('user_id', userId)
 
