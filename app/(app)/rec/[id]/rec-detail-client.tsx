@@ -818,7 +818,16 @@ export function RecDetailClient({ recommendation: rec, categoryConfig: cfg }: Pr
                   )
                 })}
               </div>
-              {/* None of these */}
+              {/* Two escape hatches, stacked.
+                  Both are <button>, which is inline-block, so with no wrapper
+                  they rendered on one line as "None of theseUpload your own →"
+                  — two separate actions reading as one broken sentence. */}
+              <div style={{
+                display:       'flex',
+                flexDirection: 'column',
+                alignItems:    'flex-start',
+                gap:           '2px',
+              }}>
               <button
                 onClick={handleDismissCandidates}
                 style={{
@@ -856,6 +865,7 @@ export function RecDetailClient({ recommendation: rec, categoryConfig: cfg }: Pr
               >
                 {uploading ? 'Uploading…' : 'Upload your own →'}
               </button>
+              </div>
             </div>
           )
         })()}
