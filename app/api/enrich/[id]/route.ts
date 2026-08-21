@@ -16,8 +16,11 @@
 import { NextRequest, NextResponse }   from 'next/server'
 import { createClient }               from '@/lib/supabase/server'
 import { getStreamingPlatforms }      from '@/lib/utils/watchmode-server'
-import { judge, mayAutoConfirm, bandFromVerdict } from '@/lib/enrichment/judge'
-import { shapeQueries, interleaveById } from '@/lib/enrichment/query-shaper'
+import {
+  identify, corroborate, decide,
+  isSuspectedHallucination, isSuspectedFabrication,
+  type IdentifyInput, type Identification, type CaptureModality,
+} from '@/lib/enrichment/identify'
 import type { Recommendation, RecMetadata, Category } from '@/lib/types'
 import {
   trackEnrichmentShownServer,
@@ -269,21 +272,70 @@ export async function PATCH(
 //     gap vs the second result — avoids silently locking in an ambiguous poster
 // ─────────────────────────────────────────────────────────────────────────────
 /**
- * How many TMDB results retrieval keeps. Three was the old value and it was
- * applied BEFORE any ranking, so a correct match sitting fourth by TMDB
- * relevance was unreachable no matter how good later stages became. Ten costs
- * nothing — same single request — and is the pool the judgement layer will
- * read from.
+ * Stand-in when the model call fails entirely. Every field is empty and
+ * `known` is false, so decide() returns 'not_found' and the person is asked.
+ * A missing model degrades to a question, never to a guess.
  */
-const RETRIEVAL_POOL_SIZE = 10
+const EMPTY_IDENT: Identification = {
+  known: false, title: null, year: null, creator: null, people: [], reason: 'model unavailable',
+}
 
 /**
- * How many candidates the judgement layer is shown. Ten is what retrieval
- * keeps; five is what a model can weigh carefully in one pass without the
- * list itself becoming the noise. The rest stay retrieved and unjudged —
- * available to a better layer later, never silently discarded.
+ * The catalogue record the model named, found within a page of results.
+ *
+ * Exact title match first, then title match with an agreeing year. Returns
+ * null rather than a near-miss: this function answers "is the thing the model
+ * named present here", and a confident maybe is what we have spent all night
+ * removing.
  */
-const JUDGE_CANDIDATE_LIMIT = 5
+function pickByTitle(
+  page:  TMDBSearchResult[],
+  title: string,
+  year:  number | null,
+): TMDBSearchResult | null {
+  const want = normaliseTitle(title)
+  const matches = page.filter(r => normaliseTitle(r.title ?? r.name ?? '') === want)
+  if (matches.length === 0) return null
+  if (matches.length === 1) return matches[0]
+
+  // Several works share the title — Devdas, Don, countless remakes. The year
+  // the model committed to is what separates them.
+  if (year !== null) {
+    const byYear = matches.find(r => {
+      const y = resultYear(r)
+      return y !== null && Math.abs(y - year) <= 1
+    })
+    if (byYear) return byYear
+  }
+  return matches[0]
+}
+
+function normaliseTitle(s: string): string {
+  return s.toLowerCase().replace(/[^a-z0-9]/g, '')
+}
+
+/**
+ * How the person entered this. Absent on every row saved before Session 18,
+ * and on those we assume 'type' — the STRICTER tolerance. An unknown modality
+ * should make us ask more often, never confirm more easily.
+ */
+function modalityFromMeta(meta: Record<string, unknown>): CaptureModality {
+  const m = meta.capture_method
+  return m === 'speak' || m === 'scan' ? m : 'type'
+}
+
+/**
+ * Band from decision. Replaces bandFromVerdict, which described a model's
+ * feeling; this describes what actually happened to the card.
+ *
+ * 'fairly_sure' is the case where we HAVE a specific suggestion that fell
+ * short of proof — the middle band doing exactly the job it was named for.
+ */
+function bandFromDecision2(decision: string, hasRecord: boolean): 'sure' | 'fairly_sure' | 'not_sure' | 'none' {
+  if (decision === 'confirm')    return 'sure'
+  if (decision === 'not_found')  return 'none'
+  return hasRecord ? 'fairly_sure' : 'not_sure'
+}
 
 /**
  * People the user named, gathered from every field that can hold one. Written
@@ -324,25 +376,47 @@ async function searchTmdb(
 }
 
 /**
- * Top-billed cast for one candidate. Returns null — not [] — when the lookup
- * fails or is unavailable, because "we could not look" and "nobody is in this"
- * must stay distinguishable all the way to the prompt.
+ * Cast AND directors for one record.
+ *
+ * Crew is included deliberately. "The new Villeneuve one" names a person who
+ * appears nowhere in a cast list, so a cast-only lookup would find nothing,
+ * report "none of the named people are here", and veto the correct film — for
+ * every film anyone described by its maker, which is one of the commonest ways
+ * people talk about films.
+ *
+ * Returns null — never [] — when the lookup fails, because "we could not look"
+ * and "nobody is in this" must stay distinguishable all the way to the
+ * decision. Conflating those two made every named-person save return 'none'
+ * earlier today.
  */
-async function fetchCast(
+async function fetchCredits(
   mediaType: string,
   id:        number,
   tmdbKey:   string,
-): Promise<string[] | null> {
+): Promise<{ people: string[]; director: string | null } | null> {
   try {
-    const url = `https://api.themoviedb.org/3/${mediaType}/${id}/credits?api_key=${tmdbKey}`
-    const res = await fetch(url)
+    const res = await fetch(
+      `https://api.themoviedb.org/3/${mediaType}/${id}/credits?api_key=${tmdbKey}&language=en-US`,
+    )
     if (!res.ok) return null
-    const json = await res.json() as { cast?: { name?: string }[] }
-    if (!Array.isArray(json.cast)) return null
-    return json.cast
+    const json = await res.json() as {
+      cast?: { name?: string }[]
+      crew?: { name?: string; job?: string }[]
+    }
+
+    const cast = (json.cast ?? [])
       .map(c => c.name)
       .filter((n): n is string => typeof n === 'string' && n.trim().length > 0)
       .slice(0, 8)
+
+    const directors = (json.crew ?? [])
+      .filter(c => c.job === 'Director' || c.job === 'Series Director')
+      .map(c => c.name)
+      .filter((n): n is string => typeof n === 'string' && n.trim().length > 0)
+
+    if (cast.length === 0 && directors.length === 0) return null
+
+    return { people: [...cast, ...directors], director: directors[0] ?? null }
   } catch {
     return null
   }
@@ -390,104 +464,79 @@ async function enrichWatch(
   const year      = meta.release_year as number | null | undefined
   const mediaType = subtype === 'series' ? 'tv' : 'movie'
 
-  // ── STAGE 0 + 1: SHAPE AND RETRIEVE ─────────────────────────────────────
-  // Retrieval can only find what the query asks for. TMDB does not return
-  // "Jawan" (2023) for the spelling "Jawaan", so the judgement layer was handed
-  // three films and correctly answered "none of these" — right, and useless.
+  // ── IDENTIFY, THEN VERIFY ────────────────────────────────────────────────
+  // One model call. It is asked what the WORK IS, not to guess spellings or
+  // pick from a list — the two string tasks that failed four times tonight.
+  // Its answer is a lookup key and a set of claims; the catalogue supplies
+  // every field that reaches the card. See lib/enrichment/identify.ts.
   //
-  // The general case is transliteration, not typos: every non-English title
-  // arrives through someone's ear and someone's keyboard, and no character
-  // distance bridges "Jawaan" to "Jawan" or "Chungking Express" to 重慶森林.
-  //
-  // The user's own wording is searched IMMEDIATELY and the shaping call runs
-  // beside it, so the common case — their spelling was right — costs no extra
-  // latency at all. Only genuinely new queries cost a round trip.
-  const subject = {
+  // The user's own title is searched in parallel. It is needed for the
+  // ask-path candidates regardless of what the model says, so this costs
+  // nothing and removes the model from the critical path when it fails.
+  const input: IdentifyInput = {
     title,
     year:        (meta.capture_year as number | null | undefined) ?? year ?? null,
     people:      peopleFromMeta(meta),
     captureText: (meta.capture_text as string | null | undefined) ?? null,
+    note:        (rec.notes as string | null | undefined) ?? null,
+    modality:    modalityFromMeta(meta),
+    medium:      mediaType === 'tv' ? 'tv' : 'film',
   }
 
-  const [firstPage, extraQueries] = await Promise.all([
+  const [userPage, ident] = await Promise.all([
     searchTmdb(mediaType, title, tmdbKey),
-    shapeQueries(subject, 'watch'),
+    identify(input),
   ])
 
-  const extraPages = extraQueries.length > 0
-    ? await Promise.all(extraQueries.map(q => searchTmdb(mediaType, q, tmdbKey)))
-    : []
+  // ── The lookup ───────────────────────────────────────────────────────────
+  // Not a search. We already know what we are looking for, so we look for
+  // exactly that. Usually it is already in the page we fetched anyway — the
+  // person's spelling was close enough for TMDB — and that costs no request.
+  let record: TMDBSearchResult | null = null
 
-  // Round-robin, NOT concatenate-then-truncate. TMDB returns up to twenty
-  // results per query; "Jawaan" alone returns more than ten, so concatenating
-  // and slicing to ten kept only the user's-spelling page and discarded the
-  // shaped page entirely. Position one is still theirs; every query now
-  // actually reaches the pool.
-  const pool = interleaveById([firstPage, ...extraPages], RETRIEVAL_POOL_SIZE)
-
-  if (pool.length === 0) {
-    return NextResponse.json({ message: 'No TMDB results found' })
+  if (ident?.known && ident.title) {
+    record = pickByTitle(userPage, ident.title, ident.year)
+    if (!record) {
+      const identPage = await searchTmdb(mediaType, ident.title, tmdbKey)
+      record = pickByTitle(identPage, ident.title, ident.year) ?? identPage[0] ?? null
+    }
   }
 
-  // ── STAGE 2: RANKING — the year is a signal applied here, not a filter ──
-  // Stable partition: candidates whose release year matches keep their TMDB
-  // relevance order and move ahead of those that don't. When the year is
-  // absent or matches nothing, the order is TMDB's, unchanged — a wrong year
-  // can now cost position, never existence.
-  const ranked = year ? promoteYearMatches(pool, year) : pool
+  // ── The proof ────────────────────────────────────────────────────────────
+  // Cast AND crew. "The new Villeneuve one" names a person who appears in
+  // neither the cast list nor anywhere a cast-only lookup would find — an
+  // earlier draft of this would have vetoed the correct film for every
+  // director named, which is one of the commonest ways people describe a film.
+  const credits = record ? await fetchCredits(mediaType, record.id, tmdbKey) : null
 
-  const results = ranked.slice(0, 3)
+  const corrob = corroborate(input, ident ?? EMPTY_IDENT, {
+    year:    record ? resultYear(record) : null,
+    credits: credits ? credits.people : null,
+    creator: credits ? credits.director : null,
+  })
 
-  // ── STAGE 3: JUDGEMENT — replaces the spelling score entirely ────────────
-  // The old rule was: Levenshtein ≥92 AND a popularity gap. It auto-confirmed
-  // a 2017 Telugu film for a user who said "Jawaan, starring Shah Rukh, 2024",
-  // because their spelling matched that film's title exactly and scored 100.
-  // Character distance is not evidence of identity, and no threshold on it
-  // could have caught that. See lib/enrichment/judge.ts.
-  const shortlist = ranked.slice(0, JUDGE_CANDIDATE_LIMIT)
+  const decision = decide(input, ident ?? EMPTY_IDENT, !!record, corrob)
 
-  // Cast is fetched BEFORE judging, not after. The previous version passed
-  // `people: []` for every candidate with a comment about vetoes abstaining
-  // when they cannot see. The veto did abstain correctly — but the PROMPT did
-  // not: it instructs the model to reject any candidate whose cast omits a
-  // named person, and an empty list omits everyone. So naming an actor
-  // guaranteed a "none" verdict for every candidate, including the right one.
-  // The model kept reporting exactly this and it read like the veto working.
-  //
-  // Five parallel requests, only when the person actually named someone —
-  // otherwise cast changes no decision and is not worth the latency.
-  const needsCast = (subject.people ?? []).length > 0
-  const castLists = needsCast
-    ? await Promise.all(shortlist.map(r => fetchCast(mediaType, r.id, tmdbKey)))
-    : shortlist.map(() => null)
+  // Evidence, never a decision. Kept so we can show the new path beats the
+  // spelling score it replaced rather than assuming it.
+  const confidence = calculateConfidence(title, record?.title ?? record?.name ?? '')
 
-  const judged = await judge(
-    subject,
-    shortlist.map((r, i) => ({
-      index:      i,
-      title:      r.title ?? r.name ?? '',
-      year:       resultYear(r),
-      // null means "we could not look", which the prompt treats differently
-      // from an empty list meaning "nobody is in this". Conflating those two
-      // is the whole of fault B.
-      people:     castLists[i],
-      overview:   typeof r.overview === 'string' ? r.overview.slice(0, 200) : null,
-      popularity: r.popularity ?? null,
-    })),
-  )
+  const evidence = {
+    score:          confidence,
+    provider:       'tmdb',
+    band:           bandFromDecision2(decision, !!record),
+    identifyKnown:  ident?.known ?? false,
+    identifyTitle:  ident?.title ?? null,
+    identifyReason: ident?.reason ?? 'model unavailable',
+    decision,
+    yearAgrees:     corrob.yearAgrees,
+    personFound:    corrob.userPersonFound,
+    creditsRead:    corrob.creditsAvailable,
+    hallucinated:   ident ? isSuspectedHallucination(ident, !!record) : false,
+    fabricated:     ident ? isSuspectedFabrication(ident, corrob) : false,
+  }
 
-  // Confidence is still computed and still logged — as evidence, never as a
-  // decision. Keeping it lets us prove the judgement layer beats the score it
-  // replaced, instead of assuming it.
-  const chosenIndex = judged.index ?? 0
-  const topResult   = ranked[chosenIndex] ?? ranked[0]
-  const confidence  = calculateConfidence(title, topResult.title ?? topResult.name ?? '')
-  const shouldAutoConfirm = mayAutoConfirm(judged)
-
-  if (shouldAutoConfirm) {
-    // A4 — log the CONFIDENT case too. This is the branch where the user is
-    // never asked, so a wrong match here is silent and permanent. Logging only
-    // the uncertain branch left the most expensive failure mode invisible.
+  if (decision === 'confirm' && record) {
     const autoId = crypto.randomUUID()
     await supabase
       .from('recommendations')
@@ -495,58 +544,47 @@ async function enrichWatch(
       .eq('id', rec.id as string)
       .eq('user_id', userId)
 
+    // The confident branch is logged too. It is the branch where nobody is
+    // ever asked, so a wrong match here is silent and permanent — the most
+    // expensive failure in the product and the one most worth watching.
     await trackEnrichmentShownServer(
       userId, autoId, rec.id as string, rec.category as Category,
-      true,                                  // auto-confirmed
-      {
-        score:          confidence,      // evidence only — no longer decides anything
-        provider:       'tmdb',
-        matchType:      'exact',
-        candidateCount: results.length,
-        band:           bandFromVerdict(judged.verdict),
-        judgeMethod:    judged.method,
-        judgeReason:    judged.reason,
-        shapedQueries:  extraQueries,
-        poolSize:       pool.length,
-      },
+      true,
+      { ...evidence, matchType: 'exact', candidateCount: 1 },
     )
 
-    // autoId is passed in, not re-read. autoConfirmWatch writes metadata from
-    // the `meta` it is handed, and that snapshot predates the enrichment_id
-    // written two statements ago — so every auto-confirmed card silently lost
-    // its correlation ticket the moment it was confirmed. Found Session 18.
-    return await autoConfirmWatch(supabase, rec, userId, topResult, subtype, mediaType, meta, tmdbKey, autoId)
+    return await autoConfirmWatch(
+      supabase, rec, userId, record, subtype, mediaType, meta, tmdbKey, autoId,
+    )
   }
 
-  // Store top 3 as candidates for the user to pick in the detail screen.
-  // poster_url is the full CDN URL — the candidate strip reads it directly.
-  // subtype is carried so PATCH knows which TMDB endpoint to confirm against.
-  // Ordered so the judgement's pick leads the strip. When the verdict is
-  // 'none' there is no pick, and the strip stays in retrieval order — which is
-  // the honest presentation of "we don't know", rather than a confident-looking
-  // first position that means nothing.
-  const stripOrder = judged.index !== null && ranked[judged.index]
-    ? [ranked[judged.index], ...ranked.filter((_, i) => i !== judged.index)].slice(0, 3)
-    : results
+  // ── Ask ──────────────────────────────────────────────────────────────────
+  // The model's suggestion leads when there is one, because it is the best
+  // guess available even though it fell short of confirmation. Behind it, the
+  // person's own search results — which are what we would have shown anyway.
+  const fallback = year ? promoteYearMatches(userPage, year) : userPage
+  const strip = record
+    ? [record, ...fallback.filter(r => r.id !== record.id)].slice(0, 3)
+    : fallback.slice(0, 3)
 
-  const candidates = stripOrder.map((r) => ({
+  if (strip.length === 0) {
+    return NextResponse.json({ message: 'No TMDB results found' })
+  }
+
+  const candidates = strip.map((r) => ({
     tmdb_id:      r.id,
     title:        r.title ?? r.name ?? '',
     poster_path:  r.poster_path ?? null,
     poster_url:   r.poster_path
       ? `https://image.tmdb.org/t/p/w500${r.poster_path}`
       : null,
-    release_year: r.release_date
-      ? parseInt(r.release_date.slice(0, 4))
-      : r.first_air_date
-        ? parseInt(r.first_air_date.slice(0, 4))
-        : null,
+    release_year: resultYear(r),
     subtype,
   }))
 
-  // Session 17 — calibration. The correlation id is PERSISTED alongside the
-  // candidates because a correction may arrive days later, and without the
-  // ticket number it can never be matched back to the score that produced it.
+  // The correlation id is PERSISTED beside the candidates: a correction may
+  // arrive days later, and without the ticket it can never be matched back to
+  // the identification that produced it.
   const enrichmentId = crypto.randomUUID()
 
   await supabase
@@ -557,16 +595,8 @@ async function enrichWatch(
 
   await trackEnrichmentShownServer(
     userId, enrichmentId, rec.id as string, rec.category as Category,
-    false,                                   // strip shown = machine deferred
-    {
-      score:          confidence,        // evidence only — no longer decides anything
-      provider:       'tmdb',
-      candidateCount: candidates.length,
-      band:           bandFromVerdict(judged.verdict),
-      judgeMethod:    judged.method,
-      judgeReason:    judged.reason,
-      shapedQueries:  extraQueries,
-    },
+    false,
+    { ...evidence, candidateCount: candidates.length },
   )
 
   return NextResponse.json({ success: true, candidates })

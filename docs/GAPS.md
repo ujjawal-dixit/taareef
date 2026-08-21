@@ -12,6 +12,38 @@
 >
 > Last updated: Session 17 · 2026-08-16
 
+### G19 · The chain that took four attempts — **closed S18**
+Four consecutive failures in one evening, each fix correct and each leaving the
+outcome identical:
+
+1. **Levenshtein 100 on the wrong film.** "Jawaan" is the exact title of a 2017
+   Telugu film. Auto-confirmed silently.
+2. **Retrieval filtered by year.** Fixed the filter; never asked whether the
+   *query* was right.
+3. **The shaped query's results were discarded.** Concatenate-then-truncate
+   filled a pool of ten with twenty results from the user's spelling.
+4. **The judge was blind to cast.** Candidates arrived with `people: []` and
+   the prompt rejected anything missing a named person — so naming an actor
+   guaranteed a "none" verdict.
+
+**The shared cause:** each stage was verified by inspecting the change, not the
+outcome. Nothing logged what a stage actually passed downstream, so three
+rounds of diagnosis were reasoning about what *should* have been passed.
+
+**Closed by** replacing the chain with identify-then-verify (T23) — and by
+logging `decision`, `personFound`, `creditsRead`, `hallucinated` and
+`fabricated`, so the next failure is one query away rather than three rounds.
+
+### G20 · The eval corpus is nearly empty — **C**
+`identify.golden.ts` covers the deterministic rules and is a real gate. The
+MODEL is unmeasured: no corpus, no hallucination rate, no fabrication rate.
+Roughly ten known cases exist (Jawaan, Dune 3, Stutz, Chungking Express).
+**That is enough to catch a regression and not enough to claim a rate** — any
+accuracy figure quoted off ten cases is noise.
+**Closes when** the ledger has enough real identifications to seed a corpus,
+and the production number exists: of everything auto-confirmed, what share was
+later corrected.
+
 ---
 
 ## SEVERITY KEY
