@@ -37,6 +37,34 @@ Trust increases the obligation to check, not the licence to skip it.
 
 **In practice:** clone the repo fresh rather than pull into a working directory. Query the live database rather than trust documentation. Read the provider's docs before theorising about their API. When something is directly testable, propose the test rather than a mechanism.
 
+### T23 · Ask each part the question it can actually answer
+
+Session 18 spent an evening on four consecutive failures with one shape. An LLM
+was asked to guess spellings, then to pick from a list, then to re-check
+another LLM. Those are string-manipulation tasks, which is what models are
+weakest at — and each patch needed another patch to clean up after it. Three
+models, still breaking.
+
+Meanwhile the model already knew the answer. Given "Javan, starring Shah Rukh
+Khan" it knows that is Jawan (2023), directed by Atlee. Nobody asked it. And
+TMDB was being driven as a search engine when its strength is being a registry
+of canonical ids and checkable facts. **Each part was doing the other part's
+job badly.**
+
+The rule: **knowledge from the model, proof from the catalogue, decisions from
+arithmetic.** A model's output is a lookup key and a set of claims — never
+card data. That makes hallucination structurally harmless: an invented film
+produces a failed lookup, never a fabricated card, however badly the model
+behaves. No prompt rule can promise that; a data-flow rule can.
+
+Corollary: **never ask a model how confident it is.** Self-reported confidence
+is fluent and uninformative. Ask for facts something else can check.
+
+Corollary: **a second model is not a second opinion.** It shares the weights,
+the training data and the blind spots. Checking correlated with the thing
+checked adds confidence without adding information — which is worse than no
+check at all.
+
 **Session 18 extension — this applies mid-conversation, not just before code.** Asked whether an LLM could see the user's raw phrasing, Claude answered "the capture text isn't stored" and built a recommendation around that constraint. One grep would have shown the audio route already returns the transcript so the capture screen can display it. Nothing needed storing; the design question had a different and easier answer.
 
 A design conversation is not a lower-evidence setting than a delivery. Constraints invented in discussion are worse than wrong code, because they silently remove options before anyone evaluates them — and nobody reviews a possibility that was never raised. **Before saying a thing does not exist, grep for it, even when talking.**

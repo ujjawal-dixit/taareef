@@ -63,6 +63,7 @@ export type RecMetadata = {
   capture_people?: string[] | null  // people they named — actors, artists, authors
   capture_year?:   number | null    // a year they mentioned; soft evidence, never a filter
   capture_text?:   string | null    // what they actually said, capped at 500 chars
+  capture_method?: 'type' | 'speak' | 'scan' | null  // how they entered it
 
   // ── watch — TMDB ─────────────────────────────────────────────────
   tmdb_id?:             number | null

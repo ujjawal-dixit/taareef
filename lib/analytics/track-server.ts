@@ -138,10 +138,10 @@ export async function trackServer(
  *
  * The comment above stands: two honest states beat three invented ones, and
  * that was the right call while the only input was a spelling score. It is no
- * longer the only input. lib/enrichment/judge.ts returns a VERDICT reached by
- * weighing named people, years and what the person actually said — so a third
- * state is now a thing the system genuinely knows, not a threshold someone
- * picked.
+ * longer the only input. lib/enrichment/identify.ts identifies the work and
+ * the catalogue verifies the claims, so the band now describes what actually
+ * happened to the card — confirmed, suggested-but-unproven, or not found —
+ * rather than a threshold someone picked or a model's feeling about itself.
  *
  * `verdict` is preferred when present. The boolean path remains for the
  * providers that have not been moved onto the judgement layer yet (listen,
@@ -177,21 +177,25 @@ export interface EnrichmentEvidence {
   candidateCount?: number
   /** Which enrichment source produced this — tmdb | places | spotify | books. */
   provider?:      string
-  /** The judgement layer's band, when this provider uses it. */
+  /** The band the decision produced. */
   band?:          EnrichmentBand | null
-  /** 'llm' | 'fallback' — how the verdict was reached. Separates a real
-   *  judgement from a degraded one, so the two are never averaged together. */
-  judgeMethod?:   string
-  /** The verdict's one-line reason. Calibration evidence, never shown. */
-  judgeReason?:   string
-  /** Extra queries the shaping layer proposed. Empty means it added nothing —
-   *  which is the expected, and cheapest, common case. Logged so we can ask
-   *  later whether shaping actually improved recall or merely spent calls. */
-  shapedQueries?: string[]
-  /** How many candidates survived into the pool. Added Session 18 because a
-   *  truncating merge silently discarded an entire query's results and nothing
-   *  in the log could have shown it. */
-  poolSize?:      number
+  /** Did the model claim to recognise the work at all? */
+  identifyKnown?: boolean
+  /** The canonical title it committed to. Null when it abstained. */
+  identifyTitle?: string | null
+  /** Its one-line reason. Calibration evidence, never shown. */
+  identifyReason?: string
+  /** confirm | show_and_ask | not_found — what actually happened to the card. */
+  decision?:      string
+  /** Which claims the catalogue independently agreed with. */
+  yearAgrees?:    boolean
+  personFound?:   boolean
+  creditsRead?:   boolean
+  /** Claimed to know the work; the catalogue has no such record. */
+  hallucinated?:  boolean
+  /** Named a cast that is absent from the real credits. Stronger evidence of
+   *  invention than a failed lookup, because it committed to specifics. */
+  fabricated?:    boolean
 }
 
 /**

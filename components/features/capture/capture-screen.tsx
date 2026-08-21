@@ -22,7 +22,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import type { CreateRecommendationInput, Category, SourceType, Recommendation } from '@/lib/types'
-import { CAPTURE_TEXT_LIMIT } from '@/lib/enrichment/judge'
+import { CAPTURE_TEXT_LIMIT } from '@/lib/enrichment/identify'
 import type { UnderstandResult } from '@/app/api/capture/understand/route'
 import { CATEGORIES } from '@/constants/categories'
 import { compressImage } from '@/lib/utils/compress-image'
@@ -324,6 +324,7 @@ export function CaptureScreen({ isOpen, onClose, onSaved }: Props) {
             saving={saving}
             error={error}
             selectedCat={selectedCat}
+            method={method}
           />
         )}
 
@@ -1029,12 +1030,15 @@ function ClarificationStep({ understood, onClarified, selectedCat }: {
 // This is the delight moment — the card is born here.
 // Every field is editable. Save is always neon.
 
-function ConfirmationScreen({ understood, onSave, saving, error, selectedCat }: {
+function ConfirmationScreen({ understood, onSave, saving, error, selectedCat, method }: {
   understood:  UnderstandResult
   onSave:      (input: CreateRecommendationInput) => Promise<void>
   saving:      boolean
   error:       string | null
   selectedCat: ReturnType<typeof CATEGORIES.find> | null
+  /** How this was entered. Recorded on the row; enrichment reads it to decide
+   *  how far the model may move the title. Speech gets more room than typing. */
+  method:      'type' | 'speak' | 'scan'
 }) {
   const [title,       setTitle]       = useState(understood.title ?? '')
   const [category,    setCategory]    = useState<Category | null>(understood.category)
@@ -1095,6 +1099,13 @@ function ConfirmationScreen({ understood, onSave, saving, error, selectedCat }: 
         ...(understood.raw_input
           ? { capture_text: understood.raw_input.slice(0, CAPTURE_TEXT_LIMIT) }
           : {}),
+        // How they entered it. Enrichment uses this to decide how far the
+        // model is allowed to move their title: speech gets more room than
+        // typing, because Whisper rewrites whole syllables. Rows saved before
+        // Session 18 have no value here and are treated as 'type' — the
+        // stricter tolerance, so an unknown modality asks more often rather
+        // than confirming more easily.
+        capture_method: method,
       },
     })
   }
