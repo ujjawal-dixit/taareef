@@ -133,7 +133,9 @@ export async function PATCH(
     // Read existing rec to get current metadata for merging
     const { data: rec, error: recError } = await supabase
       .from('recommendations')
-      .select('metadata, category')
+      // title is selected because the confirm below replaces it with the
+      // catalogue's name and keeps the person's own wording in metadata.
+      .select('metadata, category, title')
       .eq('id', params.id)
       .eq('user_id', user.id)
       .single()
@@ -202,11 +204,22 @@ export async function PATCH(
     const { error: updateError } = await supabase
       .from('recommendations')
       .update({
+        // ── THE CARD TAKES THE CATALOGUE'S NAME ──────────────────────────
+        // A card that shows the poster for Jawan while reading "Javan Movie"
+        // is telling the person two different things at once, and the wrong
+        // one is the one in large type. canonicalTitle was computed here and
+        // used ONLY for the Watchmode lookup — the card never received it.
+        //
+        // Their original wording is kept in metadata.original_title, never
+        // discarded: it is how they refer to the film, it is what a future
+        // correction-memory layer matches on, and it is theirs.
+        ...(canonicalTitle ? { title: canonicalTitle } : {}),
         image_url: detail.poster_path
           ? `https://image.tmdb.org/t/p/w500${detail.poster_path}`
           : null,
         metadata: {
           ...existingMeta,              // preserve source, notes, subtype from understand phase
+          original_title:      (existingMeta.original_title as string | undefined) ?? (rec.title as string),
           tmdb_id:             detail.id,
           subtype,                      // the real subtype (film or series)
           release_year:        airDate ? parseInt(airDate.slice(0, 4)) : null,
@@ -627,7 +640,10 @@ async function enrichWatch(
     return NextResponse.json({ success: true, candidates: [], state: 'not_found' })
   }
 
-  const candidates = strip.map((r) => ({
+  // A candidate with no artwork renders as an empty blue rectangle — it looks
+  // like a broken tile, not a choice, and it cannot be judged by eye, which is
+  // the entire point of showing a poster strip. Dropped rather than displayed.
+  const candidates = strip.filter(r => r.poster_path).map((r) => ({
     tmdb_id:      r.id,
     title:        r.title ?? r.name ?? '',
     poster_path:  r.poster_path ?? null,
@@ -683,12 +699,21 @@ async function autoConfirmWatch(
     ? `https://image.tmdb.org/t/p/w500${topResult.poster_path}`
     : null
 
+  const canonicalName = topResult.title ?? topResult.name ?? ''
+
   if (posterUrl) {
     await supabase
       .from('recommendations')
       .update({
+        // Same rule as the PATCH path: the card takes the catalogue's name,
+        // and the person's own wording is kept rather than overwritten.
+        ...(canonicalName ? { title: canonicalName } : {}),
         image_url: posterUrl,
-        metadata: { ...meta, tmdb_id: topResult.id, subtype, enrichment_id: enrichmentId },
+        metadata: {
+          ...meta,
+          original_title: (meta.original_title as string | undefined) ?? (rec.title as string),
+          tmdb_id: topResult.id, subtype, enrichment_id: enrichmentId,
+        },
       })
       .eq('id', rec.id as string)
       .eq('user_id', userId)
