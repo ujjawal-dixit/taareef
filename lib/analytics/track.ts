@@ -366,17 +366,50 @@ export function trackEnrichmentShown(
 }
 
 /** Three outcomes. `untouched` is NOT `accepted` — the user may not have noticed. */
+/**
+ * Q: When we were wrong, what was the right answer?
+ *
+ * Until Session 18 this recorded only an outcome — "corrected" — with no
+ * record of WHAT it was corrected to. A person telling us the exact right
+ * answer is the single most valuable signal the product can receive, arriving
+ * free and unprompted, and it was being stored as a content-free ping.
+ *
+ * `to` is what makes this a correction rather than a complaint. It is also the
+ * seed of correction memory and of the eval corpus: a phrasing paired with a
+ * verified catalogue id, labelled by a human. Ten of those are worth more than
+ * any prompt I can write.
+ *
+ * Deliberately NOT recorded: the person's note, source, or full sentence. What
+ * is useful here is the mapping, not the person.
+ */
 export function trackEnrichmentResolved(
   correlationId: string,
   cardId: string,
   outcome: EnrichmentOutcome,
   chosenIndex?: number,
+  detail?: {
+    /** The title we had on the card when we were wrong. */
+    from?:      string | null
+    /** The title the person chose instead. */
+    to?:        string | null
+    /** The catalogue id they chose. The durable half — titles are ambiguous. */
+    toId?:      number | null
+    /** What we had claimed at the time: sure | fairly_sure | not_sure | none. */
+    claimed?:   EnrichmentBand | null
+  },
 ): void {
   track('enrichment_resolved', {
     surface: 'card_detail',
     cardId,
     correlationId,
-    payload: { outcome, ...(chosenIndex !== undefined ? { chosen_index: chosenIndex } : {}) },
+    payload: {
+      outcome,
+      ...(chosenIndex !== undefined ? { chosen_index: chosenIndex } : {}),
+      ...(detail?.from    ? { from:    detail.from.slice(0, 120) } : {}),
+      ...(detail?.to      ? { to:      detail.to.slice(0, 120) }   : {}),
+      ...(detail?.toId    ? { to_id:   detail.toId }               : {}),
+      ...(detail?.claimed ? { claimed: detail.claimed }            : {}),
+    },
   })
 }
 

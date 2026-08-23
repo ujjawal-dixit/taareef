@@ -153,10 +153,29 @@ export function RecDetailClient({ recommendation: rec, categoryConfig: cfg }: Pr
 
   // Retroactive enrichment — fires if Watch/Listen card has no image and no candidates.
   // After firing, polls once after 2.5s to pick up candidates that just arrived.
+  //
+  // ── FIRES AT MOST ONCE PER CARD, PER SESSION ─────────────────────────────
+  // The condition "no image and no candidates" is true of every card that is
+  // STILL ENRICHING, so opening a fresh save made this screen race the
+  // enrichment it was waiting for. Observed 2026-08-21: one card logged
+  // enrichment_shown three times in five seconds — three Groq calls, up to
+  // nine TMDB calls, and every band statistic multiplied by three.
+  //
+  // A ref, not state: this must not re-run on re-render, and it must not
+  // trigger one.
+  //
+  // enrichment_state is also checked. A card the catalogue genuinely does not
+  // contain has no image and no candidates FOR EVER, so without this it would
+  // re-enrich on every single visit, permanently.
+  const enrichFiredFor = useRef<string | null>(null)
+
   useEffect(() => {
     const hasCands   = Array.isArray(liveMeta.tmdb_candidates) && (liveMeta.tmdb_candidates as unknown[]).length > 0
     const enrichable = rec.category === 'watch' || rec.category === 'listen'
-    if (!enrichable || liveImageUrl || hasCands || dismissedCands) return
+    const settled    = (liveMeta as import('@/lib/types').RecMetadata).enrichment_state === 'not_found'
+    if (!enrichable || liveImageUrl || hasCands || dismissedCands || settled) return
+    if (enrichFiredFor.current === rec.id) return
+    enrichFiredFor.current = rec.id
 
     // Fire enrichment then poll once after 2.5s for candidates
     triggerEnrichment(rec.id)
