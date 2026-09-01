@@ -15,6 +15,8 @@
 
 import { createClient } from '@/lib/supabase/server'
 import { NextResponse }  from 'next/server'
+import { trackEnrichmentShownServer } from '@/lib/analytics/track-server'
+import type { Category } from '@/lib/types'
 
 type Params = { params: Promise<{ id: string }> }
 
@@ -133,6 +135,30 @@ export async function POST(_req: Request, { params }: Params) {
 
     console.log(`[BookEnrich] Top result: "${top.title}" score=${topScore.toFixed(2)} auto=${autoConfirm}`)
 
+    // Logged on BOTH branches. Until Session 18 this route recorded nothing,
+    // so 'read' has never appeared in a single enrichment statistic.
+    //
+    // verified:false is the honest label: autoConfirm here is a title string
+    // score with a uniqueness check. It is the same family of signal that gave
+    // the wrong film a perfect 100 on the watch path, and it decides a cover
+    // with no author check and no year check. Recorded first, fixed after —
+    // the size of the problem is currently unknown.
+    const bookEnrichmentId = crypto.randomUUID()
+
+    await trackEnrichmentShownServer(
+      user.id, bookEnrichmentId, id, rec.category as Category,
+      autoConfirm,
+      {
+        provider:       'google_books',
+        matchType:      autoConfirm ? 'exact' : 'fuzzy',
+        score:          Math.round(topScore * 100),
+        candidateCount: candidates.length,
+        band:           autoConfirm ? 'sure' : 'not_sure',
+        verified:       false,
+        decision:       autoConfirm ? 'confirm' : 'show_and_ask',
+      },
+    )
+
     if (autoConfirm) {
       // High confidence single match — set cover and metadata directly
       // No candidate strip needed
@@ -141,6 +167,8 @@ export async function POST(_req: Request, { params }: Params) {
           image_url: top.cover_url ?? null,
           metadata:  {
             ...existingMeta,
+            enrichment_id:    bookEnrichmentId,
+            last_band:        'sure',
             google_books_id:  top.google_id,
             author:           top.author,
             published_year:   top.published_year,
@@ -166,7 +194,12 @@ export async function POST(_req: Request, { params }: Params) {
 
     // Multiple candidates or lower confidence — store for user confirmation
     await supabase.from('recommendations')
-      .update({ metadata: { ...existingMeta, books_candidates: candidates } })
+      .update({ metadata: {
+        ...existingMeta,
+        books_candidates: candidates,
+        enrichment_id:    bookEnrichmentId,
+        last_band:        'not_sure',
+      } })
       .eq('id', id).eq('user_id', user.id)
 
     return NextResponse.json({

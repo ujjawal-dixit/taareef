@@ -21,6 +21,7 @@ import {
   isSuspectedHallucination, isSuspectedFabrication,
   type IdentifyInput, type Identification, type CaptureModality,
 } from '@/lib/enrichment/identify'
+import { metaWriter, type MetaWriter } from '@/lib/enrichment/meta-writer'
 import type { Recommendation, RecMetadata, Category } from '@/lib/types'
 import {
   trackEnrichmentShownServer,
@@ -503,6 +504,10 @@ async function enrichWatch(
   }
 
   const title     = rec.title as string
+  // Every metadata write in this request goes through this accumulator, so a
+  // later write cannot silently drop a field an earlier one added. See
+  // lib/enrichment/meta-writer.ts for the three times that happened.
+  const mw        = metaWriter(rec.metadata)
   const meta      = rec.metadata
   const subtype   = (meta.subtype as string) ?? 'film'
   const year      = meta.release_year as number | null | undefined
@@ -605,7 +610,11 @@ async function enrichWatch(
     const autoId = crypto.randomUUID()
     await supabase
       .from('recommendations')
-      .update({ metadata: { ...meta, enrichment_id: autoId } })
+      // last_band belongs on BOTH branches. It was added to the ask branch
+      // only, so a card confirmed silently and corrected days later recorded
+      // `claimed: null` — losing precisely the calibration case that matters
+      // most: how often we were confidently wrong.
+      .update({ metadata: mw.patch({ enrichment_id: autoId, last_band: 'sure' }) })
       .eq('id', rec.id as string)
       .eq('user_id', userId)
 
@@ -619,7 +628,7 @@ async function enrichWatch(
     )
 
     return await autoConfirmWatch(
-      supabase, rec, userId, record, subtype, mediaType, meta, tmdbKey, autoId,
+      supabase, rec, userId, record, subtype, mediaType, mw, tmdbKey, autoId,
     )
   }
 
@@ -643,7 +652,11 @@ async function enrichWatch(
     await supabase
       .from('recommendations')
       .update({
-        metadata: { ...meta, enrichment_id: missId, enrichment_state: 'not_found' },
+        metadata: mw.patch({
+          enrichment_id:    missId,
+          enrichment_state: 'not_found',
+          last_band:        'none',
+        }),
       })
       .eq('id', rec.id as string)
       .eq('user_id', userId)
@@ -681,12 +694,11 @@ async function enrichWatch(
     // last_band is persisted so a correction days later can say what we had
     // CLAIMED at the time. Calibration needs the pair, not the outcome: being
     // corrected after 'sure' is a different failure from after 'not_sure'.
-    .update({ metadata: {
-      ...meta,
+    .update({ metadata: mw.patch({
       tmdb_candidates: candidates,
       enrichment_id:   enrichmentId,
       last_band:       evidence.band,
-    } })
+    }) })
     .eq('id', rec.id as string)
     .eq('user_id', userId)
 
@@ -710,10 +722,14 @@ async function autoConfirmWatch(
   topResult:   TMDBSearchResult,
   subtype:     string,
   mediaType:   string,
-  meta:        Record<string, unknown>,
+  /** The caller's running metadata state — NOT a snapshot. Taking a snapshot
+   *  here is what erased original_title fifty lines below, under a comment
+   *  warning about exactly that. */
+  mw:          MetaWriter,
   tmdbKey:     string,
   enrichmentId: string,
 ) {
+  const meta = mw.current()
   // ── The poster is written FIRST, on its own. ──────────────────────────────
   // It is the card's face and the only part of enrichment anyone watches
   // arrive. Everything below — details, credits, Watchmode — used to run
@@ -734,11 +750,12 @@ async function autoConfirmWatch(
         // and the person's own wording is kept rather than overwritten.
         ...(canonicalName ? { title: canonicalName } : {}),
         image_url: posterUrl,
-        metadata: {
-          ...meta,
-          original_title: (meta.original_title as string | undefined) ?? (rec.title as string),
-          tmdb_id: topResult.id, subtype, enrichment_id: enrichmentId,
-        },
+        metadata: mw.patch({
+          original_title: meta.original_title ?? (rec.title as string),
+          tmdb_id:        topResult.id,
+          subtype,
+          enrichment_id:  enrichmentId,
+        }),
       })
       .eq('id', rec.id as string)
       .eq('user_id', userId)
@@ -786,11 +803,10 @@ async function autoConfirmWatch(
       image_url: topResult.poster_path
         ? `https://image.tmdb.org/t/p/w500${topResult.poster_path}`
         : null,
-      metadata: {
-        ...meta,
-        // Carried explicitly through BOTH writes. `meta` is a snapshot taken
-        // before the correlation id existed, so spreading it alone silently
-        // deletes the ticket a correction days later would be matched against.
+      // Through the accumulator, so this write carries everything the poster
+      // write added — including original_title, which this object used to
+      // erase because it merged onto a stale snapshot.
+      metadata: mw.patch({
         enrichment_id:       enrichmentId,
         tmdb_id:             topResult.id,
         subtype,
@@ -803,7 +819,7 @@ async function autoConfirmWatch(
         streaming_platforms: streamingPlatforms,
         tmdb_candidates:     null,
         tmdb_confirmed:      true,
-      },
+      }),
     })
     .eq('id', rec.id as string)
     .eq('user_id', userId)
@@ -881,12 +897,38 @@ async function enrichSpotifyAlbum(
 
   const artworkUrl = album.images?.[0]?.url ?? null
 
+  // ── LOGGED, AND HONEST ABOUT WHAT IT IS ──────────────────────────────────
+  // This path searches with limit=1 and writes items[0] to the card. No year
+  // check, no artist check, no candidate strip, no question — the exact
+  // silent-wrong-answer failure a whole session was spent removing from the
+  // watch path, still live here.
+  //
+  // Instrumented before it is fixed, on purpose. We have never had a single
+  // number for listen or read, so the size of the problem is unknown, and
+  // guessing at it is how we spent yesterday. verified:false makes
+  // "confirmed without any corroboration" countable today.
+  const spotifyEnrichmentId = crypto.randomUUID()
+  await trackEnrichmentShownServer(
+    userId, spotifyEnrichmentId, rec.id as string, rec.category as Category,
+    true,
+    {
+      provider:       'spotify',
+      matchType:      'first_result',
+      candidateCount: 1,
+      band:           'sure',
+      verified:       false,
+      decision:       'confirm',
+    },
+  )
+
   await supabase
     .from('recommendations')
     .update({
       image_url: artworkUrl,
       metadata:  {
         ...meta,
+        enrichment_id: spotifyEnrichmentId,
+        last_band:     'sure',
         spotify_id:   album.id,
         artist:       album.artists?.[0]?.name ?? null,
         release_year: album.release_date ? parseInt(album.release_date.slice(0, 4)) : null,
@@ -923,12 +965,22 @@ async function enrichSpotifyArtist(
 
   const artworkUrl = artist.images?.[0]?.url ?? null
 
+  const artistEnrichId = crypto.randomUUID()
+  await trackEnrichmentShownServer(
+    userId, artistEnrichId, rec.id as string, rec.category as Category,
+    true,
+    { provider: 'spotify', matchType: 'first_result', candidateCount: 1,
+      band: 'sure', verified: false, decision: 'confirm' },
+  )
+
   await supabase
     .from('recommendations')
     .update({
       image_url: artworkUrl,
       metadata:  {
         ...meta,
+        enrichment_id: artistEnrichId,
+        last_band:     'sure',
         spotify_id:  artist.id,
         genres:      artist.genres ?? [],
       },
@@ -963,12 +1015,22 @@ async function enrichSpotifyPodcast(
 
   const artworkUrl = show.images?.[0]?.url ?? null
 
+  const podcastEnrichId = crypto.randomUUID()
+  await trackEnrichmentShownServer(
+    userId, podcastEnrichId, rec.id as string, rec.category as Category,
+    true,
+    { provider: 'spotify', matchType: 'first_result', candidateCount: 1,
+      band: 'sure', verified: false, decision: 'confirm' },
+  )
+
   await supabase
     .from('recommendations')
     .update({
       image_url: artworkUrl,
       metadata:  {
         ...meta,
+        enrichment_id: podcastEnrichId,
+        last_band:     'sure',
         spotify_id:   show.id,
         publisher:    show.publisher ?? null,
       },

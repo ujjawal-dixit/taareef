@@ -191,6 +191,20 @@ export interface EnrichmentEvidence {
   yearAgrees?:    boolean
   personFound?:   boolean
   creditsRead?:   boolean
+  /**
+   * Was this match VERIFIED, or merely taken?
+   *
+   * false means the provider's first search result was written to the card
+   * with no corroboration of any kind — no year check, no creator check, no
+   * question asked. Spotify and Google Books have always worked this way and
+   * logged nothing, so six of eight enrichment paths were invisible while we
+   * spent a session hardening the two that were not.
+   *
+   * Recorded rather than fixed, deliberately: the honest number comes first,
+   * and 'confirmed without verification' is the number that should decide how
+   * urgently the rest gets built.
+   */
+  verified?:      boolean
   /** Claimed to know the work; the catalogue has no such record. */
   hallucinated?:  boolean
   /** Named a cast that is absent from the real credits. Stronger evidence of
