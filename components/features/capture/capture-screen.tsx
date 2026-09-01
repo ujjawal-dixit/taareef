@@ -608,9 +608,33 @@ function TypeInput({ onUnderstood, onError, error }: {
           director:      null,
           author:        null,
           location_hint: locationHint.trim() || null,
+          // people and year are deliberately absent, not forgotten.
+          //
+          // This branch skips the extraction LLM because the person filled the
+          // form, and no local code can pull "starring Shah Rukh" out of a
+          // note. Rather than block a save that is otherwise instant, the work
+          // moves to enrichment: identify() reads the title, the raw input and
+          // the note, and reports named_people — which is then checked to
+          // appear literally in what the person wrote before it is allowed to
+          // corroborate anything. See lib/enrichment/identify.ts.
+          //
+          // Session 18, Finding M: this branch previously produced no people
+          // and no year at all, which silently disabled the corroboration rule
+          // for everyone who fills the form properly — the common case.
+          people:        null,
+          year:          null,
         },
         clarification: { needed: false, field: null, question: null, type: null, options: null },
-        raw_input: `${title} ${sourceName}`.trim(),
+        // Title and NOTE — never the source name.
+        //
+        // raw_input becomes capture_text, which enrichment passes to the model
+        // as "what they actually said". sourceName is who TOLD them: Ali,
+        // Arjun, Súria. Concatenating it here fed a person unconnected to the
+        // work straight into identification, through the same door we had
+        // carefully closed for the note. The note belongs here — it is about
+        // the work and often carries the only usable evidence, such as an
+        // actor's name.
+        raw_input: [title.trim(), note.trim()].filter(Boolean).join(' — '),
       }
       setProcessing(false)
       onUnderstood(result)

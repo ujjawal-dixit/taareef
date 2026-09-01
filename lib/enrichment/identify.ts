@@ -71,6 +71,21 @@ export interface Identification {
   creator:  string | null
   /** Top-billed people the model claims are in it. Checked against credits. */
   people:   string[]
+  /**
+   * People THE PERSON referred to, as the model reads their words.
+   *
+   * Distinct from `people` above: that is the model's claim about the work,
+   * this is its reading of the user. We need it because the typed capture path
+   * skips the extraction LLM entirely (Finding M), so capture_people is empty
+   * for anyone who fills the form properly — which silently disabled the
+   * corroboration rule exactly where it was most needed.
+   *
+   * NEVER trusted as given. Every entry is checked to appear literally in what
+   * the person wrote; see verifyNamedPeople(). A model that could invent a
+   * named person could manufacture its own corroboration, which is the one
+   * thing this design must not permit.
+   */
+  namedPeople: string[]
   /** One line, logged. Never shown. */
   reason:   string
 }
@@ -183,6 +198,60 @@ export function isSmallLeap(
   return editDistance(a, b) <= budget
 }
 
+/**
+ * Keep only the people the person demonstrably named.
+ *
+ * The model reads the title, transcript and note and reports whom it thinks
+ * the user meant. That reading is useful — people write "the Shah Rukh one"
+ * in a note far more often than they fill a structured field — but it must
+ * never be taken on trust, because `namedPeople` feeds the corroboration rule
+ * that allows a LARGE title leap to confirm silently. A model free to invent
+ * a name could manufacture the evidence for its own answer.
+ *
+ * So: a name survives only if it literally appears in what the person wrote.
+ * Matching is per-token and case-insensitive, because "Shah Rukh Khan" is a
+ * legitimate reading of a note that says "shah rukh".
+ */
+export function verifyNamedPeople(
+  claimed:  string[],
+  userText: string,
+): string[] {
+  const hay = normalisePerson(userText)
+  if (!hay) return []
+
+  return claimed.filter(name => {
+    const tokens = normalisePerson(name).split(' ').filter(t => t.length > 2)
+    if (tokens.length === 0) return false
+    // Every substantial token must be present. "Shah Rukh Khan" passes against
+    // a note saying "shah rukh khan"; it fails against one saying only "khan",
+    // which is far too common a name to treat as an identification.
+    return tokens.every(t => hay.includes(t))
+  })
+}
+
+/**
+ * The people to corroborate against: what the person entered structurally,
+ * plus what the model verifiably read in their own words. Union, deduplicated.
+ */
+export function effectivePeople(
+  input: IdentifyInput,
+  ident: Identification | null,
+): string[] {
+  const structural = (input.people ?? []).filter(p => p.trim().length > 1)
+  const userText = [input.title, input.captureText ?? '', input.note ?? ''].join(' ')
+  const read = ident ? verifyNamedPeople(ident.namedPeople ?? [], userText) : []
+
+  const seen = new Set<string>()
+  const out: string[] = []
+  for (const p of [...structural, ...read]) {
+    const k = normalisePerson(p)
+    if (!k || seen.has(k)) continue
+    seen.add(k)
+    out.push(p)
+  }
+  return out
+}
+
 // ── The decision — pure, deterministic, golden-tested ───────────────────────
 
 /**
@@ -216,8 +285,12 @@ export function decide(
 
   // The person named someone, credits WERE available, and none of them appear:
   // contradicted. Never confirm, whatever the title similarity.
+  // Same set corroborate() used. If these two disagree about whether a person
+  // was named, a card can be simultaneously "not corroborated" and "not
+  // contradicted" — which reads as safe and is actually unexamined.
+  const namedCount = effectivePeople(input, ident).length
   const contradicted =
-    (input.people ?? []).length > 0 && corrob.creditsAvailable && !corrob.userPersonFound
+    namedCount > 0 && corrob.creditsAvailable && !corrob.userPersonFound
   if (contradicted) return 'show_and_ask'
 
   // No named person to corroborate with. A small leap plus an agreeing year is
@@ -258,8 +331,12 @@ export function corroborate(
     creatorAgrees:
       !!ident.creator && !!record.creator &&
       normalisePerson(ident.creator) === normalisePerson(record.creator),
+    // effectivePeople, not input.people. The structural field is empty whenever
+    // the typed capture path was used, and that path is the common one for
+    // anyone who fills the form — so reading only input.people meant the
+    // corroboration rule could not fire for most saves (Finding M).
     userPersonFound:
-      creditsAvailable && (input.people ?? []).some(nameFound),
+      creditsAvailable && effectivePeople(input, ident).some(nameFound),
     creditsAvailable,
   }
 }
@@ -340,10 +417,16 @@ If you do not recognise it, or it may be too recent for you to know, set
 "known": false. That is a correct and genuinely useful answer. A wrong
 confident answer is far worse than an honest "I don't know".
 
+Also report "named_people": the people THE PERSON referred to, copied exactly
+as they wrote them. A person named anywhere in their words counts — including
+in their note. A person is corroborating evidence. A WORK named in their note
+is NOT what they saved. Copy names verbatim; never expand, correct or invent
+one, and return an empty array if they named nobody.
+
 Return ONLY valid JSON, no other text:
-{"known":true,"title":"<official title>","year":<number>,"${creatorWord}":"<name>","people":["<top billed>","..."],"reason":"<one sentence>"}
+{"known":true,"title":"<official title>","year":<number>,"${creatorWord}":"<name>","people":["<top billed>","..."],"named_people":["<as they wrote it>"],"reason":"<one sentence>"}
 or
-{"known":false,"title":null,"year":null,"${creatorWord}":null,"people":[],"reason":"<why>"}
+{"known":false,"title":null,"year":null,"${creatorWord}":null,"people":[],"named_people":[],"reason":"<why>"}
 
 EXAMPLES OF THE JOB
 - "Jawaan, starring Shah Rukh" → this is Jawan (2023), directed by Atlee,
@@ -401,6 +484,9 @@ export function parseIdentification(raw: string, creatorKey = 'director'): Ident
       creator: str(o[creatorKey]) ?? str(o.creator),
       people:  Array.isArray(o.people)
         ? o.people.filter((p): p is string => typeof p === 'string' && p.trim().length > 1).slice(0, 8)
+        : [],
+      namedPeople: Array.isArray(o.named_people)
+        ? o.named_people.filter((p): p is string => typeof p === 'string' && p.trim().length > 1).slice(0, 6)
         : [],
       reason:  typeof o.reason === 'string' ? o.reason.slice(0, 200) : '',
     }
