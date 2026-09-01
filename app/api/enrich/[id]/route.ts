@@ -308,7 +308,7 @@ export async function PATCH(
  * A missing model degrades to a question, never to a guess.
  */
 const EMPTY_IDENT: Identification = {
-  known: false, title: null, year: null, creator: null, people: [], reason: 'model unavailable',
+  known: false, title: null, year: null, creator: null, people: [], namedPeople: [], reason: 'model unavailable',
 }
 
 /**
