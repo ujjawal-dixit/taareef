@@ -4,6 +4,111 @@
 
 ---
 
+## Session 18 — 2026-09-02 — Six severity-A fixes, an enrichment rebuild, and a lesson about verifying outcomes
+
+Opened with a vault audit and closed with the enrichment pipeline rebuilt from
+first principles. Twelve PRs (#9–#20), all merged. Four of them existed only to
+repair or delete work from earlier in the same session.
+
+### What the audit found before any code was written
+
+Three severity-A defects, all invisible, all found by reading rows rather than code:
+
+- **`save_completed` had never once been written.** `trackSaveCompleted('', …)`
+  passed an empty string for a `uuid` column, so Postgres rejected the entire
+  row and the `catch` counted it into a variable nothing read. The counter-metric
+  to the North Star was dead from the day it shipped.
+- **`save_abandoned` fired on SUCCESSFUL saves** and then suppressed the next
+  save's real abandonment, because `savedRef` was set after an await that
+  resolved seconds after the sheet had already closed. A false positive that
+  swallowed the following true one.
+- **`last_opened_at` was never written** despite `card_opened` firing normally,
+  so `never_reopened` and `oldest_untouched_days` could only ever climb — and
+  TENETS asks us to investigate if the latter ever *falls*.
+
+### The enrichment rebuild
+
+Four consecutive failures on one input — "Jawaan, starring Shah Rukh, 2024" —
+each fix correct, each leaving the outcome identical:
+
+1. **Levenshtein scored the wrong film 100/100.** "Jawaan" is the exact title of
+   a 2017 Telugu film. Auto-confirmed silently.
+2. **Retrieval filtered by year.** Fixed the filter; never asked whether the
+   *query* was right.
+3. **The shaped query's entire page was discarded** — concatenate-then-truncate
+   filled a pool of ten with twenty results from the user's own spelling.
+4. **The judge was blind to cast.** Candidates arrived with `people: []` and the
+   prompt rejected anything missing a named person, so naming an actor
+   *guaranteed* a "none" verdict.
+
+Replaced with **identify-then-verify**: one model call, asked what the work IS
+rather than to guess spellings or pick from a list. The model's output is a
+lookup key and a set of claims; every field on the card comes from the
+catalogue. A hallucination can only cause a failed lookup, never a fabricated
+card — a structural guarantee no prompt rule can make.
+
+Then a regression of my own: **making the model the entry point meant its
+knowledge cutoff became the product's reach.** Main Vaapas Aaunga and Dune:
+Part Three both released in 2026; the model said `known: false` and the pipeline
+stopped, though TMDB had both. Fixed — the model narrows, it never terminates.
+
+### Mistakes, and what they cost
+
+- **PRs #11 and #12 were built and deleted four hours later.** They were
+  hypotheses shipped as conclusions.
+- **`original_title` was written and then destroyed 50 lines later** by a second
+  metadata write spreading a stale snapshot — the same bug I had fixed in PR #10,
+  in the same function, reintroduced beneath my own comment warning about it.
+- **`last_band` was never written on the confirm path.** The string replacement
+  meant to add it silently did not match, and I verified by reading the diff.
+- **A whole PR was rebuilt from scratch** (#19) an hour after it was pushed.
+- **Finding M survived four audits of the enrichment route** because every audit
+  asked "did this write survive?" and none asked "who writes this field?"
+
+### The process finding
+
+Direct push access removed the only review gate. The paste workflow was doing
+two jobs — delivery and review — and only delivery was replaced. Ten PRs in one
+evening, merged unread, with essay-length descriptions that made review harder
+rather than easier.
+
+**Agreed for next session: nothing is built until Ujjawal confirms.** Not a cap
+on volume — a gate on starting.
+
+### The deeper constraint
+
+Every hypothesis had to be merged to production and checked on a phone. There is
+no local dev environment and Claude's sandbox cannot reach Groq or TMDB, so
+**merging was the only way to find anything out.** That, more than any design
+fault, produced the churn.
+
+### Tenets added
+
+- **T23** — ask each part the question it can answer. Knowledge from the model,
+  proof from the catalogue, decisions from arithmetic. Never ask a model its
+  confidence. A second model is not a second opinion.
+- **T24** — read backwards from the field to all its producers.
+- **T21 extended** — verify the file, not the diff. `tsc` passing means the code
+  is consistent, not that your change happened.
+- **T2 extended** — the tenet applies mid-conversation, not just before code.
+
+### Open at close
+
+- **Sixteen audit findings**, G17–G28 in `GAPS.md`. G22 (listen/read
+  auto-confirm unverified) and G27 (nothing tests a save end to end) are the
+  severity-A ones.
+- **PR #20 is merged but untested in production.** A typed save — "Jawaan", note
+  "starring Shah Rukh Khan" — should now confirm silently. That is the first
+  end-to-end proof the corroboration design works.
+- **Every band statistic collected before PR #18 is inflated 2–3×**, because
+  enrichment fired two to three times per card. Numbers from before 2026-09-02
+  should not be quoted.
+- **Search and source browsing already have their database work done** (G26).
+- **The highest-leverage product change is not the LLM** — it is Indic ASR.
+  "Jawaan" was a transcription failure; everything after it was compensation.
+
+---
+
 ## Session 17 — 2026-08-12 → 18 — Measurement layer, safety rails, and a session that ran too long
 
 **Shape of the session:** built the measurement layer from nothing, then spent the back half building the process rails that should have existed first — backups, branch protection, a single source of truth. Ended with more tenets than features, for reasons that are themselves the lesson.

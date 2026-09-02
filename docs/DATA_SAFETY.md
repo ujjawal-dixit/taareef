@@ -2,7 +2,7 @@
 
 > How we avoid losing or corrupting data. Milestone-triggered, not calendar-driven — a reminder that fires monthly when you have one user is noise you learn to ignore.
 > Claude reads this each session and flags any trigger that has been crossed.
-> Last updated: Session 16 — 2026-08-10
+> Last updated: Session 18 — 2026-09-02
 
 ---
 
@@ -96,7 +96,64 @@ Extending it to ping Supabase is a small change to a route that already exists, 
 
 ---
 
-## 4. Current state — verified 2026-08-10
+## 3c. Applying DDL and writing its migration file are ONE action — added Session 18
+
+A function was created in production and its migration file was never written.
+It was found at session close by asking "is the doc update actually complete" —
+not by any check, and not by anything that would have caught it next week.
+
+**A database object the repo does not describe is worse than a missing feature.**
+It makes a future session distrust the repo, and the repo is the only thing a
+future session can read. `merge_card_metadata` existed for two hours as
+something only the database knew about.
+
+**The rule:** the migration file is written in the same turn the DDL is applied,
+before moving on. Not at session close, not "once it's used". If the object is
+worth creating it is worth describing, and if it turns out not to be worth
+keeping, the file is what tells the next session it can be dropped.
+
+**Corollary for anything applied and then abandoned:** say so in the file.
+`20260902_merge_card_metadata.sql` is marked NOT YET USED BY ANY CODE, with the
+reason it was kept anyway. An undocumented orphan invites someone to guess.
+
+---
+
+## 3d. Schema changes that can break a nightly job — added Session 18
+
+`run_rollup` casts `payload->>'band'` **directly** to `enrichment_band`. A value
+the enum does not contain raises inside the job — and because the rollups share
+one function, that failure takes `rollup_daily` and `rollup_funnel_daily` down
+too, not only the enrichment rollup. Silently, overnight.
+
+**Before emitting any new value into a column or payload that a job casts:**
+add it to the enum first, verify the cast, then ship the code. Session 18 did
+this in the correct order for `none`; the discovery that it mattered was luck,
+found by grepping consumers before changing a type.
+
+**Ask of any enum change: what casts this, and does that run unattended?**
+
+---
+
+## 4. Current state — verified 2026-09-02
+
+- `ACTIVE_HEALTHY`, `ap-south-1`, 36 recommendations
+- **3 cron jobs, all reporting `succeeded`** — nightly rollup 21:30, nightly backup 21:45, weekly snapshot Saturday 22:00
+- Rollups current to 2026-08-31; weekly snapshot 2026-08-24; backup 2026-09-02
+- `recommendations_backup`: 535 rows across 14 snapshot days
+- 13 `events` partitions — ⚠️ **the last is 2027-07 and nothing creates more** (G25)
+- 7 anonymous users remaining; the success path of `claim_anonymous_session` is **still unproven** (G10)
+
+### Session 18 DDL, all applied and verified
+
+| Change | Verification |
+|---|---|
+| `update_updated_at` ignores read-only touches | Tested on a scratch table with the **real** function attached — a copy would have proven nothing about what is deployed. Both branches PASS, real table untouched |
+| `enrichment_band` + `none` | Applied **before** any code could emit it |
+| `merge_card_metadata` | Verified on a scratch table; **not yet called by any code** |
+
+---
+
+## 4z. Superseded — verified 2026-08-10
 
 - Database: **ACTIVE_HEALTHY**, `ap-south-1`, restored after an inactivity pause
 - **32 recommendations · 16 users · 12 of them anonymous · 8 policies · 3 functions**

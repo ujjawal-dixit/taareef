@@ -23,6 +23,19 @@ This means:
 
 ## PostgreSQL Enums
 
+⚠️ **`enrichment_band` gained `none` in Session 18** — `sure`, `fairly_sure`,
+`not_sure`, `none`. `run_rollup` casts `payload->>'band'` **directly** to this
+enum, so any new value must exist in the database *before* application code can
+emit it. One unrecognised value raises inside the nightly job and takes
+`rollup_daily` and `rollup_funnel_daily` down with it, not just the enrichment
+rollup.
+
+`fairly_sure` existed in the product's language from Session 16 and **did not
+exist in code until Session 18** — there was a single boolean. It is now derived
+from a decision, and it deliberately may **not** auto-confirm: it is the case
+where we act *and say so*.
+
+
 ```sql
 -- 6 categories — locked as of Session 8. Migrated from 8 in Session 8.
 -- eat+drink → dine | see → visit | go removed
@@ -307,6 +320,39 @@ CREATE TRIGGER recommendations_updated_at
 ## Metadata JSON Schema By Category
 
 The `metadata` JSONB column stores enrichment data from external APIs. The shape varies by category.
+
+⚠️ **Never write this column by spreading a snapshot.** `{ ...meta, field }` built
+from a value read at the top of a function silently deletes anything an earlier
+statement wrote. That pattern caused three separate defects in Session 18 — twice
+while fixing the first one, once directly beneath a comment warning about it.
+Use the `MetaWriter` accumulator in `lib/enrichment/meta-writer.ts`.
+
+### Capture evidence — machine-facing, added Session 18
+
+Written at save time, read only by enrichment. **None of these is ever rendered.**
+A remark or review belongs in `notes`, which the detail screen shows as
+"Your note".
+
+| Field | Type | Purpose |
+|---|---|---|
+| `capture_people` | `string[]` | People the person named — actors, artists, authors. The strongest disambiguating signal there is; nobody names an actor by accident |
+| `capture_year` | `number` | A year they mentioned. **Soft evidence, never a filter** — speech mangles years and people misremember them |
+| `capture_text` | `string` (≤500) | What they actually said or typed. Kept permanently: fields are our guesses about which evidence matters, and those guesses change. What the person said does not, so a better identification layer can be re-run over old saves |
+| `capture_method` | `'type'\|'speak'\|'scan'` | How it was entered. Tunes how far the model may move their title. Absent on pre-Session-18 rows, which are treated as `type` — the **stricter** budget, so an unknown asks more often rather than confirming more easily |
+
+⚠️ `capture_text` must never include `source_name`. Who *told* you is not evidence
+about the work; concatenating it fed unrelated people into identification
+(Session 18, Finding N).
+
+### Enrichment state — added Session 18
+
+| Field | Type | Purpose |
+|---|---|---|
+| `enrichment_id` | `uuid` | Correlation ticket. A correction may arrive days later and cannot otherwise be matched to the identification that produced it |
+| `last_band` | `string` | What we claimed at the time. Calibration needs the pair: being corrected after `sure` is a different failure from after `not_sure` |
+| `enrichment_state` | `'not_found'` | Terminal state when enrichment finished with no match. **Silence is not a state and the UI cannot render it** — without this the card span "finding the right poster…" for ever |
+| `original_title` | `string` | The person's own wording, kept when the card takes the catalogue's name. It is how they refer to the work, and the half a correction memory would key on |
+| `tmdb_candidates` | `array` | The strip shown when we have a guess but not proof |
 
 ### Films / TV (`film`, `tv`)
 ```json

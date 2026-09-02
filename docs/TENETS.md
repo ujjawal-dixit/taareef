@@ -37,6 +37,31 @@ Trust increases the obligation to check, not the licence to skip it.
 
 **In practice:** clone the repo fresh rather than pull into a working directory. Query the live database rather than trust documentation. Read the provider's docs before theorising about their API. When something is directly testable, propose the test rather than a mechanism.
 
+### T24 · Read backwards from the field, not forwards from the writer
+
+T10 says a producer and its consumers ship together, and it is always applied
+in one direction: *I changed this writer, who reads it?* Session 18 found the
+other direction matters more.
+
+`capture_people` and `capture_year` were added to the extraction schema and
+wired through one producer. A second producer existed — the typed fast path in
+`capture-screen.tsx`, which skips the extraction LLM whenever the form is
+filled — and it wrote neither field. The corroboration rule that the whole
+session was spent building was therefore **inert on the path most people use**,
+and four separate audits of the enrichment route did not find it, because every
+one of them asked "did this write survive?" and none asked "was this value ever
+created, and by how many places?"
+
+**Before trusting a field, list every site that writes it.** `grep` for the
+field name, not for the function you changed. A field with one reader and two
+writers is the shape that hides best: everything type-checks, the tests pass,
+and the value is simply absent half the time.
+
+Corollary: a field that is optional in the type system is a field the compiler
+will not help you with. If a field must always be written, make the type say so
+— in Session 18 making `namedPeople` required rather than optional caused the
+compiler to enumerate all five construction sites in one command.
+
 ### T23 · Ask each part the question it can actually answer
 
 Session 18 spent an evening on four consecutive failures with one shape. An LLM
@@ -64,6 +89,14 @@ Corollary: **a second model is not a second opinion.** It shares the weights,
 the training data and the blind spots. Checking correlated with the thing
 checked adds confidence without adding information — which is worse than no
 check at all.
+
+**Session 18 extension — verify the FILE, not the diff.** Two defects were
+introduced this session by patching with string replacement: one replacement
+silently did not match, and one added a field to a spread that a later spread
+overwrote. `tsc` passed both times, because both were well-typed. **A type
+checker tells you the code is consistent, never that your change happened.**
+After any patch, read the resulting file and check the property you were trying
+to establish — not the diff, which only shows what you intended.
 
 **Session 18 extension — this applies mid-conversation, not just before code.** Asked whether an LLM could see the user's raw phrasing, Claude answered "the capture text isn't stored" and built a recommendation around that constraint. One grep would have shown the audio route already returns the transcript so the capture screen can display it. Nothing needed storing; the design question had a different and easier answer.
 

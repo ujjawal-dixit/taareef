@@ -10,7 +10,7 @@
 > · Never delete a gap — move it to §RESOLVED with the date and the resolution
 > · Every gap has an owner-question: *what would we know if this were closed?*
 >
-> Last updated: Session 17 · 2026-08-16
+> Last updated: Session 18 · 2026-09-02
 
 ### G19 · The chain that took four attempts — **closed S18**
 Four consecutive failures in one evening, each fix correct and each leaving the
@@ -34,7 +34,7 @@ rounds of diagnosis were reasoning about what *should* have been passed.
 logging `decision`, `personFound`, `creditsRead`, `hallucinated` and
 `fabricated`, so the next failure is one query away rather than three rounds.
 
-### G20 · The eval corpus is nearly empty — **C**
+### G21 · The eval corpus is nearly empty — **C**
 `identify.golden.ts` covers the deterministic rules and is a real gate. The
 MODEL is unmeasured: no corpus, no hallucination rate, no fabrication rate.
 Roughly ten known cases exist (Jawaan, Dune 3, Stutz, Chungking Express).
@@ -151,7 +151,7 @@ surprise mid-delivery.
 script someone remembers, not a gate something triggers.
 *Session 18: run manually, 16/16 pass. Still not a gate.*
 
-### G17 · The save funnel was wired backwards — **A** *(fix delivered S18, unproven in production)*
+### G17 · The save funnel was wired backwards — **CLOSED S18, proven in production**
 Two saves on 15 Aug produced **one `save_abandoned` and zero `save_completed`.**
 Both halves were broken, in opposite directions, by two independent faults:
 
@@ -171,7 +171,7 @@ from the day it shipped.
 **Closes when:** one real save produces one `save_completed` row carrying a
 real card id, and closing the sheet mid-flow produces one `save_abandoned`.
 
-### G18 · `last_opened_at` was never written — **A** *(fix delivered S18, unproven in production)*
+### G18 · `last_opened_at` was never written — **CLOSED S18, proven in production**
 `track.ts` documented that `card_opened` "also feeds
 `recommendations.last_opened_at`". Nothing did. The column was NULL on all 35
 rows while `card_opened` fired normally.
@@ -198,7 +198,87 @@ two hours apart. Claude then misattributed PR #3 to Claude Code without checking
 and wrote that guess into TENETS.md as fact.
 **Guard:** T20 — fetch, list commits since branch point, list open PRs, and read
 them as potentially your own, before writing any code.
+**Second instance, Session 18:** Claude built `merge_card_metadata` as a SQL
+function and a TS helper, from scratch, to fix a bug it had *already fixed and
+pushed* an hour earlier as PR #19 — a different design for the same defect, which
+would have conflicted on merge. Caught only because the working tree contained a
+`MetaWriter` Claude did not recognise and stopped to check `git log`.
 **Still open because** the guard is a habit, not a mechanism. Nothing enforces it.
+The second instance is worse than the first: it happened *after* T20 was written,
+by the author of T20, in the session where it was quoted twice.
+
+### G22 · Listen and Read auto-confirm with no verification at all — **A**
+`enrichSpotifyAlbum`, `enrichSpotifyArtist`, `enrichSpotifyPodcast` and
+`enrichBook` search with `limit=1`, take `items[0]`, and write it to the card.
+No confidence, no corroboration, no candidate strip, no way for the person to
+say "not it".
+
+This is the exact defect that took Session 18 to eliminate for `watch` — and it
+is worse here, because there is not even a spelling score to be wrong about.
+**Two of six categories silently accept whatever a search returns first.**
+
+They were unmeasured until PR #19 added logging with `verified: false`.
+**Closes when** the identify-then-verify module is given Spotify and Books
+adapters. It is provider-agnostic by design; this is an adapter, not a rewrite.
+**What we would know:** whether `listen` and `read` have the same silent error
+rate as `watch` had, or a worse one.
+
+### G23 · There is no design system in the code — **B**
+**714 `rgba()` literals. 244 inline hex colours. 540 inline `style={{}}` blocks**,
+112 of them in `rec-detail-client.tsx` alone. Ten files reference the display
+font directly.
+
+The four pillars and six motifs are real, documented in `CARD_SPEC.md`, and
+expressed **nowhere in the code**. Every screen re-derives them by hand.
+
+This is the direct cause of the run-together buttons in S18: nothing owned
+"two stacked text links", so each was styled from scratch and nobody could see
+they would collide. It will keep producing that class of defect.
+**Closes when** tokens exist, and `TextLink`, `Button`, `Field` and `Sheet` are
+primitives rather than repeated literals.
+
+### G24 · Three duplicate indexes on `recommendations` — **C**
+`idx_recommendations_user_status` ≡ `idx_recs_user_status`, and the same for
+`user_category` and `user_created`. Identical definitions under two naming
+conventions; a migration was written twice. Every insert maintains six indexes
+where three would do. Free to fix, harmless at 38 rows, real write
+amplification later.
+
+### G25 · `events` partitions run out in August 2027 — **C**
+Monthly partitions exist through `events_2027_07`, plus a `DEFAULT`. Nothing
+creates new ones. After that date rows land in `events_default` — which works,
+until someone tries to create `events_2027_08`, and that **fails** because
+DEFAULT already holds matching rows. Recovery is detach, move, reattach.
+**Closes when** a cron job creates partitions a few months ahead.
+
+### G26 · Search is half-built and the backlog does not know — **C** *(opportunity)*
+```
+idx_recommendations_fts ON recommendations USING gin(
+  to_tsvector('english', title || source_name || notes))
+```
+A full-text index already exists and has been maintained on every write.
+`idx_recommendations_source_name` exists too.
+
+`BACKLOG.md` Priority 4 says "no search exists" and Priority 2 is source
+browsing. **Both have their database work already done.** They need a query and
+a screen, not infrastructure.
+Caveat: the `'english'` text-search config will not stem Hindi, which matters
+little for title and name matching.
+
+### G27 · Nothing tests a save end to end — **A**
+Three golden suites, 58 + 16 checks, and every one of them tests a *function*.
+Every defect that reached production in Session 18 lived in a **seam**:
+capture → row, row → enrichment, write → later write, model → catalogue.
+
+Findings A, B, M and N were all seam failures. Four code audits in one evening
+missed M, which was found only by walking backwards from a field to its
+producers.
+**Closes when** one test follows a single save from tap to rendered card.
+
+### G28 · The synopsis is stored and never shown — **D** *(opportunity)*
+`metadata.overview` is written on every confirmed watch card and read nowhere.
+`genres` and `runtime_minutes` are similarly unused in most views. The detail
+screen has the film's synopsis in the row and displays none of it.
 
 ---
 

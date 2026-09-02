@@ -92,6 +92,51 @@ Written when a card detail view is opened. Durable, so the weekly snapshot can c
 
 ---
 
+## 4b. Session 18 additions to event payloads
+
+⚠️ **Every band statistic gathered before 2026-09-02 is inflated 2–3×.**
+Enrichment fired two to three times per card, because the detail screen
+re-triggered whenever a card had no image and no candidates — which is exactly
+what a card looks like *while it is enriching*. Do not quote pre-September
+numbers.
+
+**`enrichment_shown` now carries the whole decision, not just an outcome:**
+
+| Field | Question it answers |
+|---|---|
+| `decision` | `confirm` / `show_and_ask` / `not_found` — what actually happened to the card |
+| `identifyKnown` · `identifyTitle` · `identifyReason` | Did the model recognise the work, what did it name, and why |
+| `yearAgrees` · `personFound` · `creditsRead` | Which claims the catalogue independently agreed with |
+| `hallucinated` | Claimed to know the work; the catalogue has no such record |
+| `fabricated` | Named a cast absent from the real credits — stronger evidence of invention, because it committed to specifics |
+| `verified: false` | Set by `listen` and `read`, which take the first search result with no verification at all (G22) |
+| `score` | The old Levenshtein number. **Evidence only — it no longer decides anything**, kept so we can show the new path beats the one it replaced rather than assuming it |
+
+**`enrichment_resolved` now records what the right answer was.** It previously
+logged the word `corrected` and nothing else; twelve had been logged and not one
+could be learned from.
+
+| Field | Purpose |
+|---|---|
+| `from` | What the card said when it was corrected |
+| `phrase` | How **the person** originally wrote it — the half a correction memory keys on, since the next person to be wrong will be wrong in *their* words |
+| `to` · `to_id` | What it actually is. `to_id` is the durable half; titles are ambiguous, catalogue ids are not |
+| `claimed` | What we asserted at the time. Being corrected after `sure` is a different failure from after `not_sure` |
+
+Deliberately **not** recorded: the note, the source, or the full sentence. The
+mapping is useful; the person is not.
+
+**One row of this is a labelled training example** — a phrasing paired with a
+verified catalogue id, labelled by a human, at no cost to them. It is the seed
+of both correction memory and the eval corpus (G21).
+
+**Four analytics functions exist and can never fire:** `trackSearchPerformed`,
+`trackSearchResultOpened`, `trackSourceBrowsed`, and the client-side
+`trackEnrichmentShown`. `rollup_daily.searches`, `.search_opens` and
+`.source_browses` will read zero until those features exist.
+
+---
+
 ## 5. Event kinds — each with the question it answers (P6)
 
 Kind is a Postgres **enum**, so a typo fails at insert rather than silently creating
