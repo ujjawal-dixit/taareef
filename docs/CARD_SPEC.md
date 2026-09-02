@@ -1,7 +1,18 @@
 # CARD_SPEC.md — Taareef Card Field Specification
+> **Primary reader:** Claude Code.
 > Complete field specification for every category — stacked view and open view.
 > Last updated: Session 10 — 2026-06-10
 > Build every card component from this file. Do not modify without explicit approval.
+
+> **Build status — Session 19, 2026-09-02.** This file is fully realised by
+> `components/features/cards/full-card.tsx` — the locked two-zone card (RIM ·
+> FACE · WELL · INFO, the notch, the vow footer, 432px), rendered on the detail
+> screen and the source of truth for the share/export path. It is **not** yet
+> matched by `GridCard` and `CompactRow` in
+> `components/features/cards/recommendation-card.tsx` — the category-list grid
+> and compact rows still carry their pre-Session-9 layout. Rebuilding them to
+> this spec is BACKLOG.md Priority 7 (see also KB-FILEMAP.md). Until then, "build
+> every card component from this file" holds for the full card only.
 
 ---
 

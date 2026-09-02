@@ -1,4 +1,5 @@
 # KB-CLAUDE.md — Taareef Project Root
+> **Primary reader:** both (planning Claude and Claude Code).
 > Read at the start of every session. Single source of truth.
 > Last updated: Session 16 — 2026-08-10 — see Sessions 15 and 16 in KB-SESSION_LOG.md
 
@@ -137,7 +138,7 @@ app/(app)/layout.tsx          server component, mounts once
 
 **`inFlight` exists and nothing consumes it yet.** It tracks each save from request through enrichment, and is the foundation for the save peek (BACKLOG Priority 6).
 
-`components/features/navigation/app-shell.tsx` is now dead — delete it.
+`components/features/navigation/app-shell.tsx` was dead and was deleted on 2026-08-13 (commit `1208aa6`).
 
 ### Screen 03: Card Detail (rec-detail-client.tsx)
 - Renders the exact locked card design (taareef-decision-cards.html) via its own **`full-card.tsx` component — corrected Session 14, see below**

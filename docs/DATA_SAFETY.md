@@ -1,5 +1,6 @@
 # DATA_SAFETY.md — Taareef
 
+> **Primary reader:** Claude Code.
 > How we avoid losing or corrupting data. Milestone-triggered, not calendar-driven — a reminder that fires monthly when you have one user is noise you learn to ignore.
 > Claude reads this each session and flags any trigger that has been crossed.
 > Last updated: Session 18 — 2026-09-02

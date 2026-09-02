@@ -1,5 +1,6 @@
 # KB-MEASUREMENT_DECISIONS.md
 
+> **Primary reader:** both (planning Claude and Claude Code).
 > Session 17 · 2026-08-12
 > **Read this when you are about to change the measurement layer and can't remember why it looks like this.**
 > Companion to `KB-MEASUREMENT_SPEC.md` (what it is). This file is *why*.
@@ -195,23 +196,24 @@ photos ≈ 20 users × 250 saves), then egress. **Not events.**
 
 ---
 
-## Architecture findings (audit, NOT yet acted on)
+## Architecture findings (audit)
 
-Found while auditing for redundancy. **Nothing removed — awaiting explicit
-per-instance approval under the UI-preservation tenet.**
+Found while auditing for redundancy. A1 and A3 have since been actioned; A2, A4
+and A5 remain and still await explicit per-instance approval under the
+UI-preservation tenet.
 
-### A1 · A dead vertical slice
+### A1 · A dead vertical slice — **RESOLVED, 2026-08-13**
 | File | State |
 |---|---|
-| `app/(onboarding)/onboarding/categories/page.tsx` | Functional, **zero inbound links**, reachable by direct URL |
-| `app/api/user/preferences/route.ts` | **Zero callers** |
-| `user_preferences` table | 0 rows |
-| `middleware.ts` L50–53 | Comment describes a dashboard guard **that no longer exists** |
+| ~~`app/(onboarding)/onboarding/categories/page.tsx`~~ | Deleted, commit `1ba48fe` |
+| ~~`app/api/user/preferences/route.ts`~~ | Deleted, commit `18c4ce1` |
+| `user_preferences` table | Still present, 0 rows — schema change, not worth a migration |
+| `middleware.ts` L50–53 | Comment corrected in Session 17 — now explains the guard and screen were both removed |
 
-Session 14 recorded Screen 3 as deleted. It was removed from the *flow*, not the
-repo. The stale comment is the dangerous part — it documents a redirect-loop
-hazard for a guard that isn't there, so a future reader will preserve behaviour
-that doesn't exist.
+Session 14 recorded Screen 3 as deleted from the *flow*; the files themselves
+went on 2026-08-13. The stale comment — the dangerous part, because it documented
+a redirect-loop hazard for a guard that wasn't there — was the first fixed. See
+GAPS.md G06.
 
 ### A2 · `category` enum carries 14 dead values
 `restaurant, bar, film, tv, music, book, city, activity, podcast, person, eat,
@@ -219,8 +221,9 @@ drink, go, see` are all still insertable. Six are live. Postgres cannot drop enu
 values — cleaning means recreating the type. **Recommend deferring**; risk exceeds
 benefit today.
 
-### A3 · `app-shell.tsx` confirmed dead
-Only reference is its own path comment.
+### A3 · `app-shell.tsx` confirmed dead — **RESOLVED, deleted 2026-08-13**
+`components/features/navigation/app-shell.tsx` deleted in commit `1208aa6`. See
+GAPS.md G08.
 
 ### A4 · `430px` hardcoded in 12 places
 `FRAME_MAX_WIDTH` exists in `app-frame.tsx` and is largely unused.

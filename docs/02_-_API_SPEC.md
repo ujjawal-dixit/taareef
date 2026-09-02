@@ -1,7 +1,21 @@
 # API_SPEC.md — Taareef API Specification
-> ⚠️ Updated Session 8: Category system is now 6 values (watch/listen/read/dine/do/visit).
-> PATCH /api/recommendations/[id] now accepts `category` field.
-> /api/enrich/[id] now uses 'watch' (not 'film'/'tv') and 'listen' (not 'music').
+> **Primary reader:** Claude Code.
+
+> ⚠️ **STALE — Session 19, 2026-09-02. Do not build from this file; read the routes.**
+> This document predates several changes and contradicts itself:
+> - The "parse system prompt" quoted below is **not** the live one. The real
+>   extraction prompt is in `app/api/capture/understand/route.ts`, runs on Groq
+>   (not the Anthropic API), and uses the six current categories. The URL
+>   heuristics in this file (§ around "For category detection, use context
+>   clues") still emit the **retired** values `→ music`, `→ restaurant or bar`,
+>   `→ film or tv`, `→ book`, `→ city` — even though the same document's field
+>   list correctly says the six values are `watch, listen, read, dine, do, visit`.
+> - `/api/parse` does not exist. Extraction is `/api/capture/understand`;
+>   transcription is `/api/capture/audio`; OCR is `/api/capture/ocr`.
+> Source of truth for categories: `lib/types/index.ts`. Source of truth for each
+> route's real contract: the route file itself. This spec needs a full
+> route-by-route reconciliation pass of its own (tracked in BACKLOG.md).
+> Kept, not deleted, for the early API reasoning it still holds.
 
 > Complete specification for every API route in Taareef.
 > Request/response contracts, validation rules, error codes.

@@ -1,4 +1,5 @@
 # BACKLOG.md — Taareef
+> **Primary reader:** both (planning Claude and Claude Code).
 > Last updated: Session 18 — 2026-09-02
 > Rebuilt from the Session 16 workflow audit. Verified against the live repo and database, not against prior notes.
 
@@ -200,7 +201,7 @@ Roughly twenty decisions and four tenets from Sessions 15–16 exist only in con
 
 - Fold Session 15/16 decisions into `KB-DECISIONS.md`
 - T13 and T14 into `TENETS.md` (done — see file)
-- Update `KB-FILEMAP.md` for `app-providers.tsx`, `app-frame.tsx`, legal pages, deleted `app-shell.tsx` and deleted Screen 3
+- Update `KB-FILEMAP.md` for `app-providers.tsx`, `app-frame.tsx`, legal pages, deleted `app-shell.tsx` and deleted Screen 3 *(the two deletions were reflected in KB-FILEMAP.md in Session 19)*
 
 ---
 
@@ -221,7 +222,7 @@ The pattern: **the product asks for something and then does nothing with the ans
 
 ## Housekeeping
 
-- [ ] Delete dead `components/features/navigation/app-shell.tsx`
+- [x] Delete dead `components/features/navigation/app-shell.tsx` *(done 2026-08-13, commit `1208aa6`)*
 - [ ] Remove redundant `maxWidth: 430px` inside `AppFrame` (dashboard, category, edit, detail)
 - [ ] Double bottom padding — ~200px dead space on dashboard and category list
 - [ ] 12 anonymous users accumulating; cleanup job never built (needs service-role decision)

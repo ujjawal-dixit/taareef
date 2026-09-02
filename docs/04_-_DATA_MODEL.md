@@ -1,7 +1,21 @@
 # DATA_MODEL.md — Taareef Database Schema
+> **Primary reader:** Claude Code.
 > ⚠️ Updated Session 8: Category system migrated from 8 to 6 categories.
 > The Supabase production database was updated directly via SQL editor (not a migration file).
 > See KB-FILEMAP.md for the exact SQL that was applied.
+
+> ⚠️ **PARTIALLY STALE — Session 19, 2026-09-02.** The top of this file is
+> current: the `category` enum block below lists the six live values, and the
+> Session 18 note on `enrichment_band` is accurate. The **lower half is not.**
+> From roughly the "Films / TV (`film`, `tv`)" heading onward, the per-category
+> metadata and status-constraint sections are still keyed on the **retired**
+> category names — `film`, `tv`, `music`, `restaurant`, `bar`, `city`,
+> `activity` — and the `CHECK (category != 'tv' …)` examples never existed in
+> that form. For current per-category status states read
+> `CARD_SPEC.md` → "Status States Per Category"; for the metadata each category
+> actually carries, read `CARD_SPEC.md` and `lib/types/index.ts` (`RecMetadata`).
+> The applied migrations are listed in KB-FILEMAP.md → Database. Kept, not
+> deleted, for the schema reasoning it still holds.
 
 > Complete PostgreSQL + Supabase schema.
 > Every table, enum, index, RLS policy, and trigger.

@@ -1,4 +1,5 @@
 # KB-SESSION_LOG.md — Taareef
+> **Primary reader:** both (planning Claude and Claude Code).
 > Living log of every build session. Newest first.
 > Last updated: Session 17 — 2026-08-18
 

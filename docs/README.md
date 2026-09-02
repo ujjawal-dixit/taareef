@@ -1,7 +1,15 @@
 # docs/ — Taareef knowledge base
 
+> **Primary reader:** both (planning Claude and Claude Code).
+
 **This folder is the single source of truth.** Project knowledge in the Claude
 app is no longer maintained; anything there may be out of date.
+
+**Three participants now.** Ujjawal decides, reviews, merges — final authority.
+A planning Claude does product reasoning and writes specs; it cannot write to
+this repo, so it hands specs to Ujjawal, who commits them. Claude Code
+implements. Every file below carries a **Primary reader** line under its title
+saying who it is written for.
 
 ## Why it moved here (Session 17, 2026-08-18)
 
@@ -25,27 +33,27 @@ document describing the old behaviour is incomplete.
 
 ## What is where
 
-| File | Contents |
-|---|---|
-| `../CLAUDE.md` | **Stays at the repo root** — Claude Code reads it from there by convention |
-| `TENETS.md` | T1–T22, the non-negotiable rules, each with the failure that caused it |
-| `GAPS.md` | Open gaps by severity; resolved ones with dates |
-| `KB-DECISIONS.md` | Product and architecture decisions — append only |
-| `KB-SESSION_LOG.md` | What happened each session |
-| `KB-FILEMAP.md` | What every file in the repo does |
-| `KB-CLAUDE.md` | Working notes on how Claude and Ujjawal collaborate |
-| `WORKING_AGREEMENT.md` | The collaboration contract |
-| `BACKLOG.md` | What we intend to build |
-| `DATA_SAFETY.md` | Destructive-operation protocol |
-| `KB-MEASUREMENT_SPEC.md` | The events layer as built |
-| `KB-MEASUREMENT_DECISIONS.md` | Why the events layer is shaped that way |
-| `PROJECT_BRIEF.md` | The product, from the beginning |
-| `CARD_SPEC.md` | The card, canonical |
-| `ONBOARDING_SPEC.md` | First-run flow |
-| `10_-_UX_PRINCIPLES.md` | UX principles |
-| `04_-_DATA_MODEL.md` | Data model |
-| `02_-_API_SPEC.md` | API spec — **stale, predates several changes** |
-| `ENV_TEMPLATE.md` | Environment variables |
+| File | Reader | Contents |
+|---|---|---|
+| `../CLAUDE.md` | Claude Code | **Stays at the repo root** — Claude Code reads it from there by convention |
+| `TENETS.md` | both | T1–T25, the non-negotiable rules, each with the failure that caused it |
+| `GAPS.md` | both | Open gaps by severity; resolved ones with dates |
+| `KB-DECISIONS.md` | both | Product and architecture decisions — append only |
+| `KB-SESSION_LOG.md` | both | What happened each session |
+| `KB-FILEMAP.md` | Claude Code | What every file in the repo does |
+| `KB-CLAUDE.md` | both | Session-start context: design philosophy and current technical spec |
+| `BACKLOG.md` | both | What we intend to build |
+| `DATA_SAFETY.md` | Claude Code | Destructive-operation protocol |
+| `KB-MEASUREMENT_SPEC.md` | both | The events layer — original spec, now built (S17–18) |
+| `KB-MEASUREMENT_DECISIONS.md` | both | Why the events layer is shaped that way |
+| `PROJECT_BRIEF.md` | both | The product, from the beginning |
+| `CARD_SPEC.md` | Claude Code | The card, canonical — realised by `full-card.tsx`; grid/compact rows not yet |
+| `ONBOARDING_SPEC.md` | both | First-run flow — includes a removed Screen 3, kept for the reasoning |
+| `10_-_UX_PRINCIPLES.md` | both | UX principles — **stale (Session 5); read KB-CLAUDE.md and CARD_SPEC.md instead** |
+| `04_-_DATA_MODEL.md` | Claude Code | Data model — **lower half stale (retired category names); schema block current** |
+| `02_-_API_SPEC.md` | Claude Code | API spec — **stale, contradicts itself; read the route files** |
+| `ENV_TEMPLATE.md` | Claude Code | Environment variables |
+| `specs/` | both | Specs written by the planning Claude, awaiting implementation. See `specs/README.md` |
 
 ## Session start
 

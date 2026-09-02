@@ -1,6 +1,10 @@
 # KB-FILEMAP.md — Taareef
+> **Primary reader:** Claude Code.
 > Complete file map. Update at the end of every session.
-> Last updated: Session 18 — 2026-09-02 — **rebuilt from a fresh `git clone`, not from memory.** Every path below was listed from the live repo.
+> Last updated: Session 19 — 2026-09-02 — corrected three rows that still
+> described files deleted on 2026-08-13 (`onboarding/categories/page.tsx`,
+> `navigation/app-shell.tsx`, `api/user/preferences/route.ts`). The Session 18
+> "rebuilt from a fresh `git clone`" pass missed them.
 
 ---
 
@@ -11,7 +15,7 @@
 | `app/page.tsx` | Screen 0 — landing. Headline "Your recommendation journal.", `ShelfIllustration` (five category-coloured objects, rebuilt Session 15), fluid `clamp()` type, `dvh` spacing |
 | `app/(onboarding)/layout.tsx` | **New Session 15.** Carries `export const dynamic = 'force-dynamic'` — a guard rail against Next.js caching user metadata across anonymous sessions |
 | `app/(onboarding)/onboarding/demo/page.tsx` | Screens 1+2 — demo vault, capture chooser (scan/type live, voice signposted), real anonymous save, the visitor's own card enriching above the sign-in prompt |
-| `app/(onboarding)/onboarding/categories/page.tsx` | **Screen 3 — DELETE THIS.** Agreed deleted Session 15; the file is still in the repo. Nothing links to it; it collected preferences nothing consumed |
+| ~~`app/(onboarding)/onboarding/categories/page.tsx`~~ | **DELETED 2026-08-13 (commit `1ba48fe`).** Was Screen 3; collected category preferences nothing consumed, nothing linked to it. See ONBOARDING_SPEC.md "Screen 3" |
 | `app/(auth)/login/page.tsx` + `google-sign-in-button.tsx` | Sign-in. Privacy line: "Private by default. Trust works both ways." Button marks the anonymous session for claim, then plain OAuth |
 | `app/(app)/layout.tsx` | **Rewritten Session 15.** Was an empty passthrough; now mounts `AppProviders` once, above the router |
 | `app/(app)/dashboard/dashboard-client.tsx` | 2×3 category mosaic. Save logic removed Session 15 — now lives in the provider |
@@ -29,7 +33,7 @@
 |---|---|
 | `components/features/navigation/app-providers.tsx` | **New Session 15.** Layout-level: `ToastProvider`, `SaveProvider`, `AppFrame`. Owns the capture sheet, the save request, and `inFlight` — saves tracked from request through enrichment. **Nothing consumes `inFlight` yet** — it is the foundation for the save peek |
 | `components/features/navigation/app-frame.tsx` | **New Session 15.** The centred column, defined once. `routeHasNav()` decides nav presence by route, so bottom padding can never disagree with whether a nav exists |
-| `components/features/navigation/app-shell.tsx` | **DEAD — DELETE THIS.** Nothing imports it. Superseded by the two files above |
+| ~~`components/features/navigation/app-shell.tsx`~~ | **DELETED 2026-08-13 (commit `1208aa6`).** Superseded by `app-providers.tsx` + `app-frame.tsx` in the Session 15 layout refactor |
 | `components/features/navigation/bottom-nav.tsx` | Bottom nav + FAB. Also holds the one-time `[+]` tooltip (`taareef_fab_tooltip_shown`). Note: its `isVault` already anticipates `/rec/` routes it is never rendered on |
 
 ---
@@ -73,7 +77,8 @@
 | `app/api/capture/ocr/route.ts` | Vision OCR, status-code-differentiated errors, one retry |
 | `app/api/health/models/route.ts` | **New Session 15.** Daily cron. Checks Groq's catalogue against `CONFIGURED_MODELS`. **Does not check the database** — which is why the 2-week pause went unnoticed |
 | `app/api/auth/callback/route.ts` | OAuth exchange, then claims anonymous saves via cookie |
-| `app/api/feedback/route.ts` · `posters/[id]` · `watchmode` · `user/preferences` | Unchanged |
+| `app/api/feedback/route.ts` · `posters/[id]` · `watchmode` | Unchanged |
+| ~~`app/api/user/preferences/route.ts`~~ | **DELETED 2026-08-13 (commit `18c4ce1`).** Zero callers; went with Screen 3 and the `user_preferences` table |
 
 ---
 
@@ -138,5 +143,7 @@
 
 ## Pending deletions
 
-- `app/(onboarding)/onboarding/categories/page.tsx` — Screen 3, agreed deleted Session 15
-- `components/features/navigation/app-shell.tsx` — dead since the Session 15 layout refactor
+None outstanding. The three that stood here were all removed on 2026-08-13:
+`app/(onboarding)/onboarding/categories/page.tsx` (`1ba48fe`),
+`components/features/navigation/app-shell.tsx` (`1208aa6`),
+`app/api/user/preferences/route.ts` (`18c4ce1`).

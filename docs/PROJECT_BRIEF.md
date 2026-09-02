@@ -18,6 +18,7 @@
 
 # PROJECT_BRIEF.md — Taareef
 
+> **Primary reader:** both (planning Claude and Claude Code).
 > The product vision and philosophy. Do not generalise. Do not round off nuances.
 > Originally written Session 3 — May 13, 2026.
 
