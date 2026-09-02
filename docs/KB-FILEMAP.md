@@ -1,6 +1,6 @@
 # KB-FILEMAP.md — Taareef
 > Complete file map. Update at the end of every session.
-> Last updated: Session 16 — 2026-08-10 — **rebuilt from a fresh `git clone`, not from memory.** Every path below was listed from the live repo.
+> Last updated: Session 18 — 2026-09-02 — **rebuilt from a fresh `git clone`, not from memory.** Every path below was listed from the live repo.
 
 ---
 
@@ -88,7 +88,13 @@
 | `lib/card/derive.ts` · `lib/types/index.ts` · `lib/utils/*` · `lib/supabase/{client,server,middleware}.ts` | Unchanged |
 | `constants/example-cards.ts` | Six cards, one per category. Four with photos in `public/examples/` |
 | `hooks/use-recommendations.ts` | `useCreateRecommendation`, optimistic UI |
-| `scripts/matching.golden.ts` | 16 regression checks. **Not run once in Sessions 15 or 16** |
+| `lib/enrichment/identify.ts` | **New Session 18.** Identify-then-verify. One model call asking what the WORK IS; `corroborate` and `decide` are pure functions. `verifyNamedPeople` keeps only names appearing literally in the user's own text — the guard that stops a model manufacturing its own corroboration |
+| `lib/enrichment/meta-writer.ts` | **New Session 18.** `MetaWriter` accumulator. Carries running metadata forward within a request so a second write cannot clobber the first from a stale snapshot. **Nothing may write `metadata:` directly on `recommendations`** |
+| ~~`lib/enrichment/judge.ts`~~ | **Deleted Session 18.** LLM verdict layer (match/probably/unsure/none). Replaced by identify-then-verify: it was asked for a confidence it could not have, and returned "none" four times with the right film in its own input |
+| ~~`lib/enrichment/query-shaper.ts`~~ | **Deleted Session 18.** LLM spelling proposals. Superseded — the model is now asked what the work IS rather than to guess how it might be spelt |
+| `scripts/matching.golden.ts` | 16 regression checks over `lib/places/matching.ts`. Run and passing Session 18 |
+| `scripts/identify.golden.ts` | **New Session 18.** 58 checks over the deterministic half of identification — drift budgets, corroboration, vetoes, parsing. Encodes the bugs, not just the fixes: the Telugu exact-spelling match, the famous-over-obscure trap, credits-unavailable-is-not-contradiction, and invented-name corroboration |
+| ~~`scripts/judge.golden.ts`~~ | **Deleted Session 18** with the module it tested. Its cases survive in `identify.golden.ts` |
 
 ---
 
@@ -102,10 +108,20 @@
 | `004_rls_cleanup.sql` | Dropped 4 duplicate policies, retargeted all to `authenticated` |
 | `005_anon_save_cap.sql` | Restrictive policy capping anonymous sessions at 3 saves, via `current_user_save_count()` |
 | `006_claim_anonymous_saves.sql` | `security definer` row transfer with six guards |
+| `20260812_measurement_layer.sql` | `events` (monthly-partitioned), `search_log`, rollups, snapshots, `run_rollup` |
+| `20260812_claim_anonymous_session.sql` | Atomic transfer of recommendations, events and search_log |
+| `20260819_read_touch_does_not_bump_updated_at.sql` | **Session 18.** `update_updated_at` now preserves `updated_at` when a touch changes nothing but a read-marking column, so writing `last_opened_at` on card open does not make a READ look like an EDIT |
+| `20260820_enrichment_band_add_none.sql` | **Session 18.** `enrichment_band` gains `none`. Had to land BEFORE any code emitted it — `run_rollup` casts `payload->>'band'` straight to the enum, and one unknown value would have raised inside the nightly job and taken every rollup down |
+| `20260902_merge_card_metadata.sql` | **Session 18.** Merges a jsonb patch into `metadata` inside Postgres. ⚠️ **Applied to production but not called by any code.** Written after the fact — see G20 and DATA_SAFETY §3c |
 
-**Live state, verified 2026-08-10:** `ACTIVE_HEALTHY`, `ap-south-1`. 32 recommendations, 16 users (**12 anonymous — cleanup job never built**), 8 policies, 3 functions.
+**Live state, verified 2026-09-02:** `ACTIVE_HEALTHY`, `ap-south-1`. 36 recommendations, 7 anonymous users remaining, 13 `events` partitions, 3 cron jobs (nightly rollup, nightly backup, weekly snapshot) — all reporting `succeeded`. Rollups current to 2026-08-31, backup to 2026-09-02.
 
-**Known data issues:** 6 cards hold expired Google Places URLs with no recoverable refs. 4 cards carry source name `"Someone"`.
+**Known data issues:**
+- 6 cards hold expired Google Places URLs with no recoverable refs
+- 4 cards carry source name `"Someone"`
+- **Three duplicate indexes** — `idx_recommendations_user_*` ≡ `idx_recs_user_*` for status, category and created (G24)
+- **`events` partitions stop at 2027-07** plus a DEFAULT. Nothing creates more (G25)
+- **`idx_recommendations_fts` exists and is unused** — full-text search over title, source_name and notes is already indexed (G26)
 
 ---
 

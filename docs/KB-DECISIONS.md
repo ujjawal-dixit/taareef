@@ -5,6 +5,25 @@
 
 ---
 
+## Session 18 Decisions — enrichment, and how we work
+
+| Decision | Reasoning | Status |
+|---|---|---|
+| **Identify, then verify** — one model call, not three | Three LLM stages each asked a model to do string manipulation (guess a spelling, pick from a list), which is what models are weakest at. The model already knew the film; nobody asked it. TMDB was driven as a search engine when its strength is being a registry of checkable facts | Locked |
+| **The model's output never becomes card data** | It is a lookup key and a set of claims; every field on a card comes from the catalogue. Makes hallucination structurally harmless — an invented film produces a failed lookup, never a fabricated card. A data-flow guarantee holds however badly a model behaves; a prompt rule does not | Locked — the load-bearing decision |
+| **Never ask a model for a confidence score** | Self-reported confidence is fluent and uninformative. The previous design asked for exactly that (`match`/`probably`/`unsure`) and answered "none" four times with the right film in its own input. Ask for facts something else can check | Locked (T23) |
+| **Drift in proportion to corroboration** | A small title leap confirms alone. A large leap confirms only if a person the user named appears in the real credits. This is what stops a model jumping to the famous work — Jawaan→Pathaan — silently | Locked |
+| **Modality tunes tolerance, never vetoes** | Ujjawal's correction: typed spelling is *not* deliberate, people typo. Speech gets a wider budget than typing because Whisper rewrites syllables; neither is authoritative | Locked |
+| **The note is commentary, never identification** | "better than Pathaan" in a note must not identify *Pathaan*. But a **person** named in a note *is* corroborating evidence — the note may corroborate, never redirect | Locked |
+| **Anything a model reads from the user is verified against the user's text** | `named_people` feeds the rule permitting a large leap, so a model free to invent a name could manufacture the evidence for its own answer. Nothing survives that is not literally in what the person wrote | Locked |
+| **The model narrows; it never terminates** | Making it the entry point made its knowledge cutoff the product's reach — two 2026 films the catalogue had were reported as non-existent. A knowledge horizon may cost confidence, never reach | Locked |
+| **`fairly_sure` may not auto-confirm** | It is the case where we act *and say so*, not the case where we act quietly because we are fairly comfortable | Locked |
+| **Claude builds nothing until Ujjawal confirms** | Twelve unconfirmed PRs in one session; four existed only to repair or delete work from the same session. Direct push replaced the paste workflow's delivery role and deleted its review role | Locked (WORKING_AGREEMENT) |
+| **Indic ASR before any enrichment work** | "Jawaan" became "Jawaan" through Whisper in the first two seconds; four PRs were compensation for that. Fix errors where they happen | Direction agreed, not built |
+| **A reranker, not an LLM, for candidate ordering** | Cross-encoders are purpose-trained for "which of these N", are cheaper and faster, and return a calibrated *number* — which is what the confidence bands wanted all along. An LLM judge was reached for because it was familiar | Direction agreed, not built |
+
+---
+
 ## Locked Product Decisions — Never Revisit
 
 | Decision | Rationale | Date |

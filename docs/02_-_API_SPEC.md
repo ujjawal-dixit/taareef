@@ -396,6 +396,37 @@ Trigger background enrichment for a recommendation. Fetches metadata from extern
 
 **No request body required.** The recommendation ID from the URL is sufficient.
 
+⚠️ **This is why capture evidence must be STORED, not passed.** The route re-reads
+the row, so anything enrichment needs — `capture_people`, `capture_year`,
+`capture_text`, `capture_method` — has to be *on the row*. Claude twice asserted
+during Session 18 that the transcript could ride along in the request; it cannot.
+
+**Fires at most once per card.** The detail screen retriggers when a card has no
+image and no candidates — which is what a card looks like *while enriching* — so
+this raced itself two to three times per save until PR #18. Guarded by a ref
+client-side and by `enrichment_state` server-side.
+
+### The watch pipeline, rebuilt Session 18
+
+```
+identify()          one model call, in parallel with the user's own search
+      ↓             asks what the WORK IS; returns falsifiable claims
+pickByTitle()       a LOOKUP, not a search — usually already in the first page
+      ↓
+fetchCredits()      cast AND crew, only when someone was named
+      ↓
+corroborate()       compares the claims against the catalogue record
+      ↓
+decide()            pure, deterministic, golden-tested — no model involved
+```
+
+Outcomes: `confirm` (poster written silently) · `show_and_ask` (candidate strip)
+· `not_found` (writes `enrichment_state`, never returns silently).
+
+⚠️ **`listen` and `read` do not use this.** They search with `limit=1`, take
+`items[0]` and write it — no confidence, no strip, no way to say "not it". They
+log with `verified: false` so the gap is at least measurable (G22).
+
 **Response:**
 ```typescript
 ApiResponse<{ enriched: boolean; metadata: Record<string, unknown> }>

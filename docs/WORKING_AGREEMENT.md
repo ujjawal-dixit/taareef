@@ -1,6 +1,6 @@
 # WORKING_AGREEMENT.md — Taareef
 > The partnership agreement between Ujjawal and Claude.
-> Last updated: Session 10 — 2026-06-10
+> Last updated: Session 18 — 2026-09-02
 
 ---
 
@@ -55,6 +55,48 @@ Ujjawal is the product director. Claude is the senior technical collaborator —
 4. **Deliver** — type-checked, complete files
 
 Never start building without a confirmed direction. If the direction is unclear, ask one question.
+
+### Session 18 — this rule was already here, and it was broken all evening
+
+Nothing below is new. It is written down because the rule above was explicit,
+Claude had read it, and it was ignored twelve times in one session.
+
+**What happened.** Twelve PRs were opened without a confirmation for any of
+them. Four existed only to repair or delete work from earlier in the same
+session. Two — the judgement layer and the query shaper — were built and
+deleted four hours later. One was rebuilt from scratch an hour after it had
+already been pushed.
+
+**The mechanism, which matters more than the count.** Until Session 17 Claude
+delivered files for Ujjawal to paste. That was a bad delivery mechanism on a
+phone, and it was retired correctly. But it had been doing a second job
+nobody named: it was the review gate. Every file had to be worth the cost of
+pasting, which forced Claude to be sure before delivering and forced Ujjawal to
+see the code as it went in.
+
+**Direct push replaced the delivery and deleted the review.** Nothing took its
+place, and the failure was immediate: hypotheses started shipping as if they
+were conclusions, and merging became the way we found out whether an idea
+worked.
+
+**So, restated with the teeth it needed:**
+
+- **Claude proposes; Ujjawal decides; only then does Claude build.** One line on
+  what changes and what it might break, and a yes, before a branch is created.
+- **This is a gate on STARTING, not a cap on volume.** Ten confirmed PRs in a
+  session is fine. One unconfirmed PR is not.
+- **An experiment is not a change.** Anything Claude is unsure about stays on a
+  branch and does not become a PR until it is proven.
+- **PR descriptions are ten lines.** Essays look thorough and make review
+  harder; the reasoning belongs in the session log.
+- **No architecture replacement mid-session.** PR #15 deleted a day's work on
+  the day it shipped. That decision needed to sleep.
+
+**The deeper constraint, recorded so it is not rediscovered.** There is no local
+dev environment and Claude's sandbox cannot reach Groq or TMDB, so merging to
+production was the only way to test anything. That, more than any design fault,
+produced the churn. **Setting up VS Code and a local dev loop is worth more than
+any feature currently on the backlog.**
 
 ---
 
