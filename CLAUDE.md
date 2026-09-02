@@ -101,6 +101,41 @@ Source of truth: `lib/types/index.ts`. **Any reference anywhere to 8 or 10 categ
 
 ---
 
+## Enrichment (rebuilt Session 18)
+
+**Identify, then verify.** One model call, not three.
+
+```
+identify()  → asks what the WORK IS, not to guess spellings or pick from a list
+    ↓         returns falsifiable claims: title, year, creator, cast
+lookup()    → finds that title in the catalogue
+credits     → cast AND crew, fetched only when someone was named
+corroborate → compares the claims against the catalogue record
+decide()    → pure function, golden-tested, no model involved
+```
+
+**The rule that makes it safe:** the model's output is a lookup key and a set of
+claims. It **never becomes card data** — every field written to a card comes
+from the catalogue. A hallucinated identification can only cause a *failed
+lookup*, never a fabricated card. That is a data-flow guarantee, not a prompt
+rule, and it holds however badly a model behaves.
+
+**Drift in proportion to corroboration.** A small title leap confirms on its own.
+A large leap confirms only when a person the user named appears in the real
+credits. Modality (`type`/`speak`/`scan`) tunes what counts as small; it never
+vetoes anything. Unknown modality is treated as `type` — the stricter budget, so
+an unknown asks more often rather than confirming more easily.
+
+**Never ask a model its confidence.** Ask for facts something else can check.
+
+**The model narrows; it never terminates.** Its knowledge cutoff must cost us
+confidence, never reach — a 2026 film it has never heard of is still in TMDB.
+
+⚠️ **`listen` and `read` do not use this yet.** They take the first search
+result with no verification (G22). They log with `verified: false`.
+
+---
+
 ## Measurement Layer (Session 17)
 
 An `events` table, monthly-partitioned, plus nightly rollups. Governed by one rule:
@@ -114,6 +149,17 @@ That rules out dwell time, scroll depth, location, and any user content (titles,
 - Three enrichment outcomes — `accepted` · `corrected` · **`untouched`**. No correction is *not* the same as correct.
 - Rollups group by the user's **local** date, never UTC. IST is +5:30; UTC grouping scatters every evening onto the next day.
 - **North Star: completions. Counter-metric: saves.** Session length and DAU are explicitly rejected — for Taareef a *short* session is a success.
+
+⚠️ **Data before 2026-09-02 is inflated 2–3×.** Enrichment fired two to three
+times per card until PR #18, because the detail screen re-triggered whenever a
+card had no image and no candidates — which is what a card looks like *while
+enriching*. Do not quote band statistics gathered before that date.
+
+⚠️ **Metadata is never written by spreading a snapshot.** `{ ...meta, field }`
+built from a value read at the top of a function silently deletes anything an
+earlier statement wrote. That pattern caused three separate defects in Session
+18, twice while fixing the first one. Use the `MetaWriter` accumulator in
+`lib/enrichment/meta-writer.ts`.
 
 Full reasoning: `KB-MEASUREMENT_DECISIONS.md`.
 

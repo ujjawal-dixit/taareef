@@ -1,5 +1,5 @@
 # BACKLOG.md — Taareef
-> Last updated: Session 16 — 2026-08-10
+> Last updated: Session 18 — 2026-09-02
 > Rebuilt from the Session 16 workflow audit. Verified against the live repo and database, not against prior notes.
 
 ---
@@ -21,6 +21,44 @@ The V1 north-star ("does the builder save ≥3 things in week 1?") is answered a
 **The diagnosis:** the product is excellent at intake and has no digestive system. Every workflow is built up to the moment of success and abandoned at the edges. The three largest gaps — retrieval, source browsing, completion — all sit on the back half, the half that decides whether someone is still here in month three.
 
 **The metric that matters now:** does "2 months ago" change.
+
+**Session 18 update:** still true. 36 cards, last status transition 2026-07-25.
+The intake half absorbed two entire sessions; the digestive half is untouched.
+That is worth stating plainly at the top of the backlog, because two sessions of
+enrichment work did not move the number this file says is the only one that
+matters.
+
+---
+
+## What Session 18 changed about this list
+
+Read before planning. Three items are cheaper than this file assumes, and one is
+more urgent.
+
+**Search and source browsing are half-built already.** `idx_recommendations_fts`
+(a GIN index over title, source_name and notes) and `idx_recommendations_source_name`
+both exist and have been maintained on every write. Priority 4 says "no search
+exists"; the *database* work is done. They need a query and a screen. See G26.
+
+**Priority 1 has a hidden prerequisite.** The confirmation-at-save-time design
+depends on the confidence bands, and until Session 18 `fairly_sure` existed only
+in the product's language, never in code. It exists now, derived from a
+verdict rather than a spelling score — but it has never been seen by a user.
+
+**The peek needs a card that does not exist.** Ten files render card-like
+surfaces independently and none of them share a component. "Rebuild the card for
+the peek" is a design-system task before it is a feature. See G23.
+
+**New, above all of these: the highest-leverage product change is not a feature.**
+"Jawaan" became "Jawan" through Whisper, and every failure that followed was
+compensation for a transcription error made in the first two seconds. Indic ASR
+(Sarvam Saaras v3, which has a transliteration mode) fixes it where it happens,
+for roughly ₹30 per hour of audio. Nothing in the enrichment pipeline can
+recover a name that arrived wrong.
+
+**And a measurement caveat that invalidates old numbers.** Enrichment fired two
+to three times per card until PR #18. Every band statistic gathered before
+2026-09-02 is inflated 2–3× and should not be quoted.
 
 ---
 
