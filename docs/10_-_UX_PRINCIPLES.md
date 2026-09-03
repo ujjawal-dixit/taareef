@@ -1,22 +1,23 @@
-# ⚠️ THIS FILE IS SIGNIFICANTLY OUT OF DATE — DO NOT BUILD FROM IT
+# ⚠️ STALE — Session 19, 2026-09-02. Do not build from this file.
 
-**Last updated: Session 5 — May 2026.**
-**Current design system is in KB-CLAUDE.md and CARD_SPEC.md.**
-
-Key contradictions in this file vs current system:
-- Canvas is listed as `#080f0a` → actual is `#111111`
-- References 8 categories → actual is 6 (watch/listen/read/dine/do/visit)
-- Does not include Indian Folk Art pillar of design philosophy
-- Does not include Warli/Gond/Madhubani/Bidri folk art icon system
-- Does not include the two-zone card structure
-- Does not include the 4-pillar design philosophy (Matte / WKW / Folk Art / Brutalism)
-- Color system predates the vivid hex + deepDark system
-
-**Read KB-CLAUDE.md sections: Design Philosophy, Card Design System, Folk Art Icon System.**
+> Body last touched Session 5 — May 2026. Kept for the early UX reasoning; the
+> current design system lives in `KB-CLAUDE.md` (Design Philosophy, Card Design
+> System, Folk Art Icon System) and `CARD_SPEC.md`.
+>
+> What is out of date here:
+> - Canvas given as `#080f0a` → actual is `#111111` (`app/globals.css`, `--bg0`)
+> - References **8 categories** → actual is **6**: watch / listen / read / dine /
+>   do / visit (`lib/types/index.ts`)
+> - No Indian folk-art pillar of the design philosophy, and no
+>   Warli / Gond / Madhubani / Kalamkari motif system
+> - No two-zone card structure
+> - No 4-pillar design philosophy (Matte / WKW / Folk Art / Brutalism)
+> - Colour system predates the vivid-hex + deepDark scheme
 
 ---
 
 # UX_PRINCIPLES.md — Taareef Design System
+> **Primary reader:** both (planning Claude and Claude Code).
 
 > Complete design and interaction specification.
 > Every UI implementation decision references this file.

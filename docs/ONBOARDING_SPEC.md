@@ -1,4 +1,5 @@
 # ONBOARDING_SPEC.md — Taareef First-Run Experience
+> **Primary reader:** both (planning Claude and Claude Code).
 > Complete specification for the 4-screen onboarding flow.
 > Screen by screen. Copy string by copy string. Interaction by interaction.
 > Last updated: Session 10 — 2026-06-10 (updated for 6-category system)
@@ -216,6 +217,17 @@ Secondary (outlined): "Continue with Email"
 ---
 
 ## Screen 3 — The One Question
+
+> ⚠️ **REMOVED — Session 15. This screen no longer exists.**
+> The route file `app/(onboarding)/onboarding/categories/page.tsx` was deleted
+> on 2026-08-13 (commit `1ba48fe`); `app/api/user/preferences/route.ts` and the
+> `user_preferences` table went with it. Why: it collected category preferences
+> that nothing consumed, nothing linked to it, and it sat between "I saved
+> something" and "there it is" — dead weight in the one flow that has to feel
+> weightless. The first save already reveals which category a person cares
+> about, and a demonstrated signal beats a stated one. See KB-DECISIONS.md
+> (Session 15) and KB-SESSION_LOG.md Session 15.
+> The section below is kept for the reasoning, not as build guidance.
 
 **Route:** `/onboarding/categories` (post-auth, first session only)
 

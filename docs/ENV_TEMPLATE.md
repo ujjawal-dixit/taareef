@@ -1,5 +1,6 @@
 # ENV_TEMPLATE.md — Taareef Environment Variables
 
+> **Primary reader:** Claude Code.
 > Documentation for every environment variable the project uses.
 > Keep this file updated after every addition.
 > The `.env.example` file at the repo root is generated from this.

@@ -1,8 +1,18 @@
 # KB-MEASUREMENT_SPEC.md — Taareef Measurement Layer
 
-> Session 17 · 2026-08-12
-> Status: **SPEC FOR REVIEW — no SQL written, nothing applied**
-> Verified against live database `tcuyfrcmjrtczneklhmx` on 2026-08-12.
+> **Primary reader:** both (planning Claude and Claude Code).
+> Originally written Session 17 · 2026-08-12 as a spec for review.
+> Status: **BUILT.** The layer described below is live in production.
+> - Session 17 — `supabase/migrations/20260812_measurement_layer.sql`
+>   (`events` monthly-partitioned, `search_log`, the rollups, `run_rollup`) and
+>   `20260812_claim_anonymous_session.sql`. Writers: `lib/analytics/track.ts`
+>   and `lib/analytics/track-server.ts`.
+> - Session 18 — `20260819_read_touch_does_not_bump_updated_at.sql` and
+>   `20260820_enrichment_band_add_none.sql`; event-payload additions are in §4b.
+> Live state verified against `tcuyfrcmjrtczneklhmx` on 2026-09-02 (KB-FILEMAP §Database):
+> 13 `events` partitions, 3 cron jobs reporting `succeeded`.
+> The body below is the original spec, kept as the record of intent — read §4b
+> and KB-FILEMAP for what actually shipped.
 
 ---
 

@@ -1,8 +1,9 @@
 # TENETS.md — Taareef
 
+> **Primary reader:** both (planning Claude and Claude Code).
 > The non-negotiable rules of how we work. Numbered so they can be cited in conversation ("that violates T2").
 > Every tenet here was earned by something going wrong. The story is included, because a rule without its cause gets discarded the first time it's inconvenient.
-> Last updated: Session 17 — 2026-08-16
+> Last updated: Session 19 — 2026-09-02
 
 ---
 
@@ -36,71 +37,6 @@ Trust increases the obligation to check, not the licence to skip it.
 **Before changing a thing, list what already governs it** — every constraint on the table, every key actually present in the JSON, every call site of the function, every open PR. A check that returns "missing" is a prompt to enumerate, never a conclusion.
 
 **In practice:** clone the repo fresh rather than pull into a working directory. Query the live database rather than trust documentation. Read the provider's docs before theorising about their API. When something is directly testable, propose the test rather than a mechanism.
-
-### T24 · Read backwards from the field, not forwards from the writer
-
-T10 says a producer and its consumers ship together, and it is always applied
-in one direction: *I changed this writer, who reads it?* Session 18 found the
-other direction matters more.
-
-`capture_people` and `capture_year` were added to the extraction schema and
-wired through one producer. A second producer existed — the typed fast path in
-`capture-screen.tsx`, which skips the extraction LLM whenever the form is
-filled — and it wrote neither field. The corroboration rule that the whole
-session was spent building was therefore **inert on the path most people use**,
-and four separate audits of the enrichment route did not find it, because every
-one of them asked "did this write survive?" and none asked "was this value ever
-created, and by how many places?"
-
-**Before trusting a field, list every site that writes it.** `grep` for the
-field name, not for the function you changed. A field with one reader and two
-writers is the shape that hides best: everything type-checks, the tests pass,
-and the value is simply absent half the time.
-
-Corollary: a field that is optional in the type system is a field the compiler
-will not help you with. If a field must always be written, make the type say so
-— in Session 18 making `namedPeople` required rather than optional caused the
-compiler to enumerate all five construction sites in one command.
-
-### T23 · Ask each part the question it can actually answer
-
-Session 18 spent an evening on four consecutive failures with one shape. An LLM
-was asked to guess spellings, then to pick from a list, then to re-check
-another LLM. Those are string-manipulation tasks, which is what models are
-weakest at — and each patch needed another patch to clean up after it. Three
-models, still breaking.
-
-Meanwhile the model already knew the answer. Given "Javan, starring Shah Rukh
-Khan" it knows that is Jawan (2023), directed by Atlee. Nobody asked it. And
-TMDB was being driven as a search engine when its strength is being a registry
-of canonical ids and checkable facts. **Each part was doing the other part's
-job badly.**
-
-The rule: **knowledge from the model, proof from the catalogue, decisions from
-arithmetic.** A model's output is a lookup key and a set of claims — never
-card data. That makes hallucination structurally harmless: an invented film
-produces a failed lookup, never a fabricated card, however badly the model
-behaves. No prompt rule can promise that; a data-flow rule can.
-
-Corollary: **never ask a model how confident it is.** Self-reported confidence
-is fluent and uninformative. Ask for facts something else can check.
-
-Corollary: **a second model is not a second opinion.** It shares the weights,
-the training data and the blind spots. Checking correlated with the thing
-checked adds confidence without adding information — which is worse than no
-check at all.
-
-**Session 18 extension — verify the FILE, not the diff.** Two defects were
-introduced this session by patching with string replacement: one replacement
-silently did not match, and one added a field to a spread that a later spread
-overwrote. `tsc` passed both times, because both were well-typed. **A type
-checker tells you the code is consistent, never that your change happened.**
-After any patch, read the resulting file and check the property you were trying
-to establish — not the diff, which only shows what you intended.
-
-**Session 18 extension — this applies mid-conversation, not just before code.** Asked whether an LLM could see the user's raw phrasing, Claude answered "the capture text isn't stored" and built a recommendation around that constraint. One grep would have shown the audio route already returns the transcript so the capture screen can display it. Nothing needed storing; the design question had a different and easier answer.
-
-A design conversation is not a lower-evidence setting than a delivery. Constraints invented in discussion are worse than wrong code, because they silently remove options before anyone evaluates them — and nobody reviews a possibility that was never raised. **Before saying a thing does not exist, grep for it, even when talking.**
 
 **Session 17 extension — the knowledge base is a hypothesis, not a fact.** Three times in one session, something described in the KB as existing either didn't or didn't do what its description implied: the anonymous cleanup job (never written), `claim_anonymous_saves`'s "six layered guards" (real, but two of them silently discarded the sessions we most needed), and an anonymous identity that was assumed to exist on page load but was only created at first save. **When reusing an existing function, read its body, not its description.**
 
@@ -346,6 +282,109 @@ Therefore:
 **Origin:** Session 17. Claude built A1a and A4, opened PR #3, lost that turn from context as the conversation grew, and two hours later rebuilt the identical work as PR #4. The duplication was invisible from the inside; it surfaced only as a merge conflict on Ujjawal's phone.
 
 **The general form:** every safeguard in this file assumes Claude can remember the session it is in. That assumption weakens over a long conversation. Writing things down is not documentation overhead — it is the only memory that does not decay.
+
+---
+
+## T23 — Ask each part the question it can actually answer
+
+Session 18 spent an evening on four consecutive failures with one shape. An LLM
+was asked to guess spellings, then to pick from a list, then to re-check
+another LLM. Those are string-manipulation tasks, which is what models are
+weakest at — and each patch needed another patch to clean up after it. Three
+models, still breaking.
+
+Meanwhile the model already knew the answer. Given "Javan, starring Shah Rukh
+Khan" it knows that is Jawan (2023), directed by Atlee. Nobody asked it. And
+TMDB was being driven as a search engine when its strength is being a registry
+of canonical ids and checkable facts. **Each part was doing the other part's
+job badly.**
+
+The rule: **knowledge from the model, proof from the catalogue, decisions from
+arithmetic.** A model's output is a lookup key and a set of claims — never
+card data. That makes hallucination structurally harmless: an invented film
+produces a failed lookup, never a fabricated card, however badly the model
+behaves. No prompt rule can promise that; a data-flow rule can.
+
+Corollary: **never ask a model how confident it is.** Self-reported confidence
+is fluent and uninformative. Ask for facts something else can check.
+
+Corollary: **a second model is not a second opinion.** It shares the weights,
+the training data and the blind spots. Checking correlated with the thing
+checked adds confidence without adding information — which is worse than no
+check at all.
+
+**Session 18 extension — verify the FILE, not the diff.** Two defects were
+introduced this session by patching with string replacement: one replacement
+silently did not match, and one added a field to a spread that a later spread
+overwrote. `tsc` passed both times, because both were well-typed. **A type
+checker tells you the code is consistent, never that your change happened.**
+After any patch, read the resulting file and check the property you were trying
+to establish — not the diff, which only shows what you intended.
+
+**Session 18 extension — this applies mid-conversation, not just before code.** Asked whether an LLM could see the user's raw phrasing, Claude answered "the capture text isn't stored" and built a recommendation around that constraint. One grep would have shown the audio route already returns the transcript so the capture screen can display it. Nothing needed storing; the design question had a different and easier answer.
+
+A design conversation is not a lower-evidence setting than a delivery. Constraints invented in discussion are worse than wrong code, because they silently remove options before anyone evaluates them — and nobody reviews a possibility that was never raised. **Before saying a thing does not exist, grep for it, even when talking.**
+
+---
+
+## T24 — Read backwards from the field, not forwards from the writer
+
+T10 says a producer and its consumers ship together, and it is always applied
+in one direction: *I changed this writer, who reads it?* Session 18 found the
+other direction matters more.
+
+`capture_people` and `capture_year` were added to the extraction schema and
+wired through one producer. A second producer existed — the typed fast path in
+`capture-screen.tsx`, which skips the extraction LLM whenever the form is
+filled — and it wrote neither field. The corroboration rule that the whole
+session was spent building was therefore **inert on the path most people use**,
+and four separate audits of the enrichment route did not find it, because every
+one of them asked "did this write survive?" and none asked "was this value ever
+created, and by how many places?"
+
+**Before trusting a field, list every site that writes it.** `grep` for the
+field name, not for the function you changed. A field with one reader and two
+writers is the shape that hides best: everything type-checks, the tests pass,
+and the value is simply absent half the time.
+
+Corollary: a field that is optional in the type system is a field the compiler
+will not help you with. If a field must always be written, make the type say so
+— in Session 18 making `namedPeople` required rather than optional caused the
+compiler to enumerate all five construction sites in one command.
+
+---
+
+## T25 — The confirmation gate is on starting work, not on shipping it
+
+Claude proposes, Ujjawal decides, and only then does Claude build. One line on
+what will change and what it might break, and a "yes", before a branch is cut.
+This gates *starting*, not volume — ten confirmed PRs in a session is fine; one
+unconfirmed PR is not. Anything Claude is unsure of stays on a branch and does
+not become a PR until it is proven: an experiment is not a change. PR
+descriptions are ten lines — the reasoning belongs in the session log. No
+architecture replacement mid-session; that decision needs to sleep.
+
+**Origin:** Session 18. Twelve PRs were opened with no confirmation for any of
+them. Four existed only to repair or delete work from earlier the same session;
+two were built and deleted hours later; one was rebuilt from scratch an hour
+after it had already shipped. T5 ("discuss before building") was explicit, had
+been read, and was ignored twelve times.
+
+The mechanism is the part worth keeping. Until Session 17, Claude delivered
+files for Ujjawal to paste in by hand. That was a poor delivery mechanism on a
+phone and was retired correctly — but it had been doing a second, unnamed job:
+it was the review gate. Every file had to be worth the cost of pasting, which
+forced Claude to be sure before delivering and forced Ujjawal to see the code
+as it went in. Direct push replaced the delivery and silently deleted the
+review. Nothing took its place, and the failure was immediate — hypotheses
+began shipping as conclusions, and merging became how we found out whether an
+idea worked.
+
+**The deeper constraint, recorded so it is not rediscovered:** there is no local
+dev environment and Claude's sandbox cannot reach Groq or TMDB, so merging to
+production was the only way to test anything. That, more than any design fault,
+produced the churn. Setting up a local dev loop is worth more than any feature
+currently on the backlog.
 
 ---
 

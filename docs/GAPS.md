@@ -1,5 +1,7 @@
 # GAPS.md — Taareef Open Gaps Register
 
+> **Primary reader:** both (planning Claude and Claude Code).
+>
 > A living list of known gaps: things that are missing, wrong, unverified, or
 > deliberately deferred. **A gap is not a feature request.** Features live in
 > `BACKLOG.md`. A gap is something that is *already broken, already unknown, or
@@ -10,7 +12,7 @@
 > · Never delete a gap — move it to §RESOLVED with the date and the resolution
 > · Every gap has an owner-question: *what would we know if this were closed?*
 >
-> Last updated: Session 18 · 2026-09-02
+> Last updated: Session 19 · 2026-09-02 — G06 and G08 closed (files deleted 2026-08-13; docs corrected)
 
 ### G19 · The chain that took four attempts — **closed S18**
 Four consecutive failures in one evening, each fix correct and each leaving the
@@ -91,16 +93,20 @@ film, tv, music, book, city, activity, podcast, person, eat, drink, go, see`.
 **Deferred deliberately** — Postgres cannot drop enum values; cleaning means
 recreating the type on a live table. Risk exceeds benefit today.
 
-### G06 · Dead onboarding vertical slice — **C**
-| Item | State |
-|---|---|
-| `app/(onboarding)/onboarding/categories/page.tsx` | Functional, zero inbound links, reachable by URL |
-| `app/api/user/preferences/route.ts` | Zero callers |
-| `user_preferences` table | 0 rows |
-| `middleware.ts` L50–53 | Comment describes a guard **that no longer exists** |
+### G06 · Dead onboarding vertical slice — **CLOSED, gone by 2026-08-13**
+Was: Screen 3 (`app/(onboarding)/onboarding/categories/page.tsx`),
+`app/api/user/preferences/route.ts`, the `user_preferences` table, and a stale
+`middleware.ts` guard comment — all functional-but-unreferenced dead weight, the
+comment being the dangerous part (it documented a redirect guard that no longer
+existed).
 
-**The stale comment is the dangerous part** — a future reader will preserve
-behaviour that isn't there. Awaiting explicit approval to remove (UI tenet).
+Resolution: the `middleware.ts` comment was corrected in Session 17 (it now
+explains the guard and screen were both removed). The two route files were
+deleted on 2026-08-13 — `categories/page.tsx` in `1ba48fe`,
+`user/preferences/route.ts` in `18c4ce1`. The `user_preferences` table is a
+schema change, still nominally present with 0 rows; not worth a migration.
+Docs that still described these as live were corrected in Session 19
+(KB-FILEMAP.md, KB-MEASUREMENT_DECISIONS.md, ONBOARDING_SPEC.md).
 
 ### G07 · Google Places photo URLs expire — **A**
 Cards silently lose their images. All four render paths are guarded against the
@@ -109,8 +115,10 @@ another one that will die.
 **Closes when:** photos are mirrored to Supabase Storage (Phase 5.1).
 **Watch:** the 1 GB free file limit is the first ceiling this project will hit.
 
-### G08 · `app-shell.tsx` is dead — **C**
-Only reference is its own path comment.
+### G08 · `app-shell.tsx` is dead — **CLOSED, deleted 2026-08-13**
+`components/features/navigation/app-shell.tsx`, superseded by `app-providers.tsx`
++ `app-frame.tsx` in the Session 15 layout refactor. Deleted in commit
+`1208aa6`. KB-FILEMAP.md was corrected in Session 19.
 
 ### G09 · `430px` hardcoded in 12 places — **C**
 `FRAME_MAX_WIDTH` exists in `app-frame.tsx` and is largely unused. Any frame
