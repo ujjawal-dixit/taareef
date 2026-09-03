@@ -57,6 +57,35 @@ Source of truth: `lib/types/index.ts`. **Any reference anywhere to 8 or 10 categ
 
 ---
 
+## Commands
+
+The builder does not run a local dev environment, so `npm run dev` is rarely useful here — Vercel previews are the review surface (see Git Workflow). The checks that matter before a PR:
+
+| Command | Purpose |
+|---|---|
+| `npm run lint` | ESLint (`eslint-config-next`) |
+| `npm run type-check` | `tsc --noEmit` — strict; must be clean |
+| `npm run build` | `next build` — the same build Vercel runs |
+| `npx tsx scripts/matching.golden.ts` | **Golden suite for `lib/places/matching.ts`.** Run before touching any dial in the place-matching module. Exit 0 = all pass; any failure prints the case and exits 1 |
+| `npx tsx scripts/identify.golden.ts` | **Golden suite for `lib/enrichment/identify.ts`** — the deterministic half of poster identification (drift, corroboration, decision rule). Run before touching that module |
+
+There is **no unit-test framework** (no Jest/Vitest). The two golden suites in `/scripts` are the regression gate — every real bug that has been debugged is encoded there permanently. Add a case when you fix a new one; there is no other automated coverage. The model-call halves of enrichment are measured by separate `*.eval.ts` instruments, not gates.
+
+To run one golden check in isolation, comment out the others in the file, or add a name filter — the files are plain scripts, not a runner.
+
+---
+
+## Enrichment Pipeline — the risky path
+
+Capture (`/api/capture/*`) is solid. Enrichment is where silent wrong writes happen, so it carries the heaviest instrumentation:
+
+- **`lib/enrichment/identify.ts`** — decides *what a thing is* before a poster/metadata is written. Deterministic guards (`isSmallLeap`, `corroborate`, `decide`, hallucination/fabrication detectors) gate the model output. Golden-tested.
+- **`lib/enrichment/meta-writer.ts`** — the single writer of the `metadata` accumulator. Routes must not assemble `metadata` themselves.
+- **`lib/places/matching.ts`** — five-layer match/reject for Google Places (name overlap → plausibility → structured locality → strict exactness → geographic consistency). Every layer exists because a specific real place was mismatched. Golden-tested.
+- Enrichment outcomes are logged as `accepted` · `corrected` · `untouched` via `lib/analytics/track*.ts` — never a direct `events` insert.
+
+---
+
 ## Project Structure — verified 2026-08-15
 
 ```
