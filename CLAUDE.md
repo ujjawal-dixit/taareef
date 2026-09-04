@@ -75,17 +75,6 @@ To run one golden check in isolation, comment out the others in the file, or add
 
 ---
 
-## Enrichment Pipeline — the risky path
-
-Capture (`/api/capture/*`) is solid. Enrichment is where silent wrong writes happen, so it carries the heaviest instrumentation:
-
-- **`lib/enrichment/identify.ts`** — decides *what a thing is* before a poster/metadata is written. Deterministic guards (`isSmallLeap`, `corroborate`, `decide`, hallucination/fabrication detectors) gate the model output. Golden-tested.
-- **`lib/enrichment/meta-writer.ts`** — the single writer of the `metadata` accumulator. Routes must not assemble `metadata` themselves.
-- **`lib/places/matching.ts`** — five-layer match/reject for Google Places (name overlap → plausibility → structured locality → strict exactness → geographic consistency). Every layer exists because a specific real place was mismatched. Golden-tested.
-- Enrichment outcomes are logged as `accepted` · `corrected` · `untouched` via `lib/analytics/track*.ts` — never a direct `events` insert.
-
----
-
 ## Project Structure — verified 2026-08-15
 
 ```
@@ -132,6 +121,9 @@ Capture (`/api/capture/*`) is solid. Enrichment is where silent wrong writes hap
 
 ## Enrichment (rebuilt Session 18)
 
+Capture (`/api/capture/*`) is solid. Enrichment is where silent wrong writes
+happen, so it carries the heaviest instrumentation.
+
 **Identify, then verify.** One model call, not three.
 
 ```
@@ -162,6 +154,17 @@ confidence, never reach — a 2026 film it has never heard of is still in TMDB.
 
 ⚠️ **`listen` and `read` do not use this yet.** They take the first search
 result with no verification (G22). They log with `verified: false`.
+
+**The rest of the enrichment path:**
+
+- **`lib/enrichment/meta-writer.ts`** — the single writer of the `metadata`
+  accumulator. Routes must not assemble `metadata` themselves.
+- **`lib/places/matching.ts`** — five-layer match/reject for Google Places
+  (name overlap → plausibility → structured locality → strict exactness →
+  geographic consistency). Every layer exists because a specific real place was
+  mismatched. Golden-tested.
+- Enrichment outcomes are logged as `accepted` · `corrected` · `untouched` via
+  `lib/analytics/track*.ts` — never a direct `events` insert.
 
 ---
 
