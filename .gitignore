@@ -41,3 +41,6 @@ Thumbs.db
 .idea/
 .vscode/
 *.swp
+
+# Claude Code local settings — may contain secrets, never commit
+.claude/settings.local.json
