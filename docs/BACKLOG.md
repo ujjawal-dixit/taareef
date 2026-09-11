@@ -233,6 +233,7 @@ The pattern: **the product asks for something and then does nothing with the ans
 - [ ] Four cards carry source name "Someone" — cleanup `UPDATE` drafted
 - [ ] Remove dead `FOURSQUARE_API_KEY` from Vercel
 - [ ] `02_-_API_SPEC.md` significantly stale — references a `/api/parse` route that does not exist
+- [ ] **Evaluate Next.js major upgrade (14 → 15/16).** `next@14.2.35` (bumped from 14.2.18, 2026-09-10) still fails `npm audit`: the advisory DB flags the whole 14.x line (1 critical + high) and the only offered fix is `next@16.3.4`, a breaking change. Triage which of the ~24 listed advisories actually affect a Vercel-hosted App Router app (many are self-hosted / custom-server / `next/image` remote-patterns scoped) before deciding urgency. A major bump breaks the locked-stack rule → needs explicit approval + a `KB-DECISIONS.md` entry.
 
 ---
 
