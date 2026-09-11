@@ -43,6 +43,18 @@ function rgba(rgb: string, a: number): string {
   return `rgba(${rgb},${a})`
 }
 
+// Rounded trig — every builder below interpolates cos/sin output at full
+// float precision into a dangerouslySetInnerHTML string, which React
+// compares byte-for-byte between server and client during hydration. A
+// few ULPs of difference between Node's V8 and the browser's V8 is enough
+// to fail that comparison and throw a hydration-mismatch warning. Three
+// decimal places is far more precision than a ~100px medallion needs and
+// makes both renders converge to an identical string.
+const rawCos = Math.cos
+const rawSin = Math.sin
+function cos(a: number): number { return Math.round(rawCos(a) * 1000) / 1000 }
+function sin(a: number): number { return Math.round(rawSin(a) * 1000) / 1000 }
+
 // ── shared geometry primitives ────────────────────────────────────
 
 function sawRing(rgb: string, r1: number, r2: number, n: number, w = 1): string {
@@ -51,7 +63,7 @@ function sawRing(rgb: string, r1: number, r2: number, n: number, w = 1): string 
     const a1 = (i / n) * 2 * Math.PI
     const am = ((i + 0.5) / n) * 2 * Math.PI
     const a3 = ((i + 1) / n) * 2 * Math.PI
-    s += `<path d="M${Math.cos(a1) * r1} ${Math.sin(a1) * r1} L${Math.cos(am) * r2} ${Math.sin(am) * r2} L${Math.cos(a3) * r1} ${Math.sin(a3) * r1}" stroke="${rgba(rgb, 0.5)}" stroke-width="${w}" fill="none"/>`
+    s += `<path d="M${cos(a1) * r1} ${sin(a1) * r1} L${cos(am) * r2} ${sin(am) * r2} L${cos(a3) * r1} ${sin(a3) * r1}" stroke="${rgba(rgb, 0.5)}" stroke-width="${w}" fill="none"/>`
   }
   return s
 }
@@ -60,7 +72,7 @@ function dotRing(rgb: string, r: number, n: number, rad: number, op: number): st
   let s = ''
   for (let i = 0; i < n; i++) {
     const a = (i / n) * 2 * Math.PI
-    s += `<circle cx="${Math.cos(a) * r}" cy="${Math.sin(a) * r}" r="${rad}" fill="${rgba(rgb, op)}"/>`
+    s += `<circle cx="${cos(a) * r}" cy="${sin(a) * r}" r="${rad}" fill="${rgba(rgb, op)}"/>`
   }
   return s
 }
@@ -69,8 +81,8 @@ function dashRing(rgb: string, r: number, n: number, len: number, w: number, op:
   let s = ''
   for (let i = 0; i < n; i++) {
     const a = (i / n) * 2 * Math.PI
-    const x1 = Math.cos(a) * (r - len / 2), y1 = Math.sin(a) * (r - len / 2)
-    const x2 = Math.cos(a) * (r + len / 2), y2 = Math.sin(a) * (r + len / 2)
+    const x1 = cos(a) * (r - len / 2), y1 = sin(a) * (r - len / 2)
+    const x2 = cos(a) * (r + len / 2), y2 = sin(a) * (r + len / 2)
     s += `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${rgba(rgb, op)}" stroke-width="${w}" stroke-linecap="round"/>`
   }
   return s
@@ -80,7 +92,7 @@ function rays(rgb: string, r1: number, r2: number, n: number, op = 0.6): string 
   let s = ''
   for (let i = 0; i < n; i++) {
     const a = (i / n) * 2 * Math.PI
-    s += `<line x1="${Math.cos(a) * r1}" y1="${Math.sin(a) * r1}" x2="${Math.cos(a) * r2}" y2="${Math.sin(a) * r2}" stroke="${rgba(rgb, op)}" stroke-width="1" stroke-linecap="round"/>`
+    s += `<line x1="${cos(a) * r1}" y1="${sin(a) * r1}" x2="${cos(a) * r2}" y2="${sin(a) * r2}" stroke="${rgba(rgb, op)}" stroke-width="1" stroke-linecap="round"/>`
   }
   return s
 }
@@ -110,7 +122,7 @@ function madhuBorder(rgb: string, r1: number, r2: number): string {
   const n = 48
   for (let i = 0; i < n; i++) {
     const a = (i / n) * 2 * Math.PI
-    s += `<line x1="${Math.cos(a) * r1}" y1="${Math.sin(a) * r1}" x2="${Math.cos(a) * r2}" y2="${Math.sin(a) * r2}" stroke="${rgba(rgb, 0.4)}" stroke-width="0.7"/>`
+    s += `<line x1="${cos(a) * r1}" y1="${sin(a) * r1}" x2="${cos(a) * r2}" y2="${sin(a) * r2}" stroke="${rgba(rgb, 0.4)}" stroke-width="0.7"/>`
   }
   return s
 }
@@ -121,7 +133,7 @@ function blockFrame(rgb: string): string {
     + `<circle r="78" stroke="${rgba(rgb, 0.5)}" stroke-width="1.1" fill="none"/>`
   for (let i = 0; i < 32; i++) {
     const a = (i / 32) * 2 * Math.PI
-    s += `<circle cx="${Math.cos(a) * 80}" cy="${Math.sin(a) * 80}" r="0.9" fill="${rgba(rgb, 0.5)}"/>`
+    s += `<circle cx="${cos(a) * 80}" cy="${sin(a) * 80}" r="0.9" fill="${rgba(rgb, 0.5)}"/>`
   }
   return s
 }
@@ -133,7 +145,7 @@ function netBorder(rgb: string, r: number): string {
   const n = 44
   for (let i = 0; i < n; i++) {
     const a = (i / n) * 2 * Math.PI
-    s += `<line x1="${Math.cos(a) * (r - 4)}" y1="${Math.sin(a) * (r - 4)}" x2="${Math.cos(a) * r}" y2="${Math.sin(a) * r}" stroke="${rgba(rgb, 0.35)}" stroke-width="0.6"/>`
+    s += `<line x1="${cos(a) * (r - 4)}" y1="${sin(a) * (r - 4)}" x2="${cos(a) * r}" y2="${sin(a) * r}" stroke="${rgba(rgb, 0.35)}" stroke-width="0.6"/>`
   }
   return s
 }
@@ -215,14 +227,14 @@ function gondPodcast(rgb: string, p: Palette): string {
     const n = Math.round(r * 0.9)
     for (let i = 0; i < n; i++) {
       const a = (i / n) * 2 * Math.PI
-      s += `<circle cx="${Math.cos(a) * r}" cy="${Math.sin(a) * r}" r="1.5" fill="${rgba(rgb, 0.6 - k * 0.06)}"/>`
+      s += `<circle cx="${cos(a) * r}" cy="${sin(a) * r}" r="1.5" fill="${rgba(rgb, 0.6 - k * 0.06)}"/>`
     }
   })
   ;[35, 45, 55, 65, 75].forEach((r, k) => {
     const n = Math.round(r * 0.8)
     for (let i = 0; i < n; i++) {
       const a = ((i + 0.5) / n) * 2 * Math.PI
-      s += `<line x1="${Math.cos(a) * (r - 2)}" y1="${Math.sin(a) * (r - 2)}" x2="${Math.cos(a) * (r + 2)}" y2="${Math.sin(a) * (r + 2)}" stroke="${rgba(rgb, 0.4 - k * 0.05)}" stroke-width="1" stroke-linecap="round"/>`
+      s += `<line x1="${cos(a) * (r - 2)}" y1="${sin(a) * (r - 2)}" x2="${cos(a) * (r + 2)}" y2="${sin(a) * (r + 2)}" stroke="${rgba(rgb, 0.4 - k * 0.05)}" stroke-width="1" stroke-linecap="round"/>`
     }
   })
   s += `<circle r="22" stroke="${rgba(rgb, 0.8)}" stroke-width="1.3" fill="none"/>`
@@ -241,7 +253,7 @@ function gondAudiobook(rgb: string, p: Palette): string {
     for (let t = 0; t <= 720; t += 6) {
       const a = (t + off) * Math.PI / 180
       const r = t / 720 * 78
-      path += ` L ${Math.cos(a) * r} ${Math.sin(a) * r}`
+      path += ` L ${cos(a) * r} ${sin(a) * r}`
     }
     s += `<path d="${path}" stroke="${rgba(rgb, 0.5)}" stroke-width="1.3" fill="none"/>`
   })
@@ -249,7 +261,7 @@ function gondAudiobook(rgb: string, p: Palette): string {
     for (let t = 30; t <= 720; t += 26) {
       const a = (t + off) * Math.PI / 180
       const r = t / 720 * 78
-      s += `<circle cx="${Math.cos(a) * r}" cy="${Math.sin(a) * r}" r="1.7" fill="${rgba(rgb, 0.7)}"/>`
+      s += `<circle cx="${cos(a) * r}" cy="${sin(a) * r}" r="1.7" fill="${rgba(rgb, 0.7)}"/>`
     }
   })
   for (let i = 0; i < 16; i++) {
@@ -265,7 +277,7 @@ function gondArtist(rgb: string, p: Palette): string {
   const n = 40, r1 = 80, r2 = 86
   for (let i = 0; i < n; i++) {
     const a1 = (i / n) * 2 * Math.PI, am = ((i + 0.5) / n) * 2 * Math.PI, a3 = ((i + 1) / n) * 2 * Math.PI
-    s += `<path d="M${Math.cos(a1) * r1} ${Math.sin(a1) * r1} L${Math.cos(am) * r2} ${Math.sin(am) * r2} L${Math.cos(a3) * r1} ${Math.sin(a3) * r1}" stroke="${rgba(rgb, 0.4)}" stroke-width="0.9" fill="none"/>`
+    s += `<path d="M${cos(a1) * r1} ${sin(a1) * r1} L${cos(am) * r2} ${sin(am) * r2} L${cos(a3) * r1} ${sin(a3) * r1}" stroke="${rgba(rgb, 0.4)}" stroke-width="0.9" fill="none"/>`
   }
   s += `<circle r="72" stroke="${rgba(rgb, 0.3)}" stroke-width="1"/>`
   s += dotRing(rgb, 72, 40, 1.4, 0.45) + dashRing(rgb, 66, 40, 5, 0.9, 0.4)
@@ -281,12 +293,12 @@ function gondArtist(rgb: string, p: Palette): string {
   s += `<g stroke="${rgba(rgb, 0.55)}" stroke-width="1.2" stroke-linecap="round">`
   for (let i = 0; i < 11; i++) {
     const a = (104 + i * 7) * Math.PI / 180
-    s += `<line x1="${Math.cos(a) * 18}" y1="${Math.sin(a) * 18 + 8}" x2="${Math.cos(a) * 58}" y2="${Math.sin(a) * 58 + 8}"/>`
+    s += `<line x1="${cos(a) * 18}" y1="${sin(a) * 18 + 8}" x2="${cos(a) * 58}" y2="${sin(a) * 58 + 8}"/>`
     for (let k = 1; k <= 4; k++) {
       const rr = 18 + k * 10
-      s += `<circle cx="${Math.cos(a) * rr}" cy="${Math.sin(a) * rr + 8}" r="1.3" fill="${rgba(rgb, 0.6)}"/>`
+      s += `<circle cx="${cos(a) * rr}" cy="${sin(a) * rr + 8}" r="1.3" fill="${rgba(rgb, 0.6)}"/>`
     }
-    s += `<circle cx="${Math.cos(a) * 62}" cy="${Math.sin(a) * 62 + 8}" r="2.4" stroke="${rgba(rgb, 0.6)}" stroke-width="0.8" fill="${rgba(rgb, 0.12)}"/>`
+    s += `<circle cx="${cos(a) * 62}" cy="${sin(a) * 62 + 8}" r="2.4" stroke="${rgba(rgb, 0.6)}" stroke-width="0.8" fill="${rgba(rgb, 0.12)}"/>`
   }
   s += `</g>`
   // fish-scale body infill
@@ -318,7 +330,7 @@ function madhuFiction(rgb: string, p: Palette): string {
   s += `<circle r="11" stroke="${rgba(rgb, 0.5)}" stroke-width="0.8" fill="none"/>`
   for (let i = 0; i < 8; i++) {
     const a = i * 45 * Math.PI / 180
-    s += `<circle cx="${Math.cos(a) * 8}" cy="${Math.sin(a) * 8}" r="1.4" fill="${rgba(rgb, 0.7)}"/>`
+    s += `<circle cx="${cos(a) * 8}" cy="${sin(a) * 8}" r="1.4" fill="${rgba(rgb, 0.7)}"/>`
   }
   s += `<circle r="3.5" fill="${rgba(rgb, 0.9)}"/>`
   return s
@@ -360,7 +372,7 @@ function madhuPoetry(rgb: string, p: Palette): string {
   s += `<g stroke="${rgba(rgb, 0.6)}" stroke-width="1" fill="none" stroke-linecap="round">`
   for (let i = 0; i < 11; i++) {
     const a = (-150 + i * 13) * Math.PI / 180
-    const ex = Math.cos(a) * 60, ey = Math.sin(a) * 60 - 6
+    const ex = cos(a) * 60, ey = sin(a) * 60 - 6
     s += `<path d="M2 -6 Q${ex * 0.5} ${ey * 0.5 - 10} ${ex} ${ey}"/>`
     s += `<circle cx="${ex}" cy="${ey}" r="2.6" stroke="${rgba(rgb, 0.7)}" stroke-width="0.8" fill="${rgba(rgb, 0.12)}"/>`
     s += `<circle cx="${ex}" cy="${ey}" r="1" fill="${rgba(rgb, 0.8)}" stroke="none"/>`
@@ -383,7 +395,7 @@ function blockRestaurant(rgb: string, p: Palette): string {
     s += `<g transform="translate(0,${y})"><circle r="3.4" stroke="${rgba(rgb, 0.7)}" stroke-width="0.9" fill="none"/><circle r="1.2" fill="${rgba(rgb, 0.8)}"/>`
     for (let k = 0; k < 6; k++) {
       const a = k * 60 * Math.PI / 180
-      s += `<circle cx="${Math.cos(a) * 6}" cy="${Math.sin(a) * 6}" r="1" fill="${rgba(rgb, 0.55)}"/>`
+      s += `<circle cx="${cos(a) * 6}" cy="${sin(a) * 6}" r="1" fill="${rgba(rgb, 0.55)}"/>`
     }
     s += `</g>`
   }
@@ -437,14 +449,14 @@ function blockStreetFood(rgb: string, p: Palette): string {
     const n = 48
     for (let i = 0; i <= n; i++) {
       const a = (i / n) * 2 * Math.PI
-      const rr = r + Math.sin(a * 6) * 4
-      path += (i ? 'L' : 'M') + (Math.cos(a) * rr) + ' ' + (Math.sin(a) * rr) + ' '
+      const rr = r + sin(a * 6) * 4
+      path += (i ? 'L' : 'M') + (cos(a) * rr) + ' ' + (sin(a) * rr) + ' '
     }
     s += `<path d="${path}Z" stroke="${rgba(rgb, 0.55)}" stroke-width="1" fill="none"/>`
     const m = 10 + idx * 2
     for (let i = 0; i < m; i++) {
       const a = (i / m) * 2 * Math.PI
-      s += `<circle cx="${Math.cos(a) * r}" cy="${Math.sin(a) * r}" r="1.6" fill="${rgba(rgb, 0.6)}"/>`
+      s += `<circle cx="${cos(a) * r}" cy="${sin(a) * r}" r="1.6" fill="${rgba(rgb, 0.6)}"/>`
     }
   })
   for (let i = 0; i < 8; i++) {
@@ -475,14 +487,14 @@ function saoraTrail(rgb: string, p: Palette): string {
   for (let t = 0; t <= 540; t += 10) {
     const a = t * Math.PI / 180
     const r = 60 - t / 540 * 52
-    path += `${Math.cos(a) * r} ${Math.sin(a) * r} L`
+    path += `${cos(a) * r} ${sin(a) * r} L`
   }
   path = path.slice(0, -2)
   s += `<path d="${path}" stroke="${rgba(rgb, 0.55)}" stroke-width="1.3" fill="none" stroke-linecap="round"/>`
   for (let t = 20; t <= 520; t += 40) {
     const a = t * Math.PI / 180
     const r = 60 - t / 540 * 52
-    s += `<circle cx="${Math.cos(a) * r}" cy="${Math.sin(a) * r}" r="1.5" fill="${rgba(rgb, 0.7)}"/>`
+    s += `<circle cx="${cos(a) * r}" cy="${sin(a) * r}" r="1.5" fill="${rgba(rgb, 0.7)}"/>`
   }
   s += `<g transform="translate(54,2) scale(0.7)">${saoraFig(rgb, 1)}</g>`
   return s
@@ -524,7 +536,7 @@ function saoraLiveShow(rgb: string, p: Palette): string {
   }
   for (let i = 0; i < 10; i++) {
     const a1 = i * 36 * Math.PI / 180, a2 = (i + 1) * 36 * Math.PI / 180
-    s += `<path d="M${Math.cos(a1) * 44} ${Math.sin(a1) * 44} L${Math.cos(a2) * 44} ${Math.sin(a2) * 44}" stroke="${rgba(rgb, 0.3)}" stroke-width="0.7"/>`
+    s += `<path d="M${cos(a1) * 44} ${sin(a1) * 44} L${cos(a2) * 44} ${sin(a2) * 44}" stroke="${rgba(rgb, 0.3)}" stroke-width="0.7"/>`
   }
   s += `<g transform="scale(1.05)">${saoraFig(rgb, 1)}</g>`
   return s
@@ -564,7 +576,7 @@ function kalGallery(rgb: string, p: Palette): string {
   s += `<circle r="11" stroke="${rgba(rgb, 0.7)}" stroke-width="1" fill="none"/>`
   for (let i = 0; i < 8; i++) {
     const a = i * 45 * Math.PI / 180
-    s += `<circle cx="${Math.cos(a) * 6}" cy="${Math.sin(a) * 6}" r="1.2" fill="${rgba(rgb, 0.6)}"/>`
+    s += `<circle cx="${cos(a) * 6}" cy="${sin(a) * 6}" r="1.2" fill="${rgba(rgb, 0.6)}"/>`
   }
   s += `<circle r="3" fill="${rgba(rgb, 0.9)}"/>`
   return s
@@ -589,7 +601,7 @@ function kalViewpoint(rgb: string, p: Palette): string {
   s += `<circle cy="-8" r="17" stroke="${rgba(rgb, 0.8)}" stroke-width="1.3" fill="none"/>`
   for (let i = 0; i < 20; i++) {
     const a = (i / 20) * 2 * Math.PI
-    s += `<line x1="${Math.cos(a) * 20}" y1="${Math.sin(a) * 20 - 8}" x2="${Math.cos(a) * 27}" y2="${Math.sin(a) * 27 - 8}" stroke="${rgba(rgb, 0.5)}" stroke-width="0.9" stroke-linecap="round"/>`
+    s += `<line x1="${cos(a) * 20}" y1="${sin(a) * 20 - 8}" x2="${cos(a) * 27}" y2="${sin(a) * 27 - 8}" stroke="${rgba(rgb, 0.5)}" stroke-width="0.9" stroke-linecap="round"/>`
   }
   s += `<circle cy="-8" r="4" fill="${rgba(rgb, 0.85)}"/>`
   s += `<g stroke="${rgba(rgb, 0.7)}" stroke-width="1.3" fill="${rgba(rgb, 0.05)}" stroke-linejoin="round">`
