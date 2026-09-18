@@ -3,7 +3,7 @@
 > **Primary reader:** both (planning Claude and Claude Code).
 > The non-negotiable rules of how we work. Numbered so they can be cited in conversation ("that violates T2").
 > Every tenet here was earned by something going wrong. The story is included, because a rule without its cause gets discarded the first time it's inconvenient.
-> Last updated: Session 19 — 2026-09-02
+> Last updated: Session 20 — 2026-09-18
 
 ---
 
@@ -68,6 +68,8 @@ No file is ever handed over without stating precisely where it goes: `lib/consta
 
 No code is written without explicit confirmation. Every build session states: what we're building, the industry lens, the best-practice decision, and the watch-out.
 
+**Session 20 addition:** when a request has more than one honest reading, say so and name the readings — don't silently pick one. When a simpler approach would satisfy the same ask, name it before proposing the more complex one, even if the complex one is what gets built in the end.
+
 ---
 
 ## T6 — Never write a file from memory
@@ -83,6 +85,8 @@ Read exact file bytes before any edit. Never deliver a full-file replacement for
 ## T7 — Complete files only
 
 Every delivery is a complete, `tsc --noEmit`-clean file. No snippets, no diffs, no "add this line around line 40."
+
+**Session 20 addition:** a complete file is not licence to touch all of it. Match the surrounding style rather than the deliverer's own habits. Note unrelated dead code out loud rather than deleting it in passing. Remove an import or variable only if this change is what orphaned it — a pre-existing unused one is a separate conversation, not a drive-by cleanup.
 
 ---
 
@@ -385,6 +389,14 @@ dev environment and Claude's sandbox cannot reach Groq or TMDB, so merging to
 production was the only way to test anything. That, more than any design fault,
 produced the churn. Setting up a local dev loop is worth more than any feature
 currently on the backlog.
+
+---
+
+## T26 — Simplicity is a default, not a virtue to remember
+
+Write the smallest thing that satisfies what was actually asked. No speculative features, no unrequested flexibility, no defensive handling for a state that cannot occur. Before adding an abstraction, a config option, or a "just in case" branch: would a senior engineer call this overcomplicated for what was asked? If yes, simplify before shipping.
+
+**Origin:** Session 20, auditing a widely-used external Claude Code guidance file (`multica-ai/andrej-karpathy-skills`) against this document at Ujjawal's request. Three of its four principles were already covered here — T5 and T2 cover thinking before coding, T7 covers surgical changes, the spec template's "Done when" covers goal-driven execution. This was the one with no equivalent, added directly rather than inventing an incident it hasn't earned yet.
 
 ---
 
