@@ -64,6 +64,10 @@ duplicated, offline, first-run, very long, non-English.
 A short checklist. Each item checkable — by Claude Code in its environment, or
 by Ujjawal on a real phone. Say which.
 
+For anything more than one step, the checkpoints belong at each step, not only
+at the end — a plan that can only be verified after everything is built is a
+plan, not a checklist.
+
 ## Out of scope
 What this spec deliberately does not cover, so scope creep has a line to cross.
 
